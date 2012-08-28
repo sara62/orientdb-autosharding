@@ -102,11 +102,17 @@ public class OLocalDHTNode implements ODHTNode {
 
 	public long findSuccessor(long keyId) {
 		final long successorId = fingerPoints.get(0);
+		//log("Find successor for key " + keyId + ", successor is " + successorId);
 
-		if (insideInterval(id, successorId, keyId, true))
+		if (insideInterval(id, successorId, keyId, true)) {
+//			log("Successor is " + successorId);
 			return successorId;
+		}
 
+//		log("Find closest finger point for key " + keyId);
 		long nodeId = findClosestPrecedingFinger(keyId);
+//		log("Closest fingerpoint is " + nodeId);
+
 		ODHTNode node = nodeLookup.findById(nodeId);
 
 		return node.findSuccessor(keyId);
@@ -141,7 +147,17 @@ public class OLocalDHTNode implements ODHTNode {
 			}
 		}
 
-		putData(dataId, data);
+//		log("Data is going to be added with key " + dataId);
+
+		final long successorId = findSuccessor(dataId);
+		if (successorId == id) {
+//			log("Owner for key " + dataId + " is the same as requested node.");
+			putData(dataId, data);
+		} else {
+//			log("Owner for key " + dataId + " is " + successorId);
+			final ODHTNode node = nodeLookup.findById(successorId);
+			node.put(dataId, data);
+		}
 	}
 
 	private void putData(Long dataId, String data) {
@@ -155,6 +171,10 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public String get(Long dataId) {
+		return get(dataId, true);
+	}
+
+	public String get(Long dataId, boolean checkOwnerShip) {
 		while (state == NodeState.JOIN) {
 			log("Wait till node will be joined.");
 			try {
@@ -164,13 +184,26 @@ public class OLocalDHTNode implements ODHTNode {
 			}
 		}
 
+//		log("Data with key " + dataId +  " were requested.");
+		if (checkOwnerShip) {
+			final long successorId = findSuccessor(dataId);
+			if (successorId != id) {
+//				log("Successor for " + dataId + " is " + successorId);
+
+				ODHTNode node = nodeLookup.findById(successorId);
+				return node.get(dataId);
+			}
+		}
+
+//		log("Successor match for key " + dataId);
+
 		if (state == NodeState.MERGING) {
 			String data;
 			data = readData(dataId);
 
 			if (data == null) {
 				final ODHTNode successorNode = nodeLookup.findById(fingerPoints.get(0));
-				data = successorNode.get(dataId);
+				data = successorNode.get(dataId, false);
 				if (data == null && successorNode.getNodeId() != id)
 					return readData(dataId);
 				else
@@ -436,7 +469,7 @@ public class OLocalDHTNode implements ODHTNode {
 //				log("Migration - examine data with key : " + key);
 				lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 				try {
-					final String data = get(key);
+					final String data = db.get(key);
 					if (data != null) {
 						final long nodeId = findSuccessor(key);
 						if (nodeId != id) {

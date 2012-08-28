@@ -60,6 +60,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new GetNodeCall(nodeId, member.getUuid(), id), false);
 	}
 
+	public String get(Long id, boolean checkOwnerShip) {
+		return callOnRemoteMember(new GetWithCheck(nodeId, member.getUuid(), checkOwnerShip, id), false);
+	}
+
 	public int size() {
 		return callOnRemoteMember(new SizeNodeCall(nodeId, member.getUuid()), false);
 	}
@@ -121,6 +125,39 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
 			nodeId = in.readLong();
 			memberUUID = in.readUTF();
+		}
+	}
+
+	private static final class GetWithCheck extends NodeCall<String> {
+		private boolean checkOwnerShip;
+		private long keyId;
+
+		public GetWithCheck() {
+		}
+
+		private GetWithCheck(long nodeId, String memberUUID, boolean checkOwnerShip, long keyId) {
+			super(nodeId, memberUUID);
+			this.checkOwnerShip = checkOwnerShip;
+			this.keyId = keyId;
+		}
+
+		@Override
+		protected String call(ODHTNode node) {
+			return node.get(keyId, checkOwnerShip);
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeLong(keyId);
+			out.writeBoolean(checkOwnerShip);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			keyId = in.readLong();
+			checkOwnerShip = in.readBoolean();
 		}
 	}
 

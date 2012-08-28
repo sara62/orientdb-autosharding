@@ -65,8 +65,12 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 		}, 10000, 10000);
 	}
 
-	public ODHTNode findSuccessor(long key) {
-		return findById(localNode.findSuccessor(key));
+	public void put(long key, String value) {
+		localNode.put(key, value);
+	}
+
+	public String get(long key) {
+		return localNode.get(key);
 	}
 
 	public void memberAdded(MembershipEvent membershipEvent) {
@@ -105,5 +109,9 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 			return -nodeId;
 
 		return nodeId;
+	}
+
+	public ODHTNode findSuccessor(int id) {
+		return findById(localNode.findSuccessor(id));
 	}
 }

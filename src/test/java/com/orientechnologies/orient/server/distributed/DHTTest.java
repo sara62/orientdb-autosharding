@@ -92,9 +92,7 @@ public class DHTTest {
 		System.out.println("[stat] Items check " + addedData.size() + " items.");
 		int i = 0;
 		for (Map.Entry<Long, String> entry : addedData.entrySet()) {
-			final ODHTNode node = serverInstance.findSuccessor(entry.getKey());
-			Assert.assertEquals(node.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent in node "
-							+ node.getNodeId());
+			Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
 			i++;
 			if (i % 10000 == 0)
 				System.out.println("[stat] " + i + " items were processed");
@@ -136,8 +134,7 @@ public class DHTTest {
 		public Void call() throws Exception {
 			while (!testIsStopped.get()) {
 				long key = random.nextLong(end - start) + start;
-				final ODHTNode node = serverInstance.findSuccessor(key);
-				node.put(key, String.valueOf(key));
+				serverInstance.put(key, String.valueOf(key));
 
 				addedData.put(key, String.valueOf(key));
 			}
@@ -157,8 +154,7 @@ public class DHTTest {
 		public Void call() throws Exception {
 			while (!testIsStopped.get()) {
 				for (Map.Entry<Long, String> entry : addedData.entrySet()) {
-					final ODHTNode node = serverInstance.findSuccessor(entry.getKey());
-					Assert.assertEquals(node.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
+					Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
 				}
 			}
 			return null;

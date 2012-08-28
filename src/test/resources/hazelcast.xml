@@ -21,7 +21,7 @@
 	</network>
 	<executor-service>
 		<core-pool-size>1</core-pool-size>
-		<max-pool-size>16</max-pool-size>
+		<max-pool-size>256</max-pool-size>
 		<keep-alive-seconds>60</keep-alive-seconds>
 	</executor-service>
 </hazelcast>
