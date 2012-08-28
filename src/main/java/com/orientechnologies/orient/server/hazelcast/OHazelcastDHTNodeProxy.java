@@ -52,14 +52,6 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new FindSuccessorNodeCall(nodeId, member.getUuid(), id), false);
 	}
 
-	public long findPredecessor(long id) {
-		return callOnRemoteMember(new FindPredecessorNodeCall(nodeId, member.getUuid(), id), false);
-	}
-
-	public long findClosestPrecedingFinger(long id) {
-		return callOnRemoteMember(new FindClosestPrecedingFinger(nodeId, member.getUuid(), id), false);
-	}
-
 	public void put(Long id, String data) {
 		callOnRemoteMember(new PutNodeCall(nodeId,member.getUuid(), data, id), false);
 	}
@@ -70,6 +62,18 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 	public int size() {
 		return callOnRemoteMember(new SizeNodeCall(nodeId, member.getUuid()), false);
+	}
+
+	public void notifyMigrationEnd(long notifierId) {
+		callOnRemoteMember(new NotifyMigrationEndNodeCall(this.nodeId, member.getUuid(), notifierId), true);
+	}
+
+	public boolean remove(Long id) {
+		return callOnRemoteMember(new RemoveNodeCall(nodeId, member.getUuid(), id), false);
+	}
+
+	public void requestMigration(long requesterId) {
+		callOnRemoteMember(new RequestMigrationNodeCall(nodeId, member.getUuid(), requesterId), true);
 	}
 
 	private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
@@ -251,64 +255,6 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		}
 	}
 
-	private static final class FindPredecessorNodeCall extends NodeCall<Long> {
-		private long keyId;
-
-		public FindPredecessorNodeCall() {
-		}
-
-		private FindPredecessorNodeCall(long nodeId, String memberUUID, long keyId) {
-			super(nodeId, memberUUID);
-			this.keyId = keyId;
-		}
-
-		@Override
-		protected Long call(ODHTNode node) {
-			return node.findPredecessor(keyId);
-		}
-
-		@Override
-		public void writeExternal(ObjectOutput out) throws IOException {
-			super.writeExternal(out);
-			out.writeLong(keyId);
-		}
-
-		@Override
-		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-			super.readExternal(in);
-			keyId = in.readLong();
-		}
-	}
-
-	private static final class FindClosestPrecedingFinger extends NodeCall<Long> {
-		private long keyId;
-
-		public FindClosestPrecedingFinger() {
-		}
-
-		private FindClosestPrecedingFinger(long nodeId, String memberUUID, long keyId) {
-			super(nodeId, memberUUID);
-			this.keyId = keyId;
-		}
-
-		@Override
-		protected Long call(ODHTNode node) {
-			return node.findClosestPrecedingFinger(keyId);
-		}
-
-		@Override
-		public void writeExternal(ObjectOutput out) throws IOException {
-			super.writeExternal(out);
-			out.writeLong(keyId);
-		}
-
-		@Override
-		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-			super.readExternal(in);
-			keyId = in.readLong();
-		}
-	}
-
 	private static final class PutNodeCall extends NodeCall<Void> {
 		private String data;
 		private Long keyId;
@@ -372,4 +318,94 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 			keyId = in.readLong();
 		}
 	}
+
+	private static final class RemoveNodeCall extends NodeCall<Boolean> {
+		private long keyId;
+
+		public RemoveNodeCall() {
+		}
+
+		private RemoveNodeCall(long nodeId, String memberUUID, long keyId) {
+			super(nodeId, memberUUID);
+			this.keyId = keyId;
+		}
+
+		@Override
+		protected Boolean call(ODHTNode node) {
+			return node.remove(keyId);
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeLong(keyId);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			keyId = in.readLong();
+		}
+	}
+
+	private static final class NotifyMigrationEndNodeCall extends NodeCall<Void> {
+		private long notifierId;
+
+		public NotifyMigrationEndNodeCall() {
+		}
+
+		private NotifyMigrationEndNodeCall(long nodeId, String memberUUID, long notifierId) {
+			super(nodeId, memberUUID);
+			this.notifierId = notifierId;
+		}
+
+		@Override
+		protected Void call(ODHTNode node) {
+			node.notifyMigrationEnd(notifierId);
+			return null;
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeLong(notifierId);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			notifierId = in.readLong();
+		}
+	}
+
+	private static final class RequestMigrationNodeCall extends NodeCall<Void> {
+		private long requesterId;
+
+		public RequestMigrationNodeCall() {
+		}
+
+		private RequestMigrationNodeCall(long nodeId, String memberUUID, long requesterId) {
+			super(nodeId, memberUUID);
+			this.requesterId = requesterId;
+		}
+
+		@Override
+		protected Void call(ODHTNode node) {
+			node.requestMigration(requesterId);
+			return null;
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeLong(requesterId);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			requesterId = in.readLong();
+		}
+	}
+
 }

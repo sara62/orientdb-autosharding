@@ -1,11 +1,19 @@
 package com.orientechnologies.orient.server.distributed;
 
+import com.orientechnologies.common.concur.lock.OLockManager;
+
 import java.text.DateFormat;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
@@ -20,10 +28,16 @@ public class OLocalDHTNode implements ODHTNode {
 	private final long id;
 	private final AtomicLongArray fingerPoints = new AtomicLongArray(63);
 
-	private final Map<Long, String> data = new ConcurrentHashMap<Long, String>();
+	private final Map<Long, String> db = new ConcurrentHashMap<Long, String>();
 
+	private volatile long migrationId = -1;
 	private volatile ODHTNodeLookup nodeLookup;
 	private AtomicInteger next = new AtomicInteger(1);
+	private final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
+	private final ExecutorService executorService = Executors.newCachedThreadPool();
+	private final Queue<Long> notificationQueue = new ConcurrentLinkedQueue<Long>();
+
+	private NodeState state;
 
 	public OLocalDHTNode(long id) {
 		this.id = id;
@@ -41,8 +55,11 @@ public class OLocalDHTNode implements ODHTNode {
 
 	public void create() {
 		log("New ring creation was started");
+
 		predecessor.set(-1);
 		fingerPoints.set(0, id);
+		state = NodeState.STABLE;
+
 		log("New ring was created");
 	}
 
@@ -60,6 +77,7 @@ public class OLocalDHTNode implements ODHTNode {
 				return false;
 			}
 
+			state = NodeState.JOIN;
 			predecessor.set(-1);
 			fingerPoints.set(0, node.findSuccessor(id));
 
@@ -83,55 +101,21 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public long findSuccessor(long keyId) {
-		long nodeId;
-		ODHTNode node;
+		final long successorId = fingerPoints.get(0);
 
-		//log("Successor request for key id " + keyId);
-		while (true) {
-			try {
-				do {
-					nodeId = findPredecessor(keyId);
+		if (insideInterval(id, successorId, keyId, true))
+			return successorId;
 
-					node = nodeLookup.findById(nodeId);
-				} while (node == null);
+		long nodeId = findClosestPrecedingFinger(keyId);
+		ODHTNode node = nodeLookup.findById(nodeId);
 
-		//	log("Successor for " + keyId + " is " + node.getSuccessor());
-				return node.getSuccessor();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
+		return node.findSuccessor(keyId);
 	}
 
-	public long findPredecessor(long keyId) {
-		//log("Predecessor request for key id " + keyId);
-
-		while (true) {
-			ODHTNode node = this;
-
-			try {
-				while (!insideInterval(node.getNodeId(), node.getSuccessor(), keyId, true)) {
-					final long nodeId = node.findClosestPrecedingFinger(keyId);
-					final ODHTNode foundNode = nodeLookup.findById(nodeId);
-					if (foundNode != null)
-						node = foundNode;
-				}
-
-			//log("Predecessor for " + keyId + " is " + node.getNodeId());
-				return node.getNodeId();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
-	public long findClosestPrecedingFinger(long keyId) {
-		//log("Closest finger request for key id " + keyId);
-
+	private long findClosestPrecedingFinger(long keyId) {
 		for (int i = fingerPoints.length() - 1; i >= 0; i--) {
 			final long fingerPoint = fingerPoints.get(i);
 			if (fingerPoint > -1 && insideInterval(this.id, keyId, fingerPoint, false)) {
-		//	log("Closest finger for " + keyId + " is " + fingerPoint);
 				return fingerPoint;
 			}
 		}
@@ -148,19 +132,109 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public void put(Long dataId, String data) {
-		this.data.put(dataId, data);
+		while (state == NodeState.JOIN) {
+			log("Wait till node will be joined.");
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		putData(dataId, data);
+	}
+
+	private void putData(Long dataId, String data) {
+//	log("Put for " + dataId);
+		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+		try {
+			this.db.put(dataId, data);
+		} finally {
+			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+		}
 	}
 
 	public String get(Long dataId) {
-		return data.get(dataId);
+		while (state == NodeState.JOIN) {
+			log("Wait till node will be joined.");
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		if (state == NodeState.MERGING) {
+			String data;
+			data = readData(dataId);
+
+			if (data == null) {
+				final ODHTNode successorNode = nodeLookup.findById(fingerPoints.get(0));
+				data = successorNode.get(dataId);
+				if (data == null && successorNode.getNodeId() != id)
+					return readData(dataId);
+				else
+					return data;
+			} else
+				return data;
+		}
+
+		return readData(dataId);
+	}
+
+	private String readData(Long dataId) {
+		String data;
+		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
+		try {
+			data = db.get(dataId);
+		} finally {
+			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
+		}
+		return data;
+	}
+
+	public boolean remove(Long dataId) {
+		boolean result = false;
+
+		while (state == NodeState.JOIN) {
+			log("Wait till node will be joined.");
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		if (state == NodeState.MERGING) {
+			final ODHTNode successorNode = nodeLookup.findById(fingerPoints.get(0));
+			result = successorNode.remove(dataId);
+		}
+
+		result = result | removeData(dataId);
+
+		return result;
+	}
+
+	public void requestMigration(long requesterId) {
+		executorService.submit(new MergeCallable(nodeLookup, requesterId));
+		log("Data migration was started for node " + requesterId);
+	}
+
+	private boolean removeData(Long dataId) {
+		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+		try {
+			return db.remove(dataId) != null;
+		} finally {
+			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+		}
 	}
 
 	public int size() {
-		return data.size();
+		return db.size();
 	}
 
 	public void stabilize() {
-		log("Stabilization is started");
+		//log("Stabilization is started");
 		boolean result = false;
 
 		ODHTNode successor = null;
@@ -178,12 +252,14 @@ public class OLocalDHTNode implements ODHTNode {
 				result = fingerPoints.compareAndSet(0, successorId, predecessor);
 
 				if (result)
-					successor = nodeLookup.findById(predecessor);
-
-				if (result)
 					log("Successor was successfully changed");
 				else
 					log("Successor change was failed");
+
+				if (result)
+					successor = nodeLookup.findById(predecessor);
+
+				drawRing();
 			} else
 				result = true;
 		}
@@ -191,14 +267,14 @@ public class OLocalDHTNode implements ODHTNode {
 		if (successor.getNodeId() != id)
 			successor.notify(id);
 
-		drawRing();
-		log("Stabilization is finished");
+//		drawRing();
+//		log("Stabilization is finished");
 	}
 
 	public void fixFingers() {
 		int nextValue = next.intValue();
 
-		log("Fix of fingers is started for interval " + ((id + 1 << nextValue) & Long.MAX_VALUE));
+//	log("Fix of fingers is started for interval " + ((id + 1 << nextValue) & Long.MAX_VALUE));
 
 		fingerPoints.set(nextValue, findSuccessor((id + 1 << nextValue) & Long.MAX_VALUE));
 
@@ -209,14 +285,14 @@ public class OLocalDHTNode implements ODHTNode {
 			if (nextValue > 62)
 				next.compareAndSet(nextValue, 1);
 
-			log("Next value is changed to 1");
+//			log("Next value is changed to 1");
 		}
 
-		log("Fix of fingers was finished.");
+//		log("Fix of fingers was finished.");
 	}
 
 	public void fixPredecessor() {
-		log("Fix of predecessor is started");
+//		log("Fix of predecessor is started");
 
 		boolean result = false;
 
@@ -226,17 +302,16 @@ public class OLocalDHTNode implements ODHTNode {
 			if (predecessorId > -1 && nodeLookup.findById(predecessorId) == null) {
 				result = predecessor.compareAndSet(predecessorId, -1);
 
-				log("Predecessor " + predecessorId + " left the cluster");
-			}
-			else
+//				log("Predecessor " + predecessorId + " left the cluster");
+			} else
 				result = true;
 		}
 
-		log("Fix of predecessor is finished");
+//		log("Fix of predecessor is finished");
 	}
 
 	public void notify(long nodeId) {
-		log("Node " + nodeId + " thinks it can be our parent");
+//		log("Node " + nodeId + " thinks it can be our parent");
 
 		boolean result = false;
 
@@ -250,14 +325,48 @@ public class OLocalDHTNode implements ODHTNode {
 				else
 					log("Predecessor setup was failed.");
 
+				if (result && predecessorId < 0 && state == NodeState.JOIN) {
+
+					migrationId = fingerPoints.get(0);
+					final ODHTNode mergeNode = nodeLookup.findById(migrationId);
+					mergeNode.requestMigration(id);
+
+					state = NodeState.MERGING;
+					log("Status was changed to " + state);
+				}
+
 				drawRing();
-			}
-			else
+			} else
 				result = true;
 		}
 
-		log("Parent check is finished.");
+//		log("Parent check is finished.");
 
+	}
+
+	public void notifyMigrationEnd(long nodeId) {
+		log("Migration completion notification from " + nodeId);
+
+		while (state == NodeState.JOIN) {
+			log("Wait till node will be joined.");
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		if (nodeId == migrationId) {
+			state = NodeState.STABLE;
+			log("State was changed to " + state);
+
+			Long nodeToNotifyId = notificationQueue.poll();
+			while (nodeToNotifyId != null) {
+				final ODHTNode node = nodeLookup.findById(nodeToNotifyId);
+				node.notifyMigrationEnd(id);
+				nodeToNotifyId = notificationQueue.poll();
+			}
+		}
 	}
 
 	private boolean insideInterval(long from, long to, long value, boolean rightIsIncluded) {
@@ -277,7 +386,7 @@ public class OLocalDHTNode implements ODHTNode {
 	private void log(String message) {
 		DateFormat dateFormat = DateFormat.getDateTimeInstance();
 
-		System.out.println(Thread.currentThread().getName() + " : " + id + " : " +
+		System.out.println(state + " : " + Thread.currentThread().getName() + " : " + id + " : " +
 						dateFormat.format(new Date()) + " : " + message);
 	}
 
@@ -304,5 +413,66 @@ public class OLocalDHTNode implements ODHTNode {
 		builder.append(".");
 
 		log(builder.toString());
+	}
+
+	private enum NodeState {
+		JOIN, MERGING, STABLE
+	}
+
+	private final class MergeCallable implements Callable<Void> {
+		private Iterator<Long> keyIterator;
+		private final ODHTNodeLookup nodeLookup;
+		private final long requesterNode;
+
+		private MergeCallable(ODHTNodeLookup nodeLookup, long requesterNode) {
+			this.nodeLookup = nodeLookup;
+			this.requesterNode = requesterNode;
+			this.keyIterator = db.keySet().iterator();
+		}
+
+		public Void call() throws Exception {
+			while (keyIterator.hasNext()) {
+				long key = keyIterator.next();
+//				log("Migration - examine data with key : " + key);
+				lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+				try {
+					final String data = get(key);
+					if (data != null) {
+						final long nodeId = findSuccessor(key);
+						if (nodeId != id) {
+//							log("Key " + key + " belongs to node " + nodeId + ". Key is going to be migrated.");
+							final ODHTNode node = nodeLookup.findById(nodeId);
+							node.put(key, data);
+
+							keyIterator.remove();
+//							log("Key " + key + " was successfully removed.");
+						}
+					}
+//					else {
+//						log("Key " + key + " is kept on current node.");
+//					}
+				} finally {
+					lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+				}
+			}
+
+			if (state == NodeState.STABLE) {
+				final ODHTNode node = nodeLookup.findById(requesterNode);
+				node.notifyMigrationEnd(id);
+			} else {
+				notificationQueue.add(requesterNode);
+				if (state == NodeState.STABLE) {
+					Long nodeToNotifyId = notificationQueue.poll();
+					while (nodeToNotifyId != null) {
+						final ODHTNode node = nodeLookup.findById(nodeToNotifyId);
+						node.notifyMigrationEnd(id);
+						nodeToNotifyId = notificationQueue.poll();
+					}
+				}
+			}
+
+			log("Migration was successfully finished for node " + requesterNode);
+			return null;
+		}
 	}
 }

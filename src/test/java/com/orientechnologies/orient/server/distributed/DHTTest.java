@@ -1,12 +1,20 @@
 package com.orientechnologies.orient.server.distributed;
 
+import com.orientechnologies.common.util.MersenneTwisterFast;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
-import junit.framework.Assert;
+import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author Andrey Lomakin
@@ -14,6 +22,25 @@ import java.util.Random;
  */
 @Test
 public class DHTTest {
+	private final AtomicBoolean testIsStopped = new AtomicBoolean(false);
+
+	private ExecutorService readerExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
+		public Thread newThread(Runnable r) {
+			final Thread thread = new Thread(r);
+			thread.setDaemon(true);
+			return thread;
+		}
+	});
+
+	private ExecutorService writerExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
+		public Thread newThread(Runnable r) {
+			final Thread thread = new Thread(r);
+			thread.setDaemon(true);
+
+			return thread;
+		}
+	});
+
 	public void addNode() {
 		ServerInstance serverInstance = new ServerInstance();
 		serverInstance.init();
@@ -21,28 +48,56 @@ public class DHTTest {
 	}
 
 	public void addData() throws Exception {
-		ServerInstance serverInstance = new ServerInstance();
+		final ServerInstance serverInstance = new ServerInstance();
 		serverInstance.init();
+
+		ServerInstance siNext = new ServerInstance();
+		siNext.init();
 
 		Thread.sleep(20000);
 
-		final Random random = new Random();
+		final Map<Long, String> addedData = new ConcurrentHashMap<Long, String>();
 
-		Map<Long, String> addedData = new HashMap<Long, String>();
-		for (int i = 0; i < 10000; i++) {
-			long key = random.nextLong();
-			if (key < 0)
-				key = -key;
+		final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
 
-			final ODHTNode node = serverInstance.findSuccessor(key);
-			node.put(key, String.valueOf(i));
+		List<Future<Void>> futures = new ArrayList<Future<Void>>();
 
-			addedData.put(key, String.valueOf(i));
+		final int threadCount = 4;
+
+		for (int i = 0; i < threadCount; i++)
+			readerFutures.add(readerExecutor.submit(new DataReader(addedData, serverInstance)));
+
+
+		final long interval = Long.MAX_VALUE / threadCount;
+
+		for (long i = 0; i < threadCount; i++)
+			futures.add(writerExecutor.submit(new DataWriter(i * interval, (i + 1) * interval,
+							addedData, serverInstance, testIsStopped)));
+
+
+		for (int i = 0; i < 5; i++) {
+			ServerInstance si = new ServerInstance();
+			si.init();
+
+			Thread.sleep(5000);
 		}
 
+		Thread.sleep(10000);
+
+		testIsStopped.set(true);
+
+		for (Future<Void> future : futures)
+			future.get();
+
+		System.out.println("[stat] Items check " + addedData.size() + " items.");
+		int i = 0;
 		for (Map.Entry<Long, String> entry : addedData.entrySet()) {
 			final ODHTNode node = serverInstance.findSuccessor(entry.getKey());
-			Assert.assertEquals(entry.getValue(), node.get(entry.getKey()));
+			Assert.assertEquals(node.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent in node "
+							+ node.getNodeId());
+			i++;
+			if (i % 10000 == 0)
+				System.out.println("[stat] " + i + " items were processed");
 		}
 
 		System.out.println("[stat] Node sizes : ");
@@ -55,6 +110,58 @@ public class DHTTest {
 			System.out.println("[stat] Node : " + node.getNodeId() + " size - " + node.size());
 
 			node = serverInstance.findById(node.getSuccessor());
+		}
+
+		for (Future<Void> future : readerFutures)
+			future.get();
+	}
+
+	private static class DataWriter implements Callable<Void> {
+		private final long start;
+		private final long end;
+		private final MersenneTwisterFast random = new MersenneTwisterFast();
+		private final Map<Long, String> addedData;
+		private final ServerInstance serverInstance;
+		private final AtomicBoolean testIsStopped;
+
+		private DataWriter(long start, long end, Map<Long, String> addedData,
+											 ServerInstance serverInstance, AtomicBoolean testIsStopped) {
+			this.start = start;
+			this.end = end;
+			this.addedData = addedData;
+			this.serverInstance = serverInstance;
+			this.testIsStopped = testIsStopped;
+		}
+
+		public Void call() throws Exception {
+			while (!testIsStopped.get()) {
+				long key = random.nextLong(end - start) + start;
+				final ODHTNode node = serverInstance.findSuccessor(key);
+				node.put(key, String.valueOf(key));
+
+				addedData.put(key, String.valueOf(key));
+			}
+			return null;
+		}
+	}
+
+	private class DataReader implements Callable<Void> {
+		private final Map<Long, String> addedData;
+		private final ServerInstance serverInstance;
+
+		public DataReader(Map<Long, String> addedData, ServerInstance serverInstance) {
+			this.addedData = addedData;
+			this.serverInstance = serverInstance;
+		}
+
+		public Void call() throws Exception {
+			while (!testIsStopped.get()) {
+				for (Map.Entry<Long, String> entry : addedData.entrySet()) {
+					final ODHTNode node = serverInstance.findSuccessor(entry.getKey());
+					Assert.assertEquals(node.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
+				}
+			}
+			return null;
 		}
 	}
 }
