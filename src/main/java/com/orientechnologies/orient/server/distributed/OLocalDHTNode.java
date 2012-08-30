@@ -160,13 +160,13 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 	}
 
-	private void putData(Long dataId, String data) {
+	private void putData(Long keyId, String data) {
 //	log("Put for " + dataId);
-		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+		lockManager.acquireLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		try {
-			this.db.put(dataId, data);
+			this.db.put(keyId, data);
 		} finally {
-			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+			lockManager.releaseLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		}
 	}
 
@@ -202,9 +202,10 @@ public class OLocalDHTNode implements ODHTNode {
 			data = readData(dataId);
 
 			if (data == null) {
-				final ODHTNode successorNode = nodeLookup.findById(fingerPoints.get(0));
-				data = successorNode.get(dataId, false);
-				if (data == null && successorNode.getNodeId() != id)
+				final ODHTNode migrationNode = nodeLookup.findById(migrationId);
+				data = migrationNode.get(dataId, false);
+
+				if (data == null && migrationNode.getNodeId() != id)
 					return readData(dataId);
 				else
 					return data;
@@ -226,7 +227,11 @@ public class OLocalDHTNode implements ODHTNode {
 		return data;
 	}
 
-	public boolean remove(Long dataId) {
+	public boolean remove(Long keyId) {
+		return remove(keyId, true);
+	}
+
+	public boolean remove(Long keyId, boolean checkOwnerShip) {
 		boolean result = false;
 
 		while (state == NodeState.JOIN) {
@@ -238,19 +243,31 @@ public class OLocalDHTNode implements ODHTNode {
 			}
 		}
 
-		if (state == NodeState.MERGING) {
-			final ODHTNode successorNode = nodeLookup.findById(fingerPoints.get(0));
-			result = successorNode.remove(dataId);
+//		log("Request to remove key " + keyId);
+
+		if (checkOwnerShip) {
+			final long successorId = findSuccessor(keyId);
+			if (successorId != id) {
+//  			log("Successor for " + keyId + " is " + successorId);
+
+				ODHTNode node = nodeLookup.findById(successorId);
+				return node.remove(keyId);
+			}
 		}
 
-		result = result | removeData(dataId);
+		if (state == NodeState.MERGING) {
+			final ODHTNode successorNode = nodeLookup.findById(migrationId);
+			result = successorNode.remove(keyId, false);
+		}
+
+		result = result | removeData(keyId);
 
 		return result;
 	}
 
 	public void requestMigration(long requesterId) {
 		executorService.submit(new MergeCallable(nodeLookup, requesterId));
-		log("Data migration was started for node " + requesterId);
+//	log("Data migration was started for node " + requesterId);
 	}
 
 	private boolean removeData(Long dataId) {
@@ -264,6 +281,10 @@ public class OLocalDHTNode implements ODHTNode {
 
 	public int size() {
 		return db.size();
+	}
+
+	public NodeState state() {
+		return state;
 	}
 
 	public void stabilize() {
@@ -448,9 +469,6 @@ public class OLocalDHTNode implements ODHTNode {
 		log(builder.toString());
 	}
 
-	private enum NodeState {
-		JOIN, MERGING, STABLE
-	}
 
 	private final class MergeCallable implements Callable<Void> {
 		private Iterator<Long> keyIterator;

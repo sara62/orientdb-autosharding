@@ -73,6 +73,10 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 		return localNode.get(key);
 	}
 
+	public boolean remove(long key) {
+		return localNode.remove(key);
+	}
+
 	public void memberAdded(MembershipEvent membershipEvent) {
 		final Member member = membershipEvent.getMember();
 		final long nodeId = getNodeId(member);

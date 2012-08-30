@@ -76,8 +76,16 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new RemoveNodeCall(nodeId, member.getUuid(), id), false);
 	}
 
+	public boolean remove(Long keyId, boolean checkOwnerShip) {
+		return callOnRemoteMember(new RemoveWithCheckNodeCall(nodeId, member.getUuid(), keyId, checkOwnerShip), false);
+	}
+
 	public void requestMigration(long requesterId) {
 		callOnRemoteMember(new RequestMigrationNodeCall(nodeId, member.getUuid(), requesterId), true);
+	}
+
+	public NodeState state() {
+		return callOnRemoteMember(new StateNodeCall(nodeId, member.getUuid()), false);
 	}
 
 	private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
@@ -186,6 +194,20 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		@Override
 		protected Integer call(ODHTNode node) {
 			return node.size();
+		}
+	}
+
+	private static final class StateNodeCall extends NodeCall<NodeState> {
+		public StateNodeCall() {
+		}
+
+		private StateNodeCall(long nodeId, String memberUUID) {
+			super(nodeId, memberUUID);
+		}
+
+		@Override
+		protected NodeState call(ODHTNode node) {
+			return node.state();
 		}
 	}
 
@@ -384,6 +406,40 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 			keyId = in.readLong();
 		}
 	}
+
+	private static final class RemoveWithCheckNodeCall extends NodeCall<Boolean> {
+		private long keyId;
+		private boolean checkOwnerShip;
+
+		public RemoveWithCheckNodeCall() {
+		}
+
+		private RemoveWithCheckNodeCall(long nodeId, String memberUUID, long keyId, boolean checkOwnerShip) {
+			super(nodeId, memberUUID);
+			this.keyId = keyId;
+			this.checkOwnerShip = checkOwnerShip;
+		}
+
+		@Override
+		protected Boolean call(ODHTNode node) {
+			return node.remove(keyId, checkOwnerShip);
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeLong(keyId);
+			out.writeBoolean(checkOwnerShip);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			keyId = in.readLong();
+			checkOwnerShip = in.readBoolean();
+		}
+	}
+
 
 	private static final class NotifyMigrationEndNodeCall extends NodeCall<Void> {
 		private long notifierId;
