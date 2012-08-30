@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
@@ -34,6 +35,7 @@ public class OLocalDHTNode implements ODHTNode {
 	private volatile ODHTNodeLookup nodeLookup;
 	private AtomicInteger next = new AtomicInteger(1);
 	private final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
+
 	private final ExecutorService executorService = Executors.newCachedThreadPool();
 	private final Queue<Long> notificationQueue = new ConcurrentLinkedQueue<Long>();
 
@@ -78,6 +80,15 @@ public class OLocalDHTNode implements ODHTNode {
 			}
 
 			state = NodeState.JOIN;
+
+			executorService.shutdownNow();
+			executorService.awaitTermination(10, TimeUnit.MINUTES);
+
+			if (!executorService.isTerminated())
+				throw new IllegalStateException("Invalid node state . Not all background processes were terminated.");
+
+			db.clear();
+
 			predecessor.set(-1);
 			fingerPoints.set(0, node.findSuccessor(id));
 
@@ -138,17 +149,9 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public void put(Long dataId, String data) {
-		while (state == NodeState.JOIN) {
-			log("Wait till node will be joined.");
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
+		waitTillJoin();
 
 //		log("Data is going to be added with key " + dataId);
-
 		final long successorId = findSuccessor(dataId);
 		if (successorId == id) {
 //			log("Owner for key " + dataId + " is the same as requested node.");
@@ -164,9 +167,18 @@ public class OLocalDHTNode implements ODHTNode {
 //	log("Put for " + dataId);
 		lockManager.acquireLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		try {
+			delay();
 			this.db.put(keyId, data);
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
+		}
+	}
+
+	private void delay() {
+		try {
+			Thread.sleep(10);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
 	}
 
@@ -175,14 +187,7 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public String get(Long dataId, boolean checkOwnerShip) {
-		while (state == NodeState.JOIN) {
-			log("Wait till node will be joined.");
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
+		waitTillJoin();
 
 //		log("Data with key " + dataId +  " were requested.");
 		if (checkOwnerShip) {
@@ -216,10 +221,22 @@ public class OLocalDHTNode implements ODHTNode {
 		return readData(dataId);
 	}
 
+	private void waitTillJoin() {
+		while (state == NodeState.JOIN) {
+			log("Wait till node will be joined.");
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 	private String readData(Long dataId) {
 		String data;
 		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
 		try {
+			delay();
 			data = db.get(dataId);
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
@@ -234,14 +251,7 @@ public class OLocalDHTNode implements ODHTNode {
 	public boolean remove(Long keyId, boolean checkOwnerShip) {
 		boolean result = false;
 
-		while (state == NodeState.JOIN) {
-			log("Wait till node will be joined.");
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
+		waitTillJoin();
 
 //		log("Request to remove key " + keyId);
 
@@ -266,13 +276,15 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public void requestMigration(long requesterId) {
+		log("Data migration request for node " + requesterId);
 		executorService.submit(new MergeCallable(nodeLookup, requesterId));
-//	log("Data migration was started for node " + requesterId);
+		log("Data migration was started for node " + requesterId);
 	}
 
 	private boolean removeData(Long dataId) {
 		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
 		try {
+			delay();
 			return db.remove(dataId) != null;
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
@@ -401,14 +413,7 @@ public class OLocalDHTNode implements ODHTNode {
 	public void notifyMigrationEnd(long nodeId) {
 		log("Migration completion notification from " + nodeId);
 
-		while (state == NodeState.JOIN) {
-			log("Wait till node will be joined.");
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
+		waitTillJoin();
 
 		if (nodeId == migrationId) {
 			state = NodeState.STABLE;
@@ -482,7 +487,7 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 
 		public Void call() throws Exception {
-			while (keyIterator.hasNext()) {
+			while (keyIterator.hasNext() && !Thread.currentThread().isInterrupted()) {
 				long key = keyIterator.next();
 //				log("Migration - examine data with key : " + key);
 				lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);

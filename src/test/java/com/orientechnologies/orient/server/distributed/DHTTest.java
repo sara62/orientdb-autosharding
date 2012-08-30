@@ -91,10 +91,10 @@ public class DHTTest {
 			ServerInstance si = new ServerInstance();
 			si.init();
 
-			Thread.sleep(60000);
+			Thread.sleep(5000);
 		}
 
-		Thread.sleep(60000);
+		Thread.sleep(10000);
 
 		testIsStopped.set(true);
 
