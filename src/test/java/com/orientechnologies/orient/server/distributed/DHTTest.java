@@ -59,7 +59,7 @@ public class DHTTest {
 		while (true) ;
 	}
 
-	public void addData() throws Exception {
+	public void addRemoveData() throws Exception {
 		final ServerInstance serverInstance = new ServerInstance();
 		serverInstance.init();
 

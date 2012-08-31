@@ -88,6 +88,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new StateNodeCall(nodeId, member.getUuid()), false);
 	}
 
+	public long[] getSuccessors(int depth) {
+		return callOnRemoteMember(new SuccessorsNodeCall(nodeId, member.getUuid(), depth), false);
+	}
+
 	private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
 		try {
 			Future<T> future =
@@ -180,6 +184,35 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		@Override
 		protected Long call(ODHTNode node) {
 			return node.getSuccessor();
+		}
+	}
+
+	private static final class SuccessorsNodeCall extends NodeCall<long[]> {
+		private int depth;
+
+		public SuccessorsNodeCall() {
+		}
+
+		private SuccessorsNodeCall(long nodeId, String memberUUID, int depth) {
+			super(nodeId, memberUUID);
+			this.depth = depth;
+		}
+
+		@Override
+		protected long[] call(ODHTNode node) {
+			return node.getSuccessors(depth);
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeInt(depth);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			depth = in.readInt();
 		}
 	}
 

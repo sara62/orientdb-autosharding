@@ -3,9 +3,13 @@ package com.orientechnologies.orient.server.distributed;
 import com.orientechnologies.common.concur.lock.OLockManager;
 
 import java.text.DateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -38,6 +42,7 @@ public class OLocalDHTNode implements ODHTNode {
 
 	private final ExecutorService executorService = Executors.newCachedThreadPool();
 	private final Queue<Long> notificationQueue = new ConcurrentLinkedQueue<Long>();
+	private volatile long[] successorsList = new long[0];
 
 	private NodeState state;
 
@@ -127,6 +132,23 @@ public class OLocalDHTNode implements ODHTNode {
 		ODHTNode node = nodeLookup.findById(nodeId);
 
 		return node.findSuccessor(keyId);
+	}
+
+	public long[] getSuccessors(int depth) {
+		if (depth == 0)
+			return new long[]{
+							fingerPoints.get(0)
+			};
+
+		ODHTNode node = nodeLookup.findById(fingerPoints.get(0));
+
+		long[] successors = new long[depth + 1];
+		long[] result = node.getSuccessors(depth - 1);
+
+		System.arraycopy(result, 0, successors, 1, result.length);
+		successors[0] = fingerPoints.get(0);
+
+		return successors;
 	}
 
 	private long findClosestPrecedingFinger(long keyId) {
@@ -332,6 +354,16 @@ public class OLocalDHTNode implements ODHTNode {
 
 		if (successor.getNodeId() != id)
 			successor.notify(id);
+
+		final int successorsSize = (int) Math.ceil(Math.log(nodeLookup.size()) / Math.log(2)) - 1;
+		log("Successors size " + successorsSize);
+
+		if (successorsSize > 0) {
+			final ODHTNode node = nodeLookup.findById(fingerPoints.get(0));
+			successorsList = node.getSuccessors(successorsSize - 1);
+
+			log("Successors : " +  Arrays.toString(successorsList));
+		}
 
 //		drawRing();
 //		log("Stabilization is finished");

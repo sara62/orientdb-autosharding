@@ -11,6 +11,7 @@ public interface ODHTNode {
 
 	public long getNodeId();
 	public long getSuccessor();
+	public long[] getSuccessors(int depth);
 	public Long getPredecessor();
 	public void notify(long node);
 	public boolean join(long node);

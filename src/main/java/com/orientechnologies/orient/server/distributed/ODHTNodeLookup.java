@@ -6,4 +6,5 @@ package com.orientechnologies.orient.server.distributed;
  */
 public interface ODHTNodeLookup {
 	public ODHTNode findById(long id);
+	public int size();
 }
