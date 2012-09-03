@@ -3,7 +3,12 @@ package com.orientechnologies.orient.server.hazelcast;
 import com.hazelcast.core.DistributedTask;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.Member;
+import com.hazelcast.core.MemberLeftException;
+import com.orientechnologies.orient.core.exception.OMemoryLockException;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
+import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
+import com.orientechnologies.orient.server.distributed.ORemoteNodeCallException;
+import com.orientechnologies.orient.server.distributed.OServerOfflineException;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -102,9 +107,11 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 			return future.get();
 		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (ExecutionException e) {
-			e.printStackTrace();
+			Thread.currentThread().interrupt();
+		} catch (MemberLeftException mle) {
+			throw new ONodeOfflineException("Member with id " + nodeId + " was left.", mle, nodeId);
+		} catch (ExecutionException ee) {
+			throw new ORemoteNodeCallException("Error during remote call of node " + nodeId, ee, nodeId);
 		}
 
 		return null;
