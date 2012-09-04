@@ -3,7 +3,6 @@ package com.orientechnologies.orient.server.distributed;
 import com.orientechnologies.common.concur.lock.OLockManager;
 
 import java.text.DateFormat;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -25,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * @since 17.08.12
  */
 public class OLocalDHTNode implements ODHTNode {
-	private static final int MAX_RETRIES = 100;
+	private static final int MAX_RETRIES = 10;
 
 	private AtomicLong predecessor = new AtomicLong(-1);
 
@@ -39,7 +38,7 @@ public class OLocalDHTNode implements ODHTNode {
 	private AtomicInteger next = new AtomicInteger(1);
 	private final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
 
-	private final ExecutorService executorService = Executors.newCachedThreadPool();
+	private volatile ExecutorService executorService = Executors.newCachedThreadPool();
 	private final Queue<Long> notificationQueue = new ConcurrentLinkedQueue<Long>();
 	private volatile long[] successorsList = new long[0];
 
@@ -83,18 +82,21 @@ public class OLocalDHTNode implements ODHTNode {
 				return false;
 			}
 
+			if (state != null) {
+				executorService.shutdownNow();
+				executorService.awaitTermination(10, TimeUnit.MINUTES);
+
+				if (!executorService.isTerminated())
+					throw new IllegalStateException("Invalid node state . Not all background processes were terminated.");
+
+				executorService = Executors.newCachedThreadPool();
+
+				db.clear();
+			}
+
 			state = NodeState.JOIN;
 
-			executorService.shutdownNow();
-			executorService.awaitTermination(10, TimeUnit.MINUTES);
-
-			if (!executorService.isTerminated())
-				throw new IllegalStateException("Invalid node state . Not all background processes were terminated.");
-
-			db.clear();
-
 			predecessor.set(-1);
-
 			int retryCount = 0;
 
 			while (true) {
@@ -147,16 +149,11 @@ public class OLocalDHTNode implements ODHTNode {
 	public long findSuccessor(long keyId) {
 		while (true) {
 			final long successorId = fingerPoints.get(0);
-			//log("Find successor for key " + keyId + ", successor is " + successorId);
 
-			if (insideInterval(id, successorId, keyId, true)) {
-//			log("Successor is " + successorId);
+			if (insideInterval(id, successorId, keyId, true))
 				return successorId;
-			}
 
-//		log("Find closest finger point for key " + keyId);
 			long nodeId = findClosestPrecedingFinger(keyId);
-//		log("Closest fingerpoint is " + nodeId);
 
 			ODHTNode node = nodeLookup.findById(nodeId);
 			if (node == null) {
@@ -166,6 +163,9 @@ public class OLocalDHTNode implements ODHTNode {
 				} else {
 					final long[] successors = successorsList;
 					for (final long successor : successors) {
+						if (successor == id)
+							return id;
+
 						final ODHTNode successorNode = nodeLookup.findById(successor);
 						if (successorNode != null) {
 							try {
@@ -175,6 +175,7 @@ public class OLocalDHTNode implements ODHTNode {
 							}
 						}
 					}
+
 					throw new ONodeOfflineException("Node " + nodeId + " is offline .", null, nodeId);
 				}
 			}
@@ -187,6 +188,9 @@ public class OLocalDHTNode implements ODHTNode {
 				} else {
 					final long[] successors = successorsList;
 					for (final long successor : successors) {
+						if (successor == id)
+							return id;
+
 						final ODHTNode successorNode = nodeLookup.findById(successor);
 						if (successorNode != null) {
 							try {
@@ -505,30 +509,29 @@ public class OLocalDHTNode implements ODHTNode {
 	}
 
 	public void stabilize() {
-		//log("Stabilization is started");
 		boolean result = false;
 
-		ODHTNode successor = null;
-
+		int retryCount = 0;
 		while (!result) {
-			long successorId = fingerPoints.get(0);
+			final long successorId = fingerPoints.get(0);
 
-			successor = nodeLookup.findById(successorId);
-
+			ODHTNode successor = nodeLookup.findById(successorId);
 			if (successor == null) {
-				log("Successor " + successorId + " is offline will try to find new one and retry.");
-				fingerPoints.compareAndSet(0, successorId, findSuccessor(id));
+				handleSuccessorOfflineDuringStabilization(retryCount, successorId);
+
+				retryCount++;
 				result = false;
 				continue;
 			}
 
-			Long predecessor;
+			final Long predecessor;
 
 			try {
 				predecessor = successor.getPredecessor();
 			} catch (ONodeOfflineException ooe) {
-				log("Successor " + successorId + " is offline will try to find new one and retry.");
-				fingerPoints.compareAndSet(0, successorId, findSuccessor(id));
+				handleSuccessorOfflineDuringStabilization(retryCount, successorId);
+
+				retryCount++;
 				result = false;
 				continue;
 			}
@@ -547,8 +550,9 @@ public class OLocalDHTNode implements ODHTNode {
 				if (result) {
 					successor = nodeLookup.findById(predecessor);
 					if (successor == null) {
-						log("Successor " + predecessor + " is offline will try to find new one and retry.");
-						fingerPoints.compareAndSet(0, predecessor, findSuccessor(id));
+						handleSuccessorOfflineDuringStabilization(retryCount, predecessor);
+
+						retryCount++;
 						result = false;
 						continue;
 					}
@@ -562,23 +566,24 @@ public class OLocalDHTNode implements ODHTNode {
 				try {
 					successor.notify(id);
 				} catch (ONodeOfflineException ooe) {
-					log("Successor " + successor.getNodeId() + " is offline will try to find new one and retry.");
-					fingerPoints.compareAndSet(0, predecessor, findSuccessor(id));
+					handleSuccessorOfflineDuringStabilization(retryCount, successor.getNodeId());
+
+					retryCount++;
 					result = false;
 					continue;
 				}
 
 
-			final int successorsSize = (int) Math.ceil(Math.log(nodeLookup.size()) / Math.log(2)) - 1;
-//		log("Successors size " + successorsSize);
+			final int successorsSize = (int) Math.ceil(Math.log(nodeLookup.size()) / Math.log(2));
 
 			if (successorsSize > 0) {
 				long[] successors;
 				try {
 					successors = successor.getSuccessors(successorsSize - 1);
 				} catch (ONodeOfflineException oof) {
-					log("Successor " + successor.getNodeId() + " is offline will try to find new one and retry.");
-					fingerPoints.compareAndSet(0, successor.getNodeId(), findSuccessor(id));
+					handleSuccessorOfflineDuringStabilization(retryCount, successor.getNodeId());
+
+					retryCount++;
 					result = false;
 					continue;
 				}
@@ -595,10 +600,31 @@ public class OLocalDHTNode implements ODHTNode {
 //		log("Stabilization is finished");
 	}
 
+	private void handleSuccessorOfflineDuringStabilization(int retryCount, long successorId) {
+		if (retryCount < MAX_RETRIES) {
+			log("Successor " + successorId + " is offline will try to find new one and retry. " + retryCount +
+							"-d retry.");
+
+			final long newSuccessorId = findSuccessor(id);
+			if (fingerPoints.compareAndSet(0, successorId, newSuccessorId)) {
+				final ODHTNode newSuccessorNode = nodeLookup.findById(newSuccessorId);
+				if (newSuccessorNode != null)
+					try {
+						newSuccessorNode.notify(id);
+					} catch (ONodeOfflineException noe) {
+						fingerPoints.compareAndSet(0, newSuccessorId, successorId);
+					}
+			}
+		} else {
+			log("Successor " + successorId + " is offline will try to find new one and retry." +
+							" Max retry count is reached.");
+			throw new ONodeOfflineException("Successor " + successorId + " is offline will try to find new one and retry." +
+							" Max retry count is reached.", null, successorId);
+		}
+	}
+
 	public void fixFingers() {
 		int nextValue = next.intValue();
-
-//	log("Fix of fingers is started for interval " + ((id + 1 << nextValue) & Long.MAX_VALUE));
 
 		fingerPoints.set(nextValue, findSuccessor((id + 1 << nextValue) & Long.MAX_VALUE));
 
@@ -608,16 +634,10 @@ public class OLocalDHTNode implements ODHTNode {
 			nextValue = next.intValue();
 			if (nextValue > 62)
 				next.compareAndSet(nextValue, 1);
-
-//			log("Next value is changed to 1");
 		}
-
-//		log("Fix of fingers was finished.");
 	}
 
 	public void fixPredecessor() {
-//		log("Fix of predecessor is started");
-
 		boolean result = false;
 
 		while (!result) {
@@ -625,18 +645,12 @@ public class OLocalDHTNode implements ODHTNode {
 
 			if (predecessorId > -1 && nodeLookup.findById(predecessorId) == null) {
 				result = predecessor.compareAndSet(predecessorId, -1);
-
-//				log("Predecessor " + predecessorId + " left the cluster");
 			} else
 				result = true;
 		}
-
-//		log("Fix of predecessor is finished");
 	}
 
 	public void notify(long nodeId) {
-//		log("Node " + nodeId + " thinks it can be our parent");
-
 		boolean result = false;
 
 		while (!result) {
