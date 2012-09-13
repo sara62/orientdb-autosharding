@@ -136,9 +136,8 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 			level++;
 		}
 
-		db.remove(key);
-
-		treeNode.count--;
+		if (db.remove(key) != null)
+			treeNode.count--;
 
 		rehashLeafNode(level, offset, treeNode, childIndex);
 
