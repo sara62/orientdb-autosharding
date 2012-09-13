@@ -7,11 +7,13 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +33,7 @@ public class OLocalDHTNode implements ODHTNode {
 	private final long id;
 	private final AtomicLongArray fingerPoints = new AtomicLongArray(63);
 
-	private final Map<Long, String> db = new ConcurrentHashMap<Long, String>();
+	private final NavigableMap<Long, String> db = new ConcurrentSkipListMap<Long, String>();
 
 	private volatile long migrationId = -1;
 	private volatile ODHTNodeLookup nodeLookup;
@@ -306,6 +308,10 @@ public class OLocalDHTNode implements ODHTNode {
 				return;
 			}
 		}
+	}
+
+	public Iterator<Long> browseNode(long from) {
+		return db.tailMap(from, true).keySet().iterator();
 	}
 
 	private void putData(Long keyId, String data) {

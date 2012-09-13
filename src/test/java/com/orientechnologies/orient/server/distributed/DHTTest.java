@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Andrey Lomakin
  * @since 20.08.12
  */
-@Test
+@Test(enabled = false)
 public class DHTTest {
 	private final AtomicBoolean testIsStopped = new AtomicBoolean(false);
 
