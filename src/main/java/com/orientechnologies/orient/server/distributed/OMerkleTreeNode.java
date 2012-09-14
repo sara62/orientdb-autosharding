@@ -112,7 +112,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		treeNode.hash = messageDigest.digest();
 	}
 
-	public void deleteData(int level, long offset, long key) {
+	public boolean deleteData(int level, long offset, long key) {
 		OMerkleTreeNode treeNode = this;
 		final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -136,14 +136,20 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 			level++;
 		}
 
-		if (db.remove(key) != null)
+		boolean result = false;
+
+		if (db.remove(key) != null) {
 			treeNode.count--;
+			result = true;
+		}
 
 		rehashLeafNode(level, offset, treeNode, childIndex);
 
 		treeNode.releaseExclusiveLock();
 
 		rehashParentNodes(hashPathNodes);
+
+		return result;
 	}
 
 	public static long startNodeKey(int level, long index, long offset) {

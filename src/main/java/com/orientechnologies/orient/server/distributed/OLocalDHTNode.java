@@ -37,14 +37,19 @@ public class OLocalDHTNode implements ODHTNode {
 
 	private volatile long migrationId = -1;
 	private volatile ODHTNodeLookup nodeLookup;
+
 	private AtomicInteger next = new AtomicInteger(1);
 	private final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
 
 	private volatile ExecutorService executorService = Executors.newCachedThreadPool();
+
 	private final Queue<Long> notificationQueue = new ConcurrentLinkedQueue<Long>();
+
 	private volatile long[] successorsList = new long[0];
 
-	private NodeState state;
+	private volatile NodeState state;
+
+	private final OMerkleTree merkleTree = new OMerkleTree(db);
 
 	public OLocalDHTNode(long id) {
 		this.id = id;
@@ -318,7 +323,7 @@ public class OLocalDHTNode implements ODHTNode {
 		lockManager.acquireLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		try {
 			delay();
-			this.db.put(keyId, data);
+			this.merkleTree.addData(keyId, data);
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		}
@@ -582,7 +587,7 @@ public class OLocalDHTNode implements ODHTNode {
 		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
 		try {
 			delay();
-			return db.remove(dataId) != null;
+			return merkleTree.deleteData(dataId);
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
 		}
@@ -910,7 +915,7 @@ public class OLocalDHTNode implements ODHTNode {
 								}
 							}
 
-							keyIterator.remove();
+							merkleTree.deleteData(key);
 						}
 					}
 				} finally {
