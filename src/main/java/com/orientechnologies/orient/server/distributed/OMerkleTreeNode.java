@@ -65,31 +65,36 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 			level++;
 		}
 
-		db.put(key, data);
+		boolean dataWereAdded = false;
 
-		treeNode.count++;
+		if (db.put(key, data) == null) {
+			treeNode.count++;
 
-		if (treeNode.getKeyCount() <= 64)
-			rehashLeafNode(level, offset, treeNode, childIndex);
-		else {
-			final long startKey = startNodeKey(level, childIndex, offset);
+			if (treeNode.getKeyCount() <= 64)
+				rehashLeafNode(level, offset, treeNode, childIndex);
+			else {
+				final long startKey = startNodeKey(level, childIndex, offset);
 
-			final Iterator<Long> keyIterator = db.tailMap(startKey, true).keySet().iterator();
-			final NavigableSet<Long> keysToHash = new TreeSet<Long>();
+				final Iterator<Long> keyIterator = db.tailMap(startKey, true).keySet().iterator();
+				final NavigableSet<Long> keysToHash = new TreeSet<Long>();
 
-			final int keyCount = treeNode.getKeyCount();
-			for (int i = 0; i < keyCount; i++) {
-				final long currentKey = keyIterator.next();
-				keysToHash.add(currentKey);
+				final int keyCount = treeNode.getKeyCount();
+				for (int i = 0; i < keyCount; i++) {
+					final long currentKey = keyIterator.next();
+					keysToHash.add(currentKey);
+				}
+
+				convertToInternalNode(level, startKey, keysToHash, treeNode);
+				hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
 			}
 
-			convertToInternalNode(level, startKey, keysToHash, treeNode);
-			hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
+			dataWereAdded = true;
 		}
 
 		treeNode.releaseExclusiveLock();
 
-		rehashParentNodes(hashPathNodes);
+		if (dataWereAdded)
+			rehashParentNodes(hashPathNodes);
 	}
 
 	private void rehashLeafNode(int level, long offset, OMerkleTreeNode treeNode, int childIndex) {
@@ -136,20 +141,22 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 			level++;
 		}
 
-		boolean result = false;
+		boolean dataWereRemoved = false;
 
 		if (db.remove(key) != null) {
 			treeNode.count--;
-			result = true;
-		}
 
-		rehashLeafNode(level, offset, treeNode, childIndex);
+			rehashLeafNode(level, offset, treeNode, childIndex);
+
+			dataWereRemoved = true;
+		}
 
 		treeNode.releaseExclusiveLock();
 
-		rehashParentNodes(hashPathNodes);
+		if (dataWereRemoved)
+			rehashParentNodes(hashPathNodes);
 
-		return result;
+		return dataWereRemoved;
 	}
 
 	public static long startNodeKey(int level, long index, long offset) {

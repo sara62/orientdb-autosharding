@@ -5,6 +5,7 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.MemberLeftException;
 import com.orientechnologies.orient.core.exception.OMemoryLockException;
+import com.orientechnologies.orient.server.distributed.ODHTKeyOwnerIsAbsentException;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
 import com.orientechnologies.orient.server.distributed.ORemoteNodeCallException;
@@ -45,8 +46,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new GetPredecessorNodeCall(nodeId, member.getUuid()), false);
 	}
 
-	public void notify(long node) {
-		callOnRemoteMember(new NotifyNodeCall(nodeId, member.getUuid(), node), true);
+	public long notify(long node) {
+		return callOnRemoteMember(new NotifyNodeCall(nodeId, member.getUuid(), node), false);
 	}
 
 	public boolean join(long node) {
@@ -97,6 +98,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new SuccessorsNodeCall(nodeId, member.getUuid(), depth), false);
 	}
 
+	public void requestStabilization() {
+		callOnRemoteMember(new RequestStabilizationNodeCall(nodeId, member.getUuid()), true);
+	}
+
 	private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
 		try {
 			Future<T> future =
@@ -111,6 +116,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		} catch (MemberLeftException mle) {
 			throw new ONodeOfflineException("Member with id " + nodeId + " was left.", mle, nodeId);
 		} catch (ExecutionException ee) {
+			if (ee.getCause() instanceof ODHTKeyOwnerIsAbsentException)
+				throw new ODHTKeyOwnerIsAbsentException(ee.getCause(),
+								((ODHTKeyOwnerIsAbsentException) ee.getCause()).getKey());
+
 			throw new ORemoteNodeCallException("Error during remote call of node " + nodeId, ee, nodeId);
 		}
 
@@ -294,7 +303,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		}
 	}
 
-	private static final class NotifyNodeCall extends NodeCall<Void> {
+	private static final class NotifyNodeCall extends NodeCall<Long> {
 		private long notifyNodeId;
 
 		public NotifyNodeCall() {
@@ -306,10 +315,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		}
 
 		@Override
-		protected Void call(ODHTNode node) {
-			node.notify(notifyNodeId);
-
-			return null;
+		protected Long call(ODHTNode node) {
+			return node.notify(notifyNodeId);
 		}
 
 		@Override
@@ -541,4 +548,18 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		}
 	}
 
+	private static final class RequestStabilizationNodeCall extends NodeCall<Void> {
+		public RequestStabilizationNodeCall() {
+		}
+
+		private RequestStabilizationNodeCall(long nodeId, String memberUUID) {
+			super(nodeId, memberUUID);
+		}
+
+		@Override
+		protected Void call(ODHTNode node) {
+			node.requestStabilization();
+			return null;
+		}
+	}
 }

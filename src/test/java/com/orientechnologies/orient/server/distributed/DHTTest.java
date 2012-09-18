@@ -109,6 +109,20 @@ public class DHTTest {
 		for (Future<Void> future : readerFutures)
 			future.get();
 
+		ODHTNode startNode = serverInstance.findSuccessor(0);
+		System.out.println("[stat] Wait till all nodes will be stable.");
+
+		boolean allNodesAreStable = false;
+		while (!allNodesAreStable) {
+			ODHTNode node = serverInstance.findById(startNode.getSuccessor());
+			allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
+			while (node.getNodeId() != startNode.getNodeId() && allNodesAreStable) {
+				allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
+
+				node = serverInstance.findById(node.getSuccessor());
+			}
+		}
+
 		System.out.println("[stat] Items check " + data.size() + " items.");
 		int i = 0;
 		for (Map.Entry<Long, String> entry : data.entrySet()) {
@@ -122,7 +136,6 @@ public class DHTTest {
 
 		System.out.println("[stat] Node sizes : ");
 
-		ODHTNode startNode = serverInstance.findSuccessor(0);
 		int totalSize = 0;
 
 		System.out.println("[stat] Node : " + startNode.getNodeId() + " size - " + startNode.size() +
@@ -176,10 +189,20 @@ public class DHTTest {
 					if (i % n == 0) {
 						lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 						try {
-							if (data.containsKey(key)) {
-								serverInstance.remove(key);
-								data.remove(key);
-							}
+							while (true)
+								try {
+									if (data.containsKey(key)) {
+										serverInstance.remove(key);
+										data.remove(key);
+									}
+
+									break;
+								} catch (ODHTKeyOwnerIsAbsentException e) {
+									System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
+													+ key);
+									Thread.sleep(50);
+								}
+
 						} finally {
 							lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 						}
@@ -217,7 +240,15 @@ public class DHTTest {
 				long key = random.nextLong(Long.MAX_VALUE);
 				lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 				try {
-					serverInstance.put(key, String.valueOf(key));
+					while (true)
+						try {
+							serverInstance.put(key, String.valueOf(key));
+							break;
+						} catch (ODHTKeyOwnerIsAbsentException e) {
+							System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
+											+ key);
+							Thread.sleep(50);
+						}
 					data.put(key, String.valueOf(key));
 				} finally {
 					lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
@@ -244,18 +275,26 @@ public class DHTTest {
 			while (!testIsStopped.get()) {
 				int i = 0;
 				for (Map.Entry<Long, String> entry : data.entrySet()) {
-					lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
-					try {
-						if (data.containsKey(entry.getKey()))
-							Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(),
-											"Key " + entry.getKey() + " is absent");
+					while (true) {
+						lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+						try {
+							try {
+								if (data.containsKey(entry.getKey()))
+									Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(),
+													"Key " + entry.getKey() + " is absent");
+								i++;
+								if (i % 10000 == 0)
+									System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
 
-						i++;
-						if (i % 10000 == 0)
-							System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
-
-					} finally {
-						lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+								break;
+							} catch (ODHTKeyOwnerIsAbsentException e) {
+								System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
+												+ entry.getKey());
+								Thread.sleep(50);
+							}
+						} finally {
+							lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+						}
 					}
 				}
 			}

@@ -6,12 +6,10 @@ import java.text.DateFormat;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
@@ -29,8 +27,8 @@ public class OLocalDHTNode implements ODHTNode {
 	private static final int MAX_RETRIES = 10;
 
 	private AtomicLong predecessor = new AtomicLong(-1);
-
 	private final long id;
+
 	private final AtomicLongArray fingerPoints = new AtomicLongArray(63);
 
 	private final NavigableMap<Long, String> db = new ConcurrentSkipListMap<Long, String>();
@@ -125,7 +123,16 @@ public class OLocalDHTNode implements ODHTNode {
 						continue;
 					}
 
-					successor.notify(id);
+					final long prevPredecessor = successor.notify(id);
+					if (prevPredecessor > -1) {
+						final ODHTNode prevPredecessorNode = nodeLookup.findById(prevPredecessor);
+						if (prevPredecessorNode != null)
+							try {
+								prevPredecessorNode.requestStabilization();
+							} catch (ONodeOfflineException e) {
+								//ignore
+							}
+					}
 
 					log("Join completed, successor is " + fingerPoints.get(0));
 
@@ -153,14 +160,19 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 	}
 
-	public long findSuccessor(long keyId) {
+	public long findSuccessor(long key) {
 		while (true) {
+//		log("Successor request for key " + key);
 			final long successorId = fingerPoints.get(0);
 
-			if (insideInterval(id, successorId, keyId, true))
+			if (insideInterval(id, successorId, key, true)) {
+//			log("Key " + key + " inside interval " + id + " " + successorId);
 				return successorId;
+			}
 
-			long nodeId = findClosestPrecedingFinger(keyId);
+			long nodeId = findClosestPrecedingFinger(key);
+
+//		log("Closest preceding node for key " + key + " is " + nodeId);
 
 			ODHTNode node = nodeLookup.findById(nodeId);
 			if (node == null) {
@@ -176,7 +188,7 @@ public class OLocalDHTNode implements ODHTNode {
 						final ODHTNode successorNode = nodeLookup.findById(successor);
 						if (successorNode != null) {
 							try {
-								return successorNode.findSuccessor(keyId);
+								return successorNode.findSuccessor(key);
 							} catch (ONodeOfflineException noe) {
 								log(noe.toString());
 							}
@@ -188,7 +200,9 @@ public class OLocalDHTNode implements ODHTNode {
 			}
 
 			try {
-				return node.findSuccessor(keyId);
+				final long successorResult = node.findSuccessor(key);
+//			log("Successor for key " + key + " is " + successorResult);
+				return successorResult;
 			} catch (ONodeOfflineException e) {
 				if (nodeId != successorId) {
 					clearFingerPoint(nodeId);
@@ -201,7 +215,7 @@ public class OLocalDHTNode implements ODHTNode {
 						final ODHTNode successorNode = nodeLookup.findById(successor);
 						if (successorNode != null) {
 							try {
-								return successorNode.findSuccessor(keyId);
+								return successorNode.findSuccessor(key);
 							} catch (ONodeOfflineException noe) {
 								log(noe.toString());
 							}
@@ -253,13 +267,18 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 	}
 
-	private long findClosestPrecedingFinger(long keyId) {
+	private long findClosestPrecedingFinger(long key) {
+//		log("Closest preceding request for key " + key);
+
 		for (int i = fingerPoints.length() - 1; i >= 0; i--) {
 			final long fingerPoint = fingerPoints.get(i);
-			if (fingerPoint > -1 && insideInterval(this.id, keyId, fingerPoint, false)) {
+			if (fingerPoint > -1 && insideInterval(this.id, key, fingerPoint, false)) {
+//				log("Closest preceding finger for key " + key + " is " + fingerPoint);
 				return fingerPoint;
 			}
 		}
+
+//		log("Closest preceding finger for key " + key + " is " + this.id);
 
 		return this.id;
 	}
@@ -272,57 +291,66 @@ public class OLocalDHTNode implements ODHTNode {
 		return predecessor.get();
 	}
 
-	public void put(Long dataId, String data) {
+	public void put(Long key, String data) {
 		waitTillJoin();
 
 		int retryCount = 0;
-		final long successorId = findSuccessor(dataId);
 
-		if (successorId == id) {
-			putData(dataId, data);
-		} else {
-			while (true) {
-				final ODHTNode node = nodeLookup.findById(successorId);
+		while (true) {
+			final long successorId = findSuccessor(key);
+			retryCount++;
 
-				if (node == null) {
-					if (retryCount < MAX_RETRIES) {
-						retryCount++;
-						log("Node " + successorId + " is offline, retry " + retryCount + "-d time.");
-						continue;
-					} else {
-						log("Node " + successorId + " is offline, retry limit is reached.");
-						throw new ONodeOfflineException("Node " + successorId + " is offline, retry limit is reached.",
-										null, successorId);
-					}
-				}
+			if (successorId == id) {
+				if (!checkLocalOwnerShip(key, retryCount))
+					continue;
 
-				try {
-					node.put(dataId, data);
-				} catch (ONodeOfflineException ooe) {
-					if (retryCount < MAX_RETRIES) {
-						retryCount++;
-						log("Node " + successorId + " is offline, retry " + retryCount + "-d time.");
-						continue;
-					} else {
-						log("Node " + successorId + " is offline, retry limit is reached.");
-						throw new ONodeOfflineException("Node " + successorId + " is offline, retry limit is reached.",
-										null, successorId);
-					}
-				}
+				putData(key, data);
+
+				return;
+			} else {
+				if (!remoteNodePut(key, data, retryCount, successorId))
+					continue;
 
 				return;
 			}
 		}
 	}
 
-	public Iterator<Long> browseNode(long from) {
-		return db.tailMap(from, true).keySet().iterator();
+	private boolean remoteNodePut(Long key, String data, int retryCount, long nodeId) {
+		final ODHTNode node = nodeLookup.findById(nodeId);
+
+		if (node == null) {
+			if (retryCount < MAX_RETRIES) {
+				log("Node " + nodeId + " is offline, retry " + retryCount + "-d time.");
+				return false;
+			} else {
+				log("Node " + nodeId + " is offline, retry limit is reached.");
+				throw new ONodeOfflineException("Node " + nodeId + " is offline, retry limit is reached.",
+								null, nodeId);
+			}
+		}
+
+		try {
+			node.put(key, data);
+		} catch (ONodeOfflineException ooe) {
+			if (retryCount < MAX_RETRIES) {
+				log("Node " + nodeId + " is offline, retry " + retryCount + "-d time.");
+				return false;
+			} else {
+				log("Node " + nodeId + " is offline, retry limit is reached.");
+				throw new ONodeOfflineException("Node " + nodeId + " is offline, retry limit is reached.",
+								null, nodeId);
+			}
+		}
+
+		return true;
 	}
 
 	private void putData(Long keyId, String data) {
 		lockManager.acquireLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		try {
 			delay();
+//		log("Add data for key " + keyId);
 			this.merkleTree.addData(keyId, data);
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
@@ -341,46 +369,31 @@ public class OLocalDHTNode implements ODHTNode {
 		return get(dataId, true);
 	}
 
-	public String get(Long dataId, boolean checkOwnerShip) {
+	public String get(Long key, boolean checkOwnerShip) {
 		waitTillJoin();
 		int retryCount = 0;
 
 		while (true) {
+			retryCount++;
+
 			if (checkOwnerShip) {
-				final long successorId = findSuccessor(dataId);
+				final long successorId = findSuccessor(key);
 				if (successorId != id) {
+					final RemoteNodeCallResult<String> remoteNodeGetResult = remoteNodeGet(key, successorId, retryCount);
 
-					ODHTNode node = nodeLookup.findById(successorId);
-					if (node == null) {
-						if (retryCount < MAX_RETRIES) {
-							retryCount++;
-							log("Node " + successorId + " is offline, retry " + retryCount + "-d time.");
-							continue;
-						} else {
-							log("Node " + successorId + " is offline, retry limit is reached.");
-							throw new ONodeOfflineException("Node " + successorId + " is offline, retry limit is reached.",
-											null, successorId);
-						}
-					}
+					if (remoteNodeGetResult.repeat)
+						continue;
 
-					try {
-						return node.get(dataId);
-					} catch (ONodeOfflineException e) {
-						if (retryCount < MAX_RETRIES) {
-							retryCount++;
-							log("Node " + successorId + " is offline, retry " + retryCount + "-d time.");
-							continue;
-						} else {
-							log("Node " + successorId + " is offline, retry limit is reached.");
-							throw e;
-						}
-					}
+					return remoteNodeGetResult.data;
 				}
+
+				if (!checkLocalOwnerShip(key, retryCount))
+					continue;
 			}
 
 			if (state == NodeState.MERGING) {
 				String data;
-				data = readData(dataId);
+				data = readData(key);
 
 				if (data == null) {
 					int migrationRetryCount = 0;
@@ -388,7 +401,10 @@ public class OLocalDHTNode implements ODHTNode {
 					while (true) {
 						ODHTNode migrationNode = nodeLookup.findById(migrationId);
 
-						while (migrationNode == null && migrationRetryCount < MAX_RETRIES) {
+						while (migrationNode == null && migrationRetryCount <= MAX_RETRIES) {
+
+							migrationRetryCount++;
+
 							migrationId = findSuccessor(migrationId);
 							if (migrationId == id)
 								break;
@@ -399,10 +415,8 @@ public class OLocalDHTNode implements ODHTNode {
 									migrationNode.requestMigration(id);
 								} catch (ONodeOfflineException noe) {
 									migrationNode = null;
-									migrationRetryCount++;
 								}
-							} else
-								migrationRetryCount++;
+							}
 						}
 
 						if (migrationNode == null) {
@@ -414,13 +428,13 @@ public class OLocalDHTNode implements ODHTNode {
 						}
 
 						try {
-							data = migrationNode.get(dataId, false);
+							data = migrationNode.get(key, false);
 						} catch (ONodeOfflineException noe) {
 							continue;
 						}
 
-						if (data == null && migrationNode.getNodeId() != id)
-							return readData(dataId);
+						if (data == null)
+							return readData(key);
 						else
 							return data;
 					}
@@ -428,7 +442,33 @@ public class OLocalDHTNode implements ODHTNode {
 					return data;
 			}
 
-			return readData(dataId);
+			return readData(key);
+		}
+	}
+
+	private RemoteNodeCallResult<String> remoteNodeGet(long key, long nodeId, int retryCount) {
+		ODHTNode node = nodeLookup.findById(nodeId);
+		if (node == null) {
+			if (retryCount < MAX_RETRIES) {
+				log("Node " + nodeId + " is offline, retry " + retryCount + "-d time.");
+				return new RemoteNodeCallResult<String>(true, null);
+			} else {
+				log("Node " + nodeId + " is offline, retry limit is reached.");
+				throw new ONodeOfflineException("Node " + nodeId + " is offline, retry limit is reached.",
+								null, nodeId);
+			}
+		}
+
+		try {
+			return new RemoteNodeCallResult<String>(false, node.get(key));
+		} catch (ONodeOfflineException e) {
+			if (retryCount < MAX_RETRIES) {
+				log("Node " + nodeId + " is offline, retry " + retryCount + "-d time.");
+				return new RemoteNodeCallResult<String>(true, null);
+			} else {
+				log("Node " + nodeId + " is offline, retry limit is reached.");
+				throw e;
+			}
 		}
 	}
 
@@ -474,26 +514,27 @@ public class OLocalDHTNode implements ODHTNode {
 		return remove(keyId, true);
 	}
 
-	public boolean remove(Long keyId, boolean checkOwnerShip) {
+	public boolean remove(Long key, boolean checkOwnerShip) {
 		boolean result = false;
 
 		waitTillJoin();
 
-		//log("Removal request for " + keyId);
+		//log("Removal request for " + key);
 
 		if (checkOwnerShip) {
 			int retryCount = 0;
 
-			final long successorId = findSuccessor(keyId);
-			//log("Successor for key " + keyId + " is " + successorId);
+			while (true) {
+				retryCount++;
 
-			if (successorId != id) {
-				while (true) {
+				final long successorId = findSuccessor(key);
+				//log("Successor for key " + key + " is " + successorId);
+
+				if (successorId != id) {
 					ODHTNode node = nodeLookup.findById(successorId);
 					if (node == null) {
 						if (retryCount < MAX_RETRIES) {
 							log("Node " + successorId + " is offline, " + retryCount + "-d retry.");
-							retryCount++;
 							continue;
 						} else {
 							log("Node " + successorId + " is offline, retry limit was reached.");
@@ -503,17 +544,19 @@ public class OLocalDHTNode implements ODHTNode {
 					}
 
 					try {
-						return node.remove(keyId);
+						return node.remove(key);
 					} catch (ONodeOfflineException noe) {
 						if (retryCount < MAX_RETRIES) {
 							log("Node " + successorId + " is offline, " + retryCount + "-d retry.");
-							retryCount++;
 						} else {
 							log("Node " + successorId + " is offline, retry limit was reached.");
 							throw noe;
 						}
 					}
 				}
+
+				if (checkLocalOwnerShip(key, retryCount))
+					break;
 			}
 		}
 
@@ -521,7 +564,7 @@ public class OLocalDHTNode implements ODHTNode {
 			int migrationRetryCount = 0;
 
 			while (true) {
-				//log("Try to remove key " + keyId + " from node " + migrationId);
+				//log("Try to remove key " + key + " from node " + migrationId);
 
 				ODHTNode migrationNode = nodeLookup.findById(migrationId);
 
@@ -560,9 +603,9 @@ public class OLocalDHTNode implements ODHTNode {
 				}
 
 				try {
-					//log("Key " + keyId + " is going to be removed from migration node.");
-					result = migrationNode.remove(keyId, false);
-					//log("Key " + keyId + " is removed from migration node with result " + result);
+					//log("Key " + key + " is going to be removed from migration node.");
+					result = migrationNode.remove(key, false);
+					//log("Key " + key + " is removed from migration node with result " + result);
 					break;
 				} catch (ONodeOfflineException noe) {
 					//retry
@@ -570,9 +613,9 @@ public class OLocalDHTNode implements ODHTNode {
 			}
 		}
 
-		//log("Key " + keyId + " is going to be removed from owner node.");
-		result = result | removeData(keyId);
-		//log("Key " + keyId + " is removed from owner node with result " + result);
+		//log("Key " + key + " is going to be removed from owner node.");
+		result = result | removeData(key);
+		//log("Key " + key + " is removed from owner node with result " + result);
 
 		return result;
 	}
@@ -583,13 +626,14 @@ public class OLocalDHTNode implements ODHTNode {
 		log("Data migration was started for node " + requesterId);
 	}
 
-	private boolean removeData(Long dataId) {
-		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+	private boolean removeData(Long key) {
+		lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 		try {
 			delay();
-			return merkleTree.deleteData(dataId);
+//		log("Remove data for key " + key);
+			return merkleTree.deleteData(key);
 		} finally {
-			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.EXCLUSIVE);
+			lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 		}
 	}
 
@@ -655,17 +699,26 @@ public class OLocalDHTNode implements ODHTNode {
 			} else
 				result = true;
 
-			if (successor.getNodeId() != id)
-				try {
-					successor.notify(id);
-				} catch (ONodeOfflineException ooe) {
-					handleSuccessorOfflineCase(retryCount, successor.getNodeId());
+			final long prevPredecessor;
+			try {
+				prevPredecessor = successor.notify(id);
+			} catch (ONodeOfflineException ooe) {
+				handleSuccessorOfflineCase(retryCount, successor.getNodeId());
 
-					retryCount++;
-					result = false;
-					continue;
-				}
+				retryCount++;
+				result = false;
+				continue;
+			}
 
+			if (prevPredecessor > -1) {
+				ODHTNode prevPredecessorNode = nodeLookup.findById(prevPredecessor);
+				if (prevPredecessorNode != null)
+					try {
+						prevPredecessorNode.requestStabilization();
+					} catch (ONodeOfflineException e) {
+						//ignore
+					}
+			}
 
 			final int successorsSize = (int) Math.ceil(Math.log(nodeLookup.size()) / Math.log(2));
 
@@ -743,18 +796,24 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 	}
 
-	public void notify(long nodeId) {
+	public long notify(long nodeId) {
 		boolean result = false;
+		long prevPredecessor = -1;
 
 		while (!result) {
 			long predecessorId = predecessor.longValue();
 
 			if (predecessorId < 0 || (insideInterval(predecessorId, this.id, nodeId, false))) {
+				prevPredecessor = predecessorId;
+
 				result = predecessor.compareAndSet(predecessorId, nodeId);
 				if (result)
 					log("New predecessor is " + nodeId);
-				else
+				else {
 					log("Predecessor setup was failed.");
+					prevPredecessor = -1;
+				}
+
 
 				if (result && predecessorId < 0 && state == NodeState.JOIN) {
 					int retryCount = 0;
@@ -790,6 +849,7 @@ public class OLocalDHTNode implements ODHTNode {
 
 //		log("Parent check is finished.");
 
+		return prevPredecessor;
 	}
 
 	public void notifyMigrationEnd(long nodeId) {
@@ -803,6 +863,30 @@ public class OLocalDHTNode implements ODHTNode {
 
 			processNotificationQueue();
 		}
+	}
+
+	public void requestStabilization() {
+		stabilize();
+	}
+
+	private boolean checkLocalOwnerShip(final long key, final int retryCount) {
+		final long predecessorValue = predecessor.get();
+
+		if (predecessorValue > -1 && insideInterval(predecessorValue, id, key, true))
+			return true;
+
+		if (retryCount <= MAX_RETRIES) {
+			log("Owner for key " + key + " is absent. Predecessor " + predecessorValue + ". " + retryCount +
+							" retry.");
+
+			return false;
+		}
+
+
+		log("Owner for key " + key + " is absent. Predecessor " + predecessorValue + ". Retry count is reached.");
+		drawRing();
+
+		throw new ODHTKeyOwnerIsAbsentException("Owner for key " + key + " is absent.", key);
 	}
 
 	private boolean insideInterval(long from, long to, long value, boolean rightIsIncluded) {
@@ -871,75 +955,105 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 
 		public Void call() throws Exception {
-			keyCycle:
-			while (keyIterator.hasNext() && !Thread.currentThread().isInterrupted()) {
-				long key = keyIterator.next();
+			try {
+				keyCycle:
+				while (keyIterator.hasNext() && !Thread.currentThread().isInterrupted()) {
+					long key = keyIterator.next();
 
-				int retryCount = 0;
+					int retryCount = 0;
 
-				lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-				try {
-					final String data = db.get(key);
-					if (data != null) {
-						final long nodeId = findSuccessor(key);
+					lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+					try {
+						while (true) {
+							final String data = db.get(key);
+							if (data != null) {
+								final long nodeId = findSuccessor(key);
 
-						if (nodeId != id) {
+								if (nodeId != id) {
 
-							while (true) {
-								final ODHTNode node = nodeLookup.findById(nodeId);
-								if (node == null) {
-									if (retryCount < MAX_RETRIES) {
-										log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
-										retryCount++;
+									final ODHTNode node = nodeLookup.findById(nodeId);
+									if (node == null) {
+										if (retryCount < MAX_RETRIES) {
+											log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
+											retryCount++;
 
-										continue;
-									} else {
-										log("Node with id " + nodeId + " is offline. Retry limit is reached.");
+											continue;
+										} else {
+											log("Node with id " + nodeId + " is offline. Retry limit is reached.");
 
-										continue keyCycle;
+											continue keyCycle;
+										}
 									}
-								}
 
-								try {
-									node.put(key, data);
-									break;
-								} catch (ONodeOfflineException noe) {
-									if (retryCount < MAX_RETRIES) {
-										log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
-										retryCount++;
-									} else {
-										log("Node with id " + nodeId + " is offline. Retry limit is reached.");
+									try {
+										node.put(key, data);
+									} catch (ONodeOfflineException noe) {
+										if (retryCount < MAX_RETRIES) {
+											log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
+											retryCount++;
 
-										continue keyCycle;
+											continue;
+										} else {
+											log("Node with id " + nodeId + " is offline. Retry limit is reached.");
+
+											continue keyCycle;
+										}
+									} catch (ODHTKeyOwnerIsAbsentException oae) {
+										if (retryCount < MAX_RETRIES) {
+											log("Ring structure is not stabilized . " + retryCount + "-d retry.");
+											retryCount++;
+
+											continue;
+										} else {
+											log("Ring structure is not stabilized. Retry limit is reached.");
+
+											continue keyCycle;
+										}
 									}
+
+									merkleTree.deleteData(key);
+//								log("Remove data for key " + key + " during merge.");
 								}
 							}
-
-							merkleTree.deleteData(key);
+							break;
 						}
+					} finally {
+						lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 					}
-				} finally {
-					lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 				}
-			}
 
-			if (state == NodeState.STABLE) {
-				final ODHTNode node = nodeLookup.findById(requesterNode);
-				if (node != null)
-					try {
-						node.notifyMigrationEnd(id);
-					} catch (ONodeOfflineException noe) {
-						//ignore
-					}
-			} else {
-				notificationQueue.add(requesterNode);
 				if (state == NodeState.STABLE) {
-					processNotificationQueue();
+					final ODHTNode node = nodeLookup.findById(requesterNode);
+					if (node != null)
+						try {
+							node.notifyMigrationEnd(id);
+						} catch (ONodeOfflineException noe) {
+							//ignore
+						}
+				} else {
+					notificationQueue.add(requesterNode);
+					if (state == NodeState.STABLE) {
+						processNotificationQueue();
+					}
 				}
-			}
 
-			log("Migration was successfully finished for node " + requesterNode);
-			return null;
+				log("Migration was successfully finished for node " + requesterNode);
+				return null;
+
+			} catch (Exception e) {
+				log(e.toString());
+				throw e;
+			}
+		}
+	}
+
+	private static final class RemoteNodeCallResult<T> {
+		private boolean repeat;
+		private T data;
+
+		private RemoteNodeCallResult(boolean repeat, T data) {
+			this.repeat = repeat;
+			this.data = data;
 		}
 	}
 }

@@ -23,6 +23,8 @@ public class OMerkleTree {
 		final long startKey = OMerkleTreeNode.startNodeKey(1, childIndex, 0);
 
 		final OMerkleTreeNode node = roots[childIndex];
+
+  //System.out.println("Add data: key " + key + " index " + childIndex + " start key " + startKey);
 		node.addData(1, startKey, key, data);
 	}
 
@@ -31,6 +33,7 @@ public class OMerkleTree {
 		final long startKey = OMerkleTreeNode.startNodeKey(1, childIndex, 0);
 
 		final OMerkleTreeNode node = roots[childIndex];
+  //System.out.println("Delete data: key " + key + " index " + childIndex + " start key " + startKey);
 		return node.deleteData(1, startKey, key);
 	}
 
