@@ -4,12 +4,11 @@ import com.hazelcast.core.DistributedTask;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.MemberLeftException;
-import com.orientechnologies.orient.core.exception.OMemoryLockException;
 import com.orientechnologies.orient.server.distributed.ODHTKeyOwnerIsAbsentException;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
+import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
 import com.orientechnologies.orient.server.distributed.ORemoteNodeCallException;
-import com.orientechnologies.orient.server.distributed.OServerOfflineException;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -46,12 +45,12 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new GetPredecessorNodeCall(nodeId, member.getUuid()), false);
 	}
 
-	public long notify(long node) {
-		return callOnRemoteMember(new NotifyNodeCall(nodeId, member.getUuid(), node), false);
+	public long notifyParent(long nodeId) {
+		return callOnRemoteMember(new NotifyNodeCall(nodeId, member.getUuid(), nodeId), false);
 	}
 
-	public boolean join(long node) {
-		return callOnRemoteMember(new JoinNodeCall(nodeId, member.getUuid(), node), false);
+	public boolean join(long nodeId) {
+		return callOnRemoteMember(new JoinNodeCall(nodeId, member.getUuid(), nodeId), false);
 	}
 
 	public long findSuccessor(long id) {
@@ -74,6 +73,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		return callOnRemoteMember(new SizeNodeCall(nodeId, member.getUuid()), false);
 	}
 
+	public long[] missingRecords(long[] ids, ODHTRecordVersion[] versions) {
+		return new long[0];  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
 	public void notifyMigrationEnd(long notifierId) {
 		callOnRemoteMember(new NotifyMigrationEndNodeCall(this.nodeId, member.getUuid(), notifierId), true);
 	}
@@ -92,6 +95,38 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 	public NodeState state() {
 		return callOnRemoteMember(new StateNodeCall(nodeId, member.getUuid()), false);
+	}
+
+	public long create(String data) {
+		return 0;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public long create(long id, String data) {
+		return 0;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public String get(long id) {
+		return null;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public String get(long id, boolean checkOwnerShip) {
+		return null;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public void update(long id, String data) {
+		//To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public void update(long id, String data, boolean checkOwnerShip) {
+		//To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public boolean remove(long id) {
+		return false;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public boolean remove(long id, boolean checkOwnerShip) {
+		return false;  //To change body of implemented methods use File | Settings | File Templates.
 	}
 
 	public long[] getSuccessors(int depth) {
@@ -316,7 +351,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 		@Override
 		protected Long call(ODHTNode node) {
-			return node.notify(notifyNodeId);
+			return node.notifyParent(notifyNodeId);
 		}
 
 		@Override
@@ -376,7 +411,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 		@Override
 		protected Void call(ODHTNode node) {
-			node.put(keyId, data);
+			//node.put(keyId, data);
 
 			return null;
 		}
@@ -501,7 +536,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 		@Override
 		protected Void call(ODHTNode node) {
-			node.notifyMigrationEnd(notifierId);
+			//node.notifyMigrationEnd(notifierId);
 			return null;
 		}
 
@@ -531,7 +566,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 		@Override
 		protected Void call(ODHTNode node) {
-			node.requestMigration(requesterId);
+			//node.requestMigration(requesterId);
+
 			return null;
 		}
 

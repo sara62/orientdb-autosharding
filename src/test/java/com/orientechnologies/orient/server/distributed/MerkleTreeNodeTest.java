@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
@@ -17,33 +18,37 @@ import java.util.TreeMap;
 @Test
 public class MerkleTreeNodeTest {
 	public void testAddOneKey() throws Exception {
-		NavigableMap<Long, String> map = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode treeNode = new OMerkleTreeNode(map);
 		treeNode.addData(1, 0, 130, "130");
 
-		Assert.assertEquals(map.get(130L), "130");
+		Record record = map.get(130L);
+		Assert.assertEquals(record.getData(), "130");
+		Assert.assertEquals(record.getShortVersion(), 0);
 
 		MessageDigest sha = MessageDigest.getInstance("SHA-1");
 
-		final ByteBuffer byteBuffer = ByteBuffer.allocate(8).putLong(130);
+		final ByteBuffer byteBuffer = ByteBuffer.allocate(30);
+		byteBuffer.putLong(130L);
+		byteBuffer.put(record.getVersion().toStream());
+
 		byteBuffer.rewind();
 		sha.update(byteBuffer);
 
 		Assert.assertEquals(treeNode.getHash(), sha.digest());
-		Assert.assertEquals(treeNode.getKeyCount(), 1);
+		Assert.assertEquals(treeNode.getRecordsCount(), 1);
 	}
 
 	public void testAdd66Keys() throws Exception {
-		NavigableMap<Long, String> map = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode treeNode = new OMerkleTreeNode(map);
 		for (int i = 0; i < 66; i++)
 			treeNode.addData(1, 0, i, i + "");
 
 		for (long i = 0; i < 66; i++)
-			Assert.assertEquals(map.get(i), i + "");
-
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
 		OMerkleTreeNode parent = null;
 
@@ -66,17 +71,22 @@ public class MerkleTreeNodeTest {
 		treeNode = parent;
 
 		for (int i = 0; i < 4; i++)
-			Assert.assertEquals(treeNode.getChild(i).getKeyCount(), 16);
+			Assert.assertEquals(treeNode.getChild(i).getRecordsCount(), 16);
 
-		Assert.assertEquals(treeNode.getChild(4).getKeyCount(), 2);
+		Assert.assertEquals(treeNode.getChild(4).getRecordsCount(), 2);
 
 		for (int i = 0; i < 4; i++) {
-			final ByteBuffer buffer = ByteBuffer.allocate(16 * 8);
+			final ByteBuffer buffer = ByteBuffer.allocate(16 * 30);
 
 			OMerkleTreeNode child = treeNode.getChild(i);
-			for (int n = 0; n < 16; n++)
+			for (int n = 0; n < 16; n++) {
 				buffer.putLong(i * 16 + n);
 
+				Record record = map.get(i * 16L + n);
+				buffer.put(record.getVersion().toStream());
+			}
+
+			buffer.limit(buffer.position());
 			buffer.rewind();
 
 			MessageDigest sha = MessageDigest.getInstance("SHA-1");
@@ -85,9 +95,16 @@ public class MerkleTreeNodeTest {
 			Assert.assertEquals(child.getHash(), sha.digest());
 		}
 
-		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(16);
+		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(60);
+		Record record;
+
 		lastChildBuffer.putLong(64);
+		record = map.get(64L);
+		lastChildBuffer.put(record.getVersion().toStream());
+
 		lastChildBuffer.putLong(65);
+		record = map.get(65L);
+		lastChildBuffer.put(record.getVersion().toStream());
 
 		lastChildBuffer.rewind();
 
@@ -130,19 +147,19 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd67KeysToEnd() throws Exception {
-		NavigableMap<Long, String> map = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode treeNode = new OMerkleTreeNode(map);
 
 		for (long i = Long.MAX_VALUE; i >= Long.MAX_VALUE - 66; i--) {
 			long childPos = OMerkleTreeNode.childIndex(0, i);
-			long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+			long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
 			treeNode.addData(1, startKey, i, i + "");
 		}
 
 		for (long i = Long.MAX_VALUE; i >= Long.MAX_VALUE - 66; i--)
-			Assert.assertEquals(map.get(i), i + "");
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
 		OMerkleTreeNode parent = null;
 
@@ -165,16 +182,22 @@ public class MerkleTreeNodeTest {
 		treeNode = parent;
 
 		for (int i = 63; i >= 60; i--)
-			Assert.assertEquals(treeNode.getChild(i).getKeyCount(), 16);
+			Assert.assertEquals(treeNode.getChild(i).getRecordsCount(), 16);
 
-		Assert.assertEquals(treeNode.getChild(59).getKeyCount(), 3);
+		Assert.assertEquals(treeNode.getChild(59).getRecordsCount(), 3);
 
 		for (int i = 63; i >= 60; i--) {
-			final ByteBuffer buffer = ByteBuffer.allocate(16 * 8);
+			final ByteBuffer buffer = ByteBuffer.allocate(16 * 30);
 
 			OMerkleTreeNode child = treeNode.getChild(i);
-			for (int n = 15; n >= 0; n--)
-				buffer.putLong(Long.MAX_VALUE - n - 16 * (63 - i));
+			for (int n = 15; n >= 0; n--) {
+				final long id = Long.MAX_VALUE - n - 16 * (63 - i);
+
+				Record record = map.get(id);
+
+				buffer.putLong(id);
+				buffer.put(record.getVersion().toStream());
+			}
 
 			buffer.rewind();
 
@@ -184,10 +207,20 @@ public class MerkleTreeNodeTest {
 			Assert.assertEquals(child.getHash(), sha.digest());
 		}
 
-		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(24);
+		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(90);
+
+		Record record = map.get(Long.MAX_VALUE - 66);
+
 		lastChildBuffer.putLong(Long.MAX_VALUE - 66);
+		lastChildBuffer.put(record.getVersion().toStream());
+
+		record = map.get(Long.MAX_VALUE - 65);
 		lastChildBuffer.putLong(Long.MAX_VALUE - 65);
+		lastChildBuffer.put(record.getVersion().toStream());
+
+		record = map.get(Long.MAX_VALUE - 64);
 		lastChildBuffer.putLong(Long.MAX_VALUE - 64);
+		lastChildBuffer.put(record.getVersion().toStream());
 
 		lastChildBuffer.rewind();
 
@@ -232,7 +265,7 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd67KeysToNext1024Node() throws Exception {
-		NavigableMap<Long, String> map = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode treeNode = new OMerkleTreeNode(map);
 		for (int i = 0; i < 2; i++)
@@ -242,10 +275,10 @@ public class MerkleTreeNodeTest {
 			treeNode.addData(1, 0, i, i + "");
 
 		for (long i = 0; i < 2; i++)
-			Assert.assertEquals(map.get(i), i + "");
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
 		for (long i = 1024; i < 1089; i++)
-			Assert.assertEquals(map.get(i), i + "");
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
 		List<byte[]> hashes = new ArrayList<byte[]>();
 
@@ -264,23 +297,28 @@ public class MerkleTreeNodeTest {
 
 		OMerkleTreeNode parent = treeNode;
 		Assert.assertTrue(parent.getChild(0).isLeaf());
-		Assert.assertEquals(parent.getChild(0).getKeyCount(), 2);
+		Assert.assertEquals(parent.getChild(0).getRecordsCount(), 2);
 
 		treeNode = treeNode.getChild(1);
 
 		Assert.assertTrue(!treeNode.isLeaf());
 
 		for (int i = 0; i < 4; i++)
-			Assert.assertEquals(treeNode.getChild(i).getKeyCount(), 16);
+			Assert.assertEquals(treeNode.getChild(i).getRecordsCount(), 16);
 
-		Assert.assertEquals(treeNode.getChild(4).getKeyCount(), 1);
+		Assert.assertEquals(treeNode.getChild(4).getRecordsCount(), 1);
 
 		for (int i = 0; i < 4; i++) {
-			final ByteBuffer buffer = ByteBuffer.allocate(16 * 8);
+			final ByteBuffer buffer = ByteBuffer.allocate(16 * 30);
 
 			OMerkleTreeNode child = treeNode.getChild(i);
-			for (int n = 0; n < 16; n++)
+			for (int n = 0; n < 16; n++) {
 				buffer.putLong(1024 + i * 16 + n);
+
+				final Record record = map.get(1024L + i * 16 + n);
+				buffer.put(record.getVersion().toStream());
+			}
+
 
 			buffer.rewind();
 
@@ -290,8 +328,11 @@ public class MerkleTreeNodeTest {
 			Assert.assertEquals(child.getHash(), sha.digest());
 		}
 
-		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(8);
+		Record record = map.get(1088L);
+		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(30);
+
 		lastChildBuffer.putLong(1088);
+		lastChildBuffer.put(record.getVersion().toStream());
 
 		lastChildBuffer.rewind();
 
@@ -313,10 +354,18 @@ public class MerkleTreeNodeTest {
 		Assert.assertEquals(treeNode.getHash(), prevHash);
 
 		MessageDigest firstNodeSHA = MessageDigest.getInstance("SHA-1");
-		ByteBuffer firstNodeBuffer = ByteBuffer.allocate(16);
+
+		ByteBuffer firstNodeBuffer = ByteBuffer.allocate(60);
+
+		record = map.get(0L);
 
 		firstNodeBuffer.putLong(0);
+		firstNodeBuffer.put(record.getVersion().toStream());
+
+		record = map.get(1L);
+
 		firstNodeBuffer.putLong(1);
+		firstNodeBuffer.put(record.getVersion().toStream());
 
 		firstNodeBuffer.rewind();
 
@@ -364,51 +413,51 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd69KeysRemove3() {
-		NavigableMap<Long, String> mapOne = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> mapOne = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne);
 		for (int i = 0; i < 69; i++)
 			testTreeNode.addData(1, 0, i, i + "");
 
-		for (int i = 66; i < 69; i++)
-			testTreeNode.deleteData(1, 0, i);
+		for (int i = 68; i < 69; i++)
+			testTreeNode.deleteData(1, 0, i, 0);
 
 		for (long i = 0; i < 66; i++)
-			Assert.assertEquals(mapOne.get(i), i + "");
+			Assert.assertEquals(mapOne.get(i).getData(), i + "");
 
-		NavigableMap<Long, String> mapTwo = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> mapTwo = new TreeMap<Long, Record>();
 		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
-		for (int i = 0; i < 66; i++)
-			sampleTreeNode.addData(1, 0, i, i + "");
+		for (Map.Entry<Long, Record> entry : mapOne.entrySet())
+			sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd69KeysRemove60() {
-		NavigableMap<Long, String> mapOne = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> mapOne = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne);
 		for (int i = 0; i < 69; i++)
 			testTreeNode.addData(1, 0, i, i + "");
 
 		for (int i = 64; i < 69; i++)
-			testTreeNode.deleteData(1, 0, i);
+			testTreeNode.deleteData(1, 0, i, 0);
 
 		for (long i = 0; i < 64; i++)
-			Assert.assertEquals(mapOne.get(i), i + "");
+			Assert.assertEquals(mapOne.get(i).getData(), i + "");
 
-		NavigableMap<Long, String> mapTwo = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> mapTwo = new TreeMap<Long, Record>();
 		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
-		for (int i = 0; i < 64; i++)
-			sampleTreeNode.addData(1, 0, i, i + "");
+		for (Map.Entry<Long, Record> entry : mapOne.entrySet())
+			sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToNext1024NodeRemove60() throws Exception {
-		NavigableMap<Long, String> map = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map);
 		for (int i = 0; i < 2; i++)
@@ -418,56 +467,54 @@ public class MerkleTreeNodeTest {
 			testTreeNode.addData(1, 0, i, i + "");
 
 		for (int i = 1024; i < 1084; i++)
-			testTreeNode.deleteData(1, 0, i);
+			testTreeNode.deleteData(1, 0, i, 0);
 
 		for (long i = 0; i < 2; i++)
-			Assert.assertEquals(map.get(i), i + "");
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
 		for (long i = 1084; i < 1089; i++)
-			Assert.assertEquals(map.get(i), i + "");
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
-		NavigableMap<Long, String> mapTwo = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> mapTwo = new TreeMap<Long, Record>();
 		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
-		for (int i = 0; i < 2; i++)
-			sampleTreeNode.addData(1, 0, i, i + "");
-
-		for (long i = 1084; i < 1089; i++)
-			sampleTreeNode.addData(1, 0, i, i + "");
+		for (Map.Entry<Long, Record> entry : map.entrySet()) {
+			sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToEndRemove60() throws Exception {
-		NavigableMap<Long, String> map = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
 
 		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map);
 
 		for (long i = Long.MAX_VALUE; i >= Long.MAX_VALUE - 66; i--) {
 			long childPos = OMerkleTreeNode.childIndex(0, i);
-			long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+			long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
 			testTreeNode.addData(1, startKey, i, i + "");
 		}
 
-		for (long i = Long.MAX_VALUE - 66; i < Long.MAX_VALUE - 60; i++) {
-			long childPos = OMerkleTreeNode.childIndex(0, i);
-			long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+		for (long i = Long.MAX_VALUE - 66; i < Long.MAX_VALUE - 62; i++) {
+			final long childPos = OMerkleTreeNode.childIndex(0, i);
+			final long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-			testTreeNode.deleteData(1, startKey, i);
+			testTreeNode.deleteData(1, startKey, i, 0);
 		}
 
 		for (long i = Long.MAX_VALUE - 60; i > 0; i++)
-			Assert.assertEquals(map.get(i), i + "");
+			Assert.assertEquals(map.get(i).getData(), i + "");
 
-		NavigableMap<Long, String> mapTwo = new TreeMap<Long, String>();
+		NavigableMap<Long, Record> mapTwo = new TreeMap<Long, Record>();
 		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
-		for (long i = Long.MAX_VALUE - 60; i > 0; i++) {
-			long childPos = OMerkleTreeNode.childIndex(0, i);
-			long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+		for (Map.Entry<Long, Record> entry : map.entrySet()) {
+			long childPos = OMerkleTreeNode.childIndex(0, entry.getKey());
+			long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-			sampleTreeNode.addData(1, startKey, i, i + "");
+			sampleTreeNode.putReplica(1, startKey, entry.getKey(), entry.getValue());
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
@@ -476,7 +523,7 @@ public class MerkleTreeNodeTest {
 	private void compareNodes(OMerkleTreeNode nodeOne, OMerkleTreeNode nodeTwo) {
 		Assert.assertEquals(nodeOne.getHash(), nodeTwo.getHash());
 		Assert.assertEquals(nodeOne.isLeaf(), nodeTwo.isLeaf());
-		Assert.assertEquals(nodeOne.getKeyCount(), nodeTwo.getKeyCount());
+		Assert.assertEquals(nodeOne.getRecordsCount(), nodeTwo.getRecordsCount());
 
 		if (!nodeOne.isLeaf()) {
 			for (int i = 0; i < 64; i++) {

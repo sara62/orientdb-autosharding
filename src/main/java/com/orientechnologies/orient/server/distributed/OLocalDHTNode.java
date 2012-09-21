@@ -1,6 +1,8 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.common.concur.lock.OLockManager;
+import com.orientechnologies.common.util.MersenneTwister;
+import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
 
 import java.text.DateFormat;
 import java.util.Date;
@@ -26,12 +28,14 @@ import java.util.concurrent.atomic.AtomicLongArray;
 public class OLocalDHTNode implements ODHTNode {
 	private static final int MAX_RETRIES = 10;
 
-	private AtomicLong predecessor = new AtomicLong(-1);
+	private final MersenneTwister random = new MersenneTwister();
+
 	private final long id;
 
 	private final AtomicLongArray fingerPoints = new AtomicLongArray(63);
+	private AtomicLong predecessor = new AtomicLong(-1);
 
-	private final NavigableMap<Long, String> db = new ConcurrentSkipListMap<Long, String>();
+	private final NavigableMap<Long, Record> db = new ConcurrentSkipListMap<Long, Record>();
 
 	private volatile long migrationId = -1;
 	private volatile ODHTNodeLookup nodeLookup;
@@ -77,13 +81,13 @@ public class OLocalDHTNode implements ODHTNode {
 		return id;
 	}
 
-	public boolean join(long joinNodeId) {
+	public boolean join(long nodeId) {
 		try {
-			log("Join is started using node with id " + joinNodeId);
+			log("Join is started using node with id " + nodeId);
 
-			final ODHTNode node = nodeLookup.findById(joinNodeId);
+			final ODHTNode node = nodeLookup.findById(nodeId);
 			if (node == null) {
-				log("Node with id " + joinNodeId + " is absent.");
+				log("Node with id " + nodeId + " is absent.");
 				return false;
 			}
 
@@ -123,7 +127,7 @@ public class OLocalDHTNode implements ODHTNode {
 						continue;
 					}
 
-					final long prevPredecessor = successor.notify(id);
+					final long prevPredecessor = successor.notifyParent(id);
 					if (prevPredecessor > -1) {
 						final ODHTNode prevPredecessorNode = nodeLookup.findById(prevPredecessor);
 						if (prevPredecessorNode != null)
@@ -138,8 +142,8 @@ public class OLocalDHTNode implements ODHTNode {
 
 					return true;
 				} catch (ONodeOfflineException ooe) {
-					if (ooe.getNodeId() == joinNodeId) {
-						log("Node with id " + joinNodeId + " is absent.");
+					if (ooe.getNodeId() == nodeId) {
+						log("Node with id " + nodeId + " is absent.");
 						return false;
 					}
 
@@ -291,6 +295,77 @@ public class OLocalDHTNode implements ODHTNode {
 		return predecessor.get();
 	}
 
+	public long create(String data) {
+		waitTillJoin();
+
+		int retryCount = 0;
+
+		while (true) {
+			try {
+				final long id = random.nextLong(Long.MAX_VALUE);
+				retryCount++;
+
+				return create(id, data);
+			} catch (ORecordDuplicatedException e) {
+				//ignore
+				if (retryCount >= MAX_RETRIES)
+					throw e;
+			}
+		}
+	}
+
+
+	public long create(long id, String data) {
+		int retryCount = 0;
+
+		while (true) {
+			final long successorId = findSuccessor(id);
+			retryCount++;
+
+			if (successorId == id) {
+				if (!checkLocalOwnerShip(id, retryCount))
+					continue;
+
+				addData(id, data);
+
+				return id;
+			} else {
+				if (!remoteNodeCreate(id, data, retryCount, successorId))
+					continue;
+
+				return id;
+			}
+		}
+	}
+
+	public String get(long id) {
+		return null;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public String get(long id, boolean checkOwnerShip) {
+		return null;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public void update(long id, String data) {
+		//To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public void update(long id, String data, boolean checkOwnerShip) {
+		//To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public boolean remove(long id) {
+		return false;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public boolean remove(long id, boolean checkOwnerShip) {
+		return false;  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
+	public long[] missingRecords(long[] ids, ODHTRecordVersion[] versions) {
+		return new long[0];  //To change body of implemented methods use File | Settings | File Templates.
+	}
+
 	public void put(Long key, String data) {
 		waitTillJoin();
 
@@ -304,11 +379,11 @@ public class OLocalDHTNode implements ODHTNode {
 				if (!checkLocalOwnerShip(key, retryCount))
 					continue;
 
-				putData(key, data);
+				addData(key, data);
 
 				return;
 			} else {
-				if (!remoteNodePut(key, data, retryCount, successorId))
+				if (!remoteNodeCreate(key, data, retryCount, successorId))
 					continue;
 
 				return;
@@ -316,7 +391,7 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 	}
 
-	private boolean remoteNodePut(Long key, String data, int retryCount, long nodeId) {
+	private boolean remoteNodeCreate(long id, String data, int retryCount, long nodeId) {
 		final ODHTNode node = nodeLookup.findById(nodeId);
 
 		if (node == null) {
@@ -331,7 +406,7 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 
 		try {
-			node.put(key, data);
+			node.create(id, data);
 		} catch (ONodeOfflineException ooe) {
 			if (retryCount < MAX_RETRIES) {
 				log("Node " + nodeId + " is offline, retry " + retryCount + "-d time.");
@@ -346,7 +421,7 @@ public class OLocalDHTNode implements ODHTNode {
 		return true;
 	}
 
-	private void putData(Long keyId, String data) {
+	private void addData(Long keyId, String data) {
 		lockManager.acquireLock(Thread.currentThread(), keyId, OLockManager.LOCK.EXCLUSIVE);
 		try {
 			delay();
@@ -412,7 +487,7 @@ public class OLocalDHTNode implements ODHTNode {
 							migrationNode = nodeLookup.findById(migrationId);
 							if (migrationNode != null) {
 								try {
-									migrationNode.requestMigration(id);
+									//TODO migrationNode.requestMigration(id);
 								} catch (ONodeOfflineException noe) {
 									migrationNode = null;
 								}
@@ -478,7 +553,7 @@ public class OLocalDHTNode implements ODHTNode {
 			final ODHTNode node = nodeLookup.findById(nodeToNotifyId);
 			if (node != null)
 				try {
-					node.notifyMigrationEnd(id);
+					//TODO node.notifyMigrationEnd(id);
 				} catch (ONodeOfflineException noe) {
 				}
 
@@ -503,7 +578,7 @@ public class OLocalDHTNode implements ODHTNode {
 		lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
 		try {
 			delay();
-			data = db.get(dataId);
+			data = db.get(dataId).getData();
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
 		}
@@ -584,7 +659,7 @@ public class OLocalDHTNode implements ODHTNode {
 					if (migrationNode != null) {
 						try {
 							log("Migration request for " + migrationNode.getNodeId());
-							migrationNode.requestMigration(id);
+							//TODO migrationNode.requestMigration(id);
 						} catch (ONodeOfflineException noe) {
 							migrationNode = null;
 							migrationRetryCount++;
@@ -631,7 +706,7 @@ public class OLocalDHTNode implements ODHTNode {
 		try {
 			delay();
 //		log("Remove data for key " + key);
-			return merkleTree.deleteData(key);
+			return true; //TODO merkleTree.deleteData(key);
 		} finally {
 			lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
 		}
@@ -701,7 +776,7 @@ public class OLocalDHTNode implements ODHTNode {
 
 			final long prevPredecessor;
 			try {
-				prevPredecessor = successor.notify(id);
+				prevPredecessor = successor.notifyParent(id);
 			} catch (ONodeOfflineException ooe) {
 				handleSuccessorOfflineCase(retryCount, successor.getNodeId());
 
@@ -756,7 +831,7 @@ public class OLocalDHTNode implements ODHTNode {
 				final ODHTNode newSuccessorNode = nodeLookup.findById(newSuccessorId);
 				if (newSuccessorNode != null)
 					try {
-						newSuccessorNode.notify(id);
+						newSuccessorNode.notifyParent(id);
 					} catch (ONodeOfflineException noe) {
 						fingerPoints.compareAndSet(0, newSuccessorId, successorId);
 					}
@@ -796,7 +871,7 @@ public class OLocalDHTNode implements ODHTNode {
 		}
 	}
 
-	public long notify(long nodeId) {
+	public long notifyParent(long nodeId) {
 		boolean result = false;
 		long prevPredecessor = -1;
 
@@ -830,7 +905,7 @@ public class OLocalDHTNode implements ODHTNode {
 						}
 
 						try {
-							mergeNode.requestMigration(id);
+							//TODO mergeNode.requestMigration(id);
 							break;
 						} catch (ONodeOfflineException noe) {
 							handleSuccessorOfflineCase(retryCount, migrationId);
@@ -962,71 +1037,71 @@ public class OLocalDHTNode implements ODHTNode {
 
 					int retryCount = 0;
 
-					lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-					try {
-						while (true) {
-							final String data = db.get(key);
-							if (data != null) {
-								final long nodeId = findSuccessor(key);
-
-								if (nodeId != id) {
-
-									final ODHTNode node = nodeLookup.findById(nodeId);
-									if (node == null) {
-										if (retryCount < MAX_RETRIES) {
-											log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
-											retryCount++;
-
-											continue;
-										} else {
-											log("Node with id " + nodeId + " is offline. Retry limit is reached.");
-
-											continue keyCycle;
-										}
-									}
-
-									try {
-										node.put(key, data);
-									} catch (ONodeOfflineException noe) {
-										if (retryCount < MAX_RETRIES) {
-											log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
-											retryCount++;
-
-											continue;
-										} else {
-											log("Node with id " + nodeId + " is offline. Retry limit is reached.");
-
-											continue keyCycle;
-										}
-									} catch (ODHTKeyOwnerIsAbsentException oae) {
-										if (retryCount < MAX_RETRIES) {
-											log("Ring structure is not stabilized . " + retryCount + "-d retry.");
-											retryCount++;
-
-											continue;
-										} else {
-											log("Ring structure is not stabilized. Retry limit is reached.");
-
-											continue keyCycle;
-										}
-									}
-
-									merkleTree.deleteData(key);
-//								log("Remove data for key " + key + " during merge.");
-								}
-							}
-							break;
-						}
-					} finally {
-						lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-					}
+//					lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+//					try {
+//						while (true) {
+//							final String data = db.get(key);
+//							if (data != null) {
+//								final long nodeId = findSuccessor(key);
+//
+//								if (nodeId != id) {
+//
+//									final ODHTNode node = nodeLookup.findById(nodeId);
+//									if (node == null) {
+//										if (retryCount < MAX_RETRIES) {
+//											log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
+//											retryCount++;
+//
+//											continue;
+//										} else {
+//											log("Node with id " + nodeId + " is offline. Retry limit is reached.");
+//
+//											continue keyCycle;
+//										}
+//									}
+//
+//									try {
+//										node.put(key, data);
+//									} catch (ONodeOfflineException noe) {
+//										if (retryCount < MAX_RETRIES) {
+//											log("Node with id " + nodeId + " is offline. " + retryCount + "-d retry.");
+//											retryCount++;
+//
+//											continue;
+//										} else {
+//											log("Node with id " + nodeId + " is offline. Retry limit is reached.");
+//
+//											continue keyCycle;
+//										}
+//									} catch (ODHTKeyOwnerIsAbsentException oae) {
+//										if (retryCount < MAX_RETRIES) {
+//											log("Ring structure is not stabilized . " + retryCount + "-d retry.");
+//											retryCount++;
+//
+//											continue;
+//										} else {
+//											log("Ring structure is not stabilized. Retry limit is reached.");
+//
+//											continue keyCycle;
+//										}
+//									}
+//
+//									merkleTree.deleteData(key);
+////								log("Remove data for key " + key + " during merge.");
+//								}
+//							}
+//							break;
+//						}
+//					} finally {
+//						lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+//					}
 				}
 
 				if (state == NodeState.STABLE) {
 					final ODHTNode node = nodeLookup.findById(requesterNode);
 					if (node != null)
 						try {
-							node.notifyMigrationEnd(id);
+//TODO							node.notifyMigrationEnd(id);
 						} catch (ONodeOfflineException noe) {
 							//ignore
 						}

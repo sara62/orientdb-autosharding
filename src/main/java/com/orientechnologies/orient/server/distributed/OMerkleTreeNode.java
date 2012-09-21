@@ -1,31 +1,34 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.common.concur.resource.OSharedResourceAdaptive;
+import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
+import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.ListIterator;
+import java.util.Map;
 import java.util.NavigableMap;
-import java.util.NavigableSet;
-import java.util.TreeSet;
 
 /**
  * @author Andrey Lomakin
  * @since 04.09.12
  */
 public class OMerkleTreeNode extends OSharedResourceAdaptive {
-	private final NavigableMap<Long, String> db;
+	private final NavigableMap<Long, Record> db;
 
 	private int count;
 	private OMerkleTreeNode[] children;
 
 	private byte[] hash;
 
-	public OMerkleTreeNode(final NavigableMap<Long, String> db) {
+	public OMerkleTreeNode(final NavigableMap<Long, Record> db) {
 		count = 0;
 		children = null;
 
@@ -35,13 +38,13 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		this.db = db;
 	}
 
-	public OMerkleTreeNode(int count, byte[] hash, NavigableMap<Long, String> db) {
+	public OMerkleTreeNode(int count, byte[] hash, NavigableMap<Long, Record> db) {
 		this.db = db;
 		this.count = count;
 		this.hash = hash;
 	}
 
-	public void addData(int level, long offset, long key, String data) {
+	public long addData(int level, long offset, long id, String data) {
 		OMerkleTreeNode treeNode = this;
 		final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -52,9 +55,9 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		while (!treeNode.isLeaf()) {
 			hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
 
-			offset = startNodeKey(level, childIndex, offset);
+			offset = startNodeId(level, childIndex, offset);
 
-			childIndex = childIndex(level, key);
+			childIndex = childIndex(level, id);
 
 			final OMerkleTreeNode child = treeNode.getChild(childIndex);
 			child.acquireExclusiveLock();
@@ -65,51 +68,127 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 			level++;
 		}
 
-		boolean dataWereAdded = false;
+		Record record;
+		try {
+			record = db.get(id);
+			if (record == null || record.isTombstone()) {
+				if (record == null)
+					record = new Record(data);
+				else
+					record = new Record(data, record.getShortVersion() + 1);
 
-		if (db.put(key, data) == null) {
-			treeNode.count++;
+				db.put(id, record);
+				treeNode.count++;
 
-			if (treeNode.getKeyCount() <= 64)
-				rehashLeafNode(level, offset, treeNode, childIndex);
-			else {
-				final long startKey = startNodeKey(level, childIndex, offset);
+				if (treeNode.getRecordsCount() <= 64)
+					rehashLeafNode(level, offset, treeNode, childIndex);
+				else {
+					final long startId = startNodeId(level, childIndex, offset);
 
-				final Iterator<Long> keyIterator = db.tailMap(startKey, true).keySet().iterator();
-				final NavigableSet<Long> keysToHash = new TreeSet<Long>();
-
-				final int keyCount = treeNode.getKeyCount();
-				for (int i = 0; i < keyCount; i++) {
-					final long currentKey = keyIterator.next();
-					keysToHash.add(currentKey);
+					addInternalNodes(level, startId, treeNode);
+					hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
 				}
-
-				convertToInternalNode(level, startKey, keysToHash, treeNode);
-				hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
-			}
-
-			dataWereAdded = true;
+			} else
+				throw new ORecordDuplicatedException("Record with id " + id + " has already exist in DB.", new ORecordId(1, id));
+		} finally {
+			treeNode.releaseExclusiveLock();
 		}
 
-		treeNode.releaseExclusiveLock();
+		rehashParentNodes(hashPathNodes);
 
-		if (dataWereAdded)
-			rehashParentNodes(hashPathNodes);
+		return record.getShortVersion();
+	}
+
+	public boolean putReplica(int level, long offset, long id, Record replica) {
+		OMerkleTreeNode treeNode = this;
+		final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
+
+		treeNode.acquireExclusiveLock();
+
+		int childIndex = 0;
+
+		while (!treeNode.isLeaf()) {
+			hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
+
+			offset = startNodeId(level, childIndex, offset);
+
+			childIndex = childIndex(level, id);
+
+			final OMerkleTreeNode child = treeNode.getChild(childIndex);
+			child.acquireExclusiveLock();
+			treeNode.releaseExclusiveLock();
+
+			treeNode = child;
+
+			level++;
+		}
+
+		try {
+			final Record record = db.get(id);
+
+			if (record == null || replica.compareVersions(record) > 0) {
+				db.put(id, replica);
+
+				if (record == null) {
+					if (!replica.isTombstone())
+						treeNode.count++;
+				} else {
+					if (record.isTombstone() && !replica.isTombstone())
+						treeNode.count++;
+					else if (!record.isTombstone() && replica.isTombstone())
+						treeNode.count--;
+				}
+
+				if (treeNode.getRecordsCount() <= 64)
+					rehashLeafNode(level, offset, treeNode, childIndex);
+				else {
+					final long startId = startNodeId(level, childIndex, offset);
+
+					addInternalNodes(level, startId, treeNode);
+					hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
+				}
+			} else
+				return false;
+		} finally {
+			treeNode.releaseExclusiveLock();
+		}
+
+		rehashParentNodes(hashPathNodes);
+
+		return true;
 	}
 
 	private void rehashLeafNode(int level, long offset, OMerkleTreeNode treeNode, int childIndex) {
 		final MessageDigest messageDigest = sha();
-		final ByteBuffer byteBuffer = ByteBuffer.allocate(treeNode.getKeyCount() * 8);
+		final ByteBuffer byteBuffer = ByteBuffer.allocate(treeNode.getRecordsCount() * 30);
 
-		final long startKey = startNodeKey(level, childIndex, offset);
+		final long startId = startNodeId(level, childIndex, offset);
+		final long endId = startNodeId(level, childIndex + 1, offset);
 
-		final Iterator<Long> keyIterator = db.tailMap(startKey, true).keySet().iterator();
+		final Iterator<Long> idIterator;
+		if (endId > startId)
+			idIterator = db.subMap(startId, true, endId, false).keySet().iterator();
+		else
+			idIterator = db.tailMap(startId, true).keySet().iterator();
 
-		final int keyCount = treeNode.getKeyCount();
-		for (int i = 0; i < keyCount; i++) {
-			final long currentKey = keyIterator.next();
-			byteBuffer.putLong(currentKey);
+		final int recordsCount = treeNode.getRecordsCount();
+		int actualRecordsCount = 0;
+
+		while (idIterator.hasNext()) {
+			final long currentId = idIterator.next();
+			final ODHTRecordVersion version = db.get(currentId).getVersion();
+			if (!version.isTombstone()) {
+				byteBuffer.putLong(currentId);
+				byteBuffer.put(version.toStream());
+
+				actualRecordsCount++;
+			}
 		}
+
+		if (actualRecordsCount != recordsCount)
+			throw new IllegalStateException("Illegal state of Merkle Tree node. Expected records count is "
+							+ recordsCount + " but real records count is " + actualRecordsCount);
+
 
 		byteBuffer.rewind();
 		messageDigest.update(byteBuffer);
@@ -117,7 +196,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		treeNode.hash = messageDigest.digest();
 	}
 
-	public boolean deleteData(int level, long offset, long key) {
+	public void deleteData(int level, long offset, long id, long version) {
 		OMerkleTreeNode treeNode = this;
 		final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -128,9 +207,9 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		while (!treeNode.isLeaf()) {
 			hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
 
-			offset = startNodeKey(level, childIndex, offset);
+			offset = startNodeId(level, childIndex, offset);
 
-			childIndex = childIndex(level, key);
+			childIndex = childIndex(level, id);
 
 			final OMerkleTreeNode child = treeNode.getChild(childIndex);
 			child.acquireExclusiveLock();
@@ -141,25 +220,27 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 			level++;
 		}
 
-		boolean dataWereRemoved = false;
+		try {
+			final Record record = db.get(id);
+			if (record != null && !record.isTombstone()) {
+				if (record.getShortVersion() == version) {
+					record.convertToTombstone();
+					treeNode.count--;
 
-		if (db.remove(key) != null) {
-			treeNode.count--;
-
-			rehashLeafNode(level, offset, treeNode, childIndex);
-
-			dataWereRemoved = true;
+					rehashLeafNode(level, offset, treeNode, childIndex);
+				} else
+					throw new IllegalStateException("Record with id " + id + " is out of date. Current version is " + record.getShortVersion() +
+									" but expected version is " + version);
+			} else
+				throw new ORecordNotFoundException("Record with id " + id +
+								" can not be deleted from database because it is absent");
+		} finally {
+			treeNode.releaseExclusiveLock();
 		}
-
-		treeNode.releaseExclusiveLock();
-
-		if (dataWereRemoved)
-			rehashParentNodes(hashPathNodes);
-
-		return dataWereRemoved;
+		rehashParentNodes(hashPathNodes);
 	}
 
-	public static long startNodeKey(int level, long index, long offset) {
+	public static long startNodeId(int level, long index, long offset) {
 		return (1L << (64 - 6 * level)) * index + offset;
 	}
 
@@ -167,39 +248,60 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		return (int) ((key >> (64 - 6 * (level + 1))) & 63L);
 	}
 
-	private void convertToInternalNode(int level, long offset, NavigableSet<Long> keys, OMerkleTreeNode treeNode) {
+	private void addInternalNodes(int level, long offset, OMerkleTreeNode treeNode) {
 		final OMerkleTreeNode[] children = new OMerkleTreeNode[64];
 		final ByteBuffer parentBuffer = ByteBuffer.allocate(64 * 20);
 
 		for (int i = 0; i < 64; i++) {
 			final int childLevel = level + 1;
-			final long startChildKey = startNodeKey(childLevel, i, offset);
-			final long endChildKey = startNodeKey(childLevel, i + 1, offset);
 
-			final NavigableSet<Long> childKeysToAdd;
+			final long startChildKey = startNodeId(childLevel, i, offset);
+			final long endChildKey = startNodeId(childLevel, i + 1, offset);
 
+			final Iterator<Long> idIterator;
 			if (endChildKey > startChildKey)
-				childKeysToAdd = keys.subSet(startChildKey, true, endChildKey, false);
+				idIterator = db.subMap(startChildKey, true, endChildKey, false).keySet().iterator();
 			else
-				childKeysToAdd = keys.tailSet(startChildKey, true);
+				idIterator = db.tailMap(startChildKey, true).keySet().iterator();
 
-			final int childSize = childKeysToAdd.size();
+			int recordsCount = 0;
+
+			final Map<Long, ODHTRecordVersion> recordsToHash = new LinkedHashMap<Long, ODHTRecordVersion>(64);
+			while (idIterator.hasNext()) {
+				if (recordsCount == 64) {
+					recordsCount++;
+					break;
+				}
+
+				final long currentId = idIterator.next();
+
+				ODHTRecordVersion version = db.get(currentId).getVersion();
+				if (!version.isTombstone()) {
+					recordsToHash.put(currentId, version);
+
+					recordsCount++;
+				}
+			}
+
 			final OMerkleTreeNode child;
 
-			if (childSize <= 64) {
-				final ByteBuffer buffer = ByteBuffer.allocate(childSize * 8);
-				for (long currentKey : childKeysToAdd)
-					buffer.putLong(currentKey);
+			if (recordsCount <= 64) {
+				final ByteBuffer buffer = ByteBuffer.allocate(recordsCount * 30);
+
+				for (Map.Entry<Long, ODHTRecordVersion> entry : recordsToHash.entrySet()) {
+					buffer.putLong(entry.getKey());
+					buffer.put(entry.getValue().toStream());
+				}
 
 				buffer.rewind();
 
 				final MessageDigest sha = sha();
 				sha.update(buffer);
 
-				child = new OMerkleTreeNode(childSize, sha.digest(), db);
+				child = new OMerkleTreeNode(recordsCount, sha.digest(), db);
 			} else {
 				child = new OMerkleTreeNode(db);
-				convertToInternalNode(childLevel, startChildKey, childKeysToAdd, child);
+				addInternalNodes(childLevel, startChildKey, child);
 			}
 
 			children[i] = child;
@@ -216,7 +318,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 		treeNode.hash = sha.digest();
 	}
 
-	public int getKeyCount() {
+	public int getRecordsCount() {
 		acquireSharedLock();
 		try {
 			return count;
@@ -279,7 +381,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 					byteBuffer.put(child.getHash());
 
 					if (child.isLeaf())
-						childrenCount += child.getKeyCount();
+						childrenCount += child.getRecordsCount();
 					else
 						childrenCount = 65;
 				}

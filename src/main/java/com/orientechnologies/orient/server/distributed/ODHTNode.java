@@ -10,27 +10,33 @@ public interface ODHTNode {
 	}
 
 	public long getNodeId();
+
 	public long getSuccessor();
-
 	public long[] getSuccessors(int depth);
-
 	public Long getPredecessor();
 
 	public void requestStabilization();
-	public long notify(long node);
-	public boolean join(long node);
+
+	public long notifyParent(long nodeId);
+	public boolean join(long nodeId);
 
 	public long findSuccessor(long id);
 
 	public NodeState state();
 
-	public void put(Long id, String data);
-	public String get(Long id);
-	public String get(Long id, boolean checkOwnerShip);
-	public boolean remove(Long id);
-	public boolean remove(Long keyId, boolean checkOwnerShip);
+	public long create(String data);
+	public long create(long id, String data);
+
+	public String get(long id);
+	public String get(long id, boolean checkOwnerShip);
+
+	public void update(long id, String data);
+	public void update(long id, String data, boolean checkOwnerShip);
+
+	public boolean remove(long id);
+	public boolean remove(long id, boolean checkOwnerShip);
+
 	public int size();
 
-	public void notifyMigrationEnd(long nodeId);
-	public void requestMigration(long requesterId);
+	public long[] missingRecords(long[] ids, ODHTRecordVersion[] versions);
 }
