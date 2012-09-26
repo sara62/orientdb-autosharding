@@ -1,234 +1,251 @@
 package com.orientechnologies.orient.server.distributed;
 
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NavigableMap;
-import java.util.Random;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.orientechnologies.common.concur.lock.OLockManager;
 
 /**
  * @author Andrey Lomakin
  * @since 13.09.12
  */
-@Test(enabled = false)
+@Test
 public class MerkleTreeNodeTestMultiThreadingTest {
-	public void testConcurrentModifications() throws Exception {
-		final ExecutorService adderExecutorService = Executors.newCachedThreadPool(new AdderThreadFactory());
-		final ExecutorService readerExecutorService = Executors.newCachedThreadPool(new ReaderThreadFactory());
-		final ExecutorService deleterExecutorService = Executors.newCachedThreadPool(new DeleterThreadFactory());
+  public void testConcurrentModifications() throws Exception {
+    final ExecutorService adderExecutorService = Executors.newCachedThreadPool(new AdderThreadFactory());
+    final ExecutorService readerExecutorService = Executors.newCachedThreadPool(new ReaderThreadFactory());
+    final ExecutorService deleterExecutorService = Executors.newCachedThreadPool(new DeleterThreadFactory());
 
-		final NavigableMap<Long, String> db = new ConcurrentSkipListMap<Long, String>();
-		final CountDownLatch trigger = new CountDownLatch(1);
+    final NavigableMap<Long, Record> db = new ConcurrentSkipListMap<Long, Record>();
+    final CountDownLatch trigger = new CountDownLatch(1);
 
-		final OMerkleTreeNode treeNode = new OMerkleTreeNode(db);
+    final OMerkleTreeNode treeNode = new OMerkleTreeNode(db);
 
-		final List<Future<Void>> writerFutures = new ArrayList<Future<Void>>();
-		final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
-		final List<Future<Void>> deleterFutures = new ArrayList<Future<Void>>();
+    final List<Future<Void>> writerFutures = new ArrayList<Future<Void>>();
+    final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
+    final List<Future<Void>> deleterFutures = new ArrayList<Future<Void>>();
 
-		final AtomicBoolean testIsFinished = new AtomicBoolean(false);
+    final AtomicBoolean testIsFinished = new AtomicBoolean(false);
 
-		final int interval = 500000;
+    final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
 
-		for (int i = 0; i < 5; i++)
-			writerFutures.add(adderExecutorService.submit(new ConcurrentAdder(treeNode, trigger, i * interval, interval)));
+    final int interval = 500000;
 
-		for (int i = 0; i < 2; i++)
-			readerFutures.add(readerExecutorService.submit(new ConcurrentReader(treeNode, trigger, testIsFinished)));
+    for (int i = 0; i < 5; i++)
+      writerFutures.add(adderExecutorService.submit(new ConcurrentAdder(treeNode, trigger, i * interval, interval, lockManager)));
 
-		deleterFutures.add(deleterExecutorService.submit(new ConcurrentDeleter(treeNode,
-						trigger, interval * 5, testIsFinished)));
+    for (int i = 0; i < 2; i++)
+      readerFutures.add(readerExecutorService.submit(new ConcurrentReader(treeNode, trigger, testIsFinished)));
 
-		trigger.countDown();
+    deleterFutures.add(deleterExecutorService.submit(new ConcurrentDeleter(treeNode, trigger, interval * 5, testIsFinished,
+        lockManager, db)));
 
-		for (Future<Void> future : writerFutures)
-			future.get();
+    trigger.countDown();
 
-		testIsFinished.set(true);
+    for (Future<Void> future : writerFutures)
+      future.get();
 
-		for (Future<Void> future : readerFutures)
-			future.get();
+    testIsFinished.set(true);
 
-		for (Future<Void> future : deleterFutures)
-			future.get();
+    for (Future<Void> future : readerFutures)
+      future.get();
 
-		final NavigableMap<Long, String> dbTwo = new ConcurrentSkipListMap<Long, String>();
-		final OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(dbTwo);
+    for (Future<Void> future : deleterFutures)
+      future.get();
 
-		System.out.println("Sample tree creation. DB size is : " + db.size());
+    final NavigableMap<Long, Record> dbTwo = new ConcurrentSkipListMap<Long, Record>();
+    final OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(dbTwo);
 
-		for (long key : db.keySet()) {
-			long childPos = OMerkleTreeNode.childIndex(0, key);
-			long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+    System.out.println("Sample tree creation. DB size is : " + db.size());
 
-			sampleTreeNode.addData(1, startKey, key, key + "");
-		}
+    for (Map.Entry<Long, Record> entry : db.entrySet()) {
+      long childPos = OMerkleTreeNode.childIndex(0, entry.getKey());
+      long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-		System.out.println("Sample tree comparison.");
+      sampleTreeNode.putReplica(1, startKey, entry.getKey(), entry.getValue());
+    }
 
-		compareNodes(sampleTreeNode, treeNode);
-	}
+    System.out.println("Sample tree comparison.");
 
-	private void compareNodes(OMerkleTreeNode nodeOne, OMerkleTreeNode nodeTwo) {
-		Assert.assertEquals(nodeOne.getHash(), nodeTwo.getHash());
-		Assert.assertEquals(nodeOne.isLeaf(), nodeTwo.isLeaf());
-		Assert.assertEquals(nodeOne.getKeyCount(), nodeTwo.getKeyCount());
+    compareNodes(sampleTreeNode, treeNode);
+  }
 
-		if (!nodeOne.isLeaf()) {
-			for (int i = 0; i < 64; i++) {
-				final OMerkleTreeNode childOne = nodeOne.getChild(i);
-				final OMerkleTreeNode childTwo = nodeTwo.getChild(i);
+  private void compareNodes(OMerkleTreeNode nodeOne, OMerkleTreeNode nodeTwo) {
+    Assert.assertEquals(nodeOne.getHash(), nodeTwo.getHash());
+    Assert.assertEquals(nodeOne.isLeaf(), nodeTwo.isLeaf());
+    Assert.assertEquals(nodeOne.getRecordsCount(), nodeTwo.getRecordsCount());
 
-				compareNodes(childOne, childTwo);
-			}
-		}
-	}
+    if (!nodeOne.isLeaf()) {
+      for (int i = 0; i < 64; i++) {
+        final OMerkleTreeNode childOne = nodeOne.getChild(i);
+        final OMerkleTreeNode childTwo = nodeTwo.getChild(i);
 
-	private static class AdderThreadFactory implements ThreadFactory {
-		final AtomicInteger counter = new AtomicInteger();
+        compareNodes(childOne, childTwo);
+      }
+    }
+  }
 
-		public Thread newThread(Runnable r) {
-			Thread thread = new Thread(r);
-			thread.setName("Adder - " + counter.incrementAndGet());
+  private static class AdderThreadFactory implements ThreadFactory {
+    final AtomicInteger counter = new AtomicInteger();
 
-			return thread;
-		}
-	}
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r);
+      thread.setName("Adder - " + counter.incrementAndGet());
 
-	private static class ReaderThreadFactory implements ThreadFactory {
-		final AtomicInteger counter = new AtomicInteger();
+      return thread;
+    }
+  }
 
-		public Thread newThread(Runnable r) {
-			Thread thread = new Thread(r);
-			thread.setName("Reader - " + counter.incrementAndGet());
+  private static class ReaderThreadFactory implements ThreadFactory {
+    final AtomicInteger counter = new AtomicInteger();
 
-			return thread;
-		}
-	}
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r);
+      thread.setName("Reader - " + counter.incrementAndGet());
 
-	private static class DeleterThreadFactory implements ThreadFactory {
-		final AtomicInteger counter = new AtomicInteger();
+      return thread;
+    }
+  }
 
-		public Thread newThread(Runnable r) {
-			Thread thread = new Thread(r);
-			thread.setName("Reader - " + counter.incrementAndGet());
+  private static class DeleterThreadFactory implements ThreadFactory {
+    final AtomicInteger counter = new AtomicInteger();
 
-			return thread;
-		}
-	}
+    public Thread newThread(Runnable r) {
+      Thread thread = new Thread(r);
+      thread.setName("Reader - " + counter.incrementAndGet());
 
-	private final class ConcurrentDeleter implements Callable<Void> {
-		private final OMerkleTreeNode node;
-		private final CountDownLatch trigger;
-		private final int interval;
+      return thread;
+    }
+  }
 
-		private final AtomicBoolean testIsFinished;
+  private final class ConcurrentDeleter implements Callable<Void> {
+    private final OMerkleTreeNode              node;
+    private final CountDownLatch               trigger;
+    private final int                          interval;
 
-		private final Random random = new Random();
+    private final AtomicBoolean                testIsFinished;
 
-		private ConcurrentDeleter(OMerkleTreeNode node, CountDownLatch trigger, int interval, AtomicBoolean testIsFinished) {
-			this.node = node;
-			this.trigger = trigger;
-			this.interval = interval;
-			this.testIsFinished = testIsFinished;
-		}
+    private final Random                       random = new Random();
 
-		public Void call() throws Exception {
-			trigger.await();
+    private final NavigableMap<Long, Record>   db;
 
-			while (!testIsFinished.get()) {
-				final int key = random.nextInt(interval);
+    private final OLockManager<Long, Runnable> lockManager;
 
-				long childPos = OMerkleTreeNode.childIndex(0, key);
-				long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+    private ConcurrentDeleter(OMerkleTreeNode node, CountDownLatch trigger, int interval, AtomicBoolean testIsFinished,
+        OLockManager<Long, Runnable> lockManager, NavigableMap<Long, Record> db) {
+      this.node = node;
+      this.trigger = trigger;
+      this.interval = interval;
+      this.testIsFinished = testIsFinished;
+      this.lockManager = lockManager;
+      this.db = db;
+    }
 
-				node.deleteData(1, startKey, key);
-			}
+    public Void call() throws Exception {
+      trigger.await();
 
-			return null;
-		}
-	}
+      while (!testIsFinished.get()) {
+        final long key = random.nextInt(interval);
 
-	private final class ConcurrentAdder implements Callable<Void> {
-		private final OMerkleTreeNode node;
-		private final CountDownLatch trigger;
-		private final long startPos;
-		private final int interval;
+        lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+        try {
+          final Record record = db.get(key);
 
+          if (record == null || record.isTombstone())
+            continue;
 
-		private ConcurrentAdder(OMerkleTreeNode node, CountDownLatch trigger, long startPos, int interval) {
-			this.node = node;
-			this.trigger = trigger;
-			this.startPos = startPos;
-			this.interval = interval;
-		}
+          final long childPos = OMerkleTreeNode.childIndex(0, key);
+          final long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-		public Void call() throws Exception {
-			trigger.await();
+          node.deleteRecord(1, startKey, key, record.getShortVersion());
+        } finally {
+          lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+        }
+      }
 
-			System.out.println(Thread.currentThread().getName() +
-							":Insertions were started.");
+      return null;
+    }
+  }
 
-			for (long i = startPos; i < startPos + interval; i++) {
-				long childPos = OMerkleTreeNode.childIndex(0, i);
-				long startKey = OMerkleTreeNode.startNodeKey(1, childPos, 0);
+  private final class ConcurrentAdder implements Callable<Void> {
+    private final OMerkleTreeNode              node;
+    private final CountDownLatch               trigger;
+    private final long                         startPos;
+    private final int                          interval;
+    private final OLockManager<Long, Runnable> lockManager;
 
-				node.addData(1, startKey, i, i + "");
-				if ((i - startPos) % 10000 == 0)
-					System.out.println(Thread.currentThread().getName() +
-									":" + (i - startPos) + " records were inserted.");
-			}
+    private ConcurrentAdder(OMerkleTreeNode node, CountDownLatch trigger, long startPos, int interval,
+        OLockManager<Long, Runnable> lockManager) {
+      this.node = node;
+      this.trigger = trigger;
+      this.startPos = startPos;
+      this.interval = interval;
+      this.lockManager = lockManager;
+    }
 
-			System.out.println(Thread.currentThread().getName() + ":Insertions were finished.");
+    public Void call() throws Exception {
+      trigger.await();
 
-			return null;
-		}
-	}
+      System.out.println(Thread.currentThread().getName() + ":Insertions were started.");
 
-	private static final class ConcurrentReader implements Callable<Void> {
-		private final OMerkleTreeNode node;
-		private final CountDownLatch trigger;
-		private final AtomicBoolean testIsFinished;
+      for (long i = startPos; i < startPos + interval; i++) {
+        long childPos = OMerkleTreeNode.childIndex(0, i);
+        long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-		private ConcurrentReader(OMerkleTreeNode node, CountDownLatch trigger, AtomicBoolean testIsFinished) {
-			this.node = node;
-			this.trigger = trigger;
-			this.testIsFinished = testIsFinished;
-		}
+        lockManager.acquireLock(Thread.currentThread(), i, OLockManager.LOCK.EXCLUSIVE);
+        try {
+          node.addRecord(1, startKey, i, i + "");
+          if ((i - startPos) % 10000 == 0)
+            System.out.println(Thread.currentThread().getName() + ":" + (i - startPos) + " records were inserted.");
+        } finally {
+          lockManager.releaseLock(Thread.currentThread(), i, OLockManager.LOCK.EXCLUSIVE);
+        }
+      }
 
-		public Void call() throws Exception {
-			trigger.await();
+      System.out.println(Thread.currentThread().getName() + ":Insertions were finished.");
 
-			System.out.println(Thread.currentThread().getName() + ":Reading is started.");
+      return null;
+    }
+  }
 
-			while (!testIsFinished.get()) {
-				readNode(node);
-			}
+  private static final class ConcurrentReader implements Callable<Void> {
+    private final OMerkleTreeNode node;
+    private final CountDownLatch  trigger;
+    private final AtomicBoolean   testIsFinished;
 
-			System.out.println(Thread.currentThread().getName() + ":Reading was finished.");
+    private ConcurrentReader(OMerkleTreeNode node, CountDownLatch trigger, AtomicBoolean testIsFinished) {
+      this.node = node;
+      this.trigger = trigger;
+      this.testIsFinished = testIsFinished;
+    }
 
-			return null;
-		}
+    public Void call() throws Exception {
+      trigger.await();
 
-		private void readNode(OMerkleTreeNode node) {
-			node.getHash();
-			if (!node.isLeaf())
-				for (int i = 0; i < 64; i++)
-					if (testIsFinished.get()) {
-						readNode(node.getChild(i));
-					}
+      System.out.println(Thread.currentThread().getName() + ":Reading is started.");
 
-		}
-	}
+      while (!testIsFinished.get()) {
+        readNode(node);
+      }
+
+      System.out.println(Thread.currentThread().getName() + ":Reading was finished.");
+
+      return null;
+    }
+
+    private void readNode(OMerkleTreeNode node) {
+      node.getHash();
+      if (!node.isLeaf())
+        for (int i = 0; i < 64; i++)
+          if (testIsFinished.get()) {
+            readNode(node.getChild(i));
+          }
+
+    }
+  }
 }
