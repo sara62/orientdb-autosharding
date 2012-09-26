@@ -44,12 +44,12 @@ public class OMerkleTree {
     node.updateRecord(1, startId, id, version, data);
   }
 
-  public void putReplica(final long id, final Record replica) {
+  public void updateReplica(final long id, final Record replica) {
     final int childIndex = OMerkleTreeNode.childIndex(0, id);
     final long startId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
 
     final OMerkleTreeNode node = roots[childIndex];
-    node.putReplica(1, startId, id, replica);
+    node.updateReplica(1, startId, id, replica);
   }
 
   public OMerkleTreeNode getRoot(int index) {

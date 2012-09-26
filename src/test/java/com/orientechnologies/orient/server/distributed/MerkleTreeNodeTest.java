@@ -426,7 +426,7 @@ public class MerkleTreeNodeTest {
     OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
     for (Map.Entry<Long, Record> entry : mapOne.entrySet())
-      sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, 0, entry.getKey(), entry.getValue());
 
     compareNodes(sampleTreeNode, testTreeNode);
   }
@@ -448,7 +448,7 @@ public class MerkleTreeNodeTest {
     OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
     for (Map.Entry<Long, Record> entry : mapOne.entrySet())
-      sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, 0, entry.getKey(), entry.getValue());
 
     compareNodes(sampleTreeNode, testTreeNode);
   }
@@ -476,7 +476,7 @@ public class MerkleTreeNodeTest {
     OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
     for (Map.Entry<Long, Record> entry : map.entrySet()) {
-      sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, 0, entry.getKey(), entry.getValue());
     }
 
     compareNodes(sampleTreeNode, testTreeNode);
@@ -511,7 +511,7 @@ public class MerkleTreeNodeTest {
       long childPos = OMerkleTreeNode.childIndex(0, entry.getKey());
       long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-      sampleTreeNode.putReplica(1, startKey, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, startKey, entry.getKey(), entry.getValue());
     }
 
     compareNodes(sampleTreeNode, testTreeNode);
@@ -619,7 +619,7 @@ public class MerkleTreeNodeTest {
     OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
     for (Map.Entry<Long, Record> entry : mapOne.entrySet())
-      sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, 0, entry.getKey(), entry.getValue());
 
     compareNodes(sampleTreeNode, testTreeNode);
   }
@@ -644,7 +644,7 @@ public class MerkleTreeNodeTest {
     OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
     for (Map.Entry<Long, Record> entry : mapOne.entrySet())
-      sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, 0, entry.getKey(), entry.getValue());
 
     compareNodes(sampleTreeNode, testTreeNode);
   }
@@ -675,7 +675,7 @@ public class MerkleTreeNodeTest {
     OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo);
 
     for (Map.Entry<Long, Record> entry : map.entrySet()) {
-      sampleTreeNode.putReplica(1, 0, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, 0, entry.getKey(), entry.getValue());
     }
 
     compareNodes(sampleTreeNode, testTreeNode);
@@ -710,7 +710,7 @@ public class MerkleTreeNodeTest {
       long childPos = OMerkleTreeNode.childIndex(0, entry.getKey());
       long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-      sampleTreeNode.putReplica(1, startKey, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, startKey, entry.getKey(), entry.getValue());
     }
 
     compareNodes(sampleTreeNode, testTreeNode);

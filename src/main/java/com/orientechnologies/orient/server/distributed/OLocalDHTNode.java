@@ -42,11 +42,14 @@ public class OLocalDHTNode implements ODHTNode {
   private volatile NodeState                 state;
 
   private final OMerkleTree                  merkleTree        = new OMerkleTree(db);
+  private final int                          replicaCount;
 
-  public OLocalDHTNode(long id) {
+  public OLocalDHTNode(long id, int replicaCount) {
     this.id = id;
     for (int i = 0; i < fingerPoints.length(); i++)
       fingerPoints.set(i, -1);
+
+    this.replicaCount = replicaCount;
   }
 
   public ODHTNodeLookup getNodeLookup() {
@@ -363,6 +366,21 @@ public class OLocalDHTNode implements ODHTNode {
     }
   }
 
+  public Record getRecordFromNode(long id) {
+    Record mergeData;
+
+    if (state == NodeState.MERGING)
+      mergeData = getDataFromMigrationNode(id);
+    else
+      mergeData = null;
+
+    Record record = readData(id);
+    if (mergeData == null)
+      return record;
+
+    return record.compareVersions(mergeData) > 0 ? record : mergeData;
+  }
+
   public void update(long id, Record data) {
     waitTillJoin();
     int retryCount = 0;
@@ -372,7 +390,7 @@ public class OLocalDHTNode implements ODHTNode {
 
       final long successorId = findSuccessor(id);
       if (successorId != id) {
-        if (remoteNodeUpdate(id, data, retryCount, successorId))
+        if (!remoteNodeUpdate(id, data, retryCount, successorId))
           continue;
 
         return;
@@ -400,7 +418,7 @@ public class OLocalDHTNode implements ODHTNode {
 
       final long successorId = findSuccessor(id);
       if (successorId != id) {
-        if (remoteNodeRemove(id, version, retryCount, successorId))
+        if (!remoteNodeRemove(id, version, retryCount, successorId))
           continue;
 
         return;
@@ -506,7 +524,46 @@ public class OLocalDHTNode implements ODHTNode {
   }
 
   private Record getDataFromMigrationNode(long id) {
-    return null;
+    final long migrationNodeId = migrationId;
+    if (migrationNodeId < 0)
+      return null;
+
+    int retryCount = 0;
+
+    while (true) {
+      retryCount++;
+      if (retryCount > replicaCount + 1) {
+        state = NodeState.STABLE;
+        migrationId = -1;
+
+        return null;
+      }
+
+      ODHTNode node = nodeLookup.findById(migrationNodeId);
+      if (node == null) {
+        if (replicaCount < 1) {
+          state = NodeState.STABLE;
+          migrationId = -1;
+
+          return null;
+        } else {
+          migrationId = findSuccessor(migrationId);
+          continue;
+        }
+      }
+
+      try {
+        return node.getRecordFromNode(id);
+      } catch (ONodeOfflineException onoe) {
+        if (replicaCount < 1) {
+          state = NodeState.STABLE;
+          migrationId = -1;
+
+          return null;
+        } else
+          migrationId = findSuccessor(migrationId);
+      }
+    }
   }
 
   private Record addData(long id, String data) {
@@ -605,7 +662,7 @@ public class OLocalDHTNode implements ODHTNode {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.SHARED);
     try {
       delay();
-      this.merkleTree.putReplica(id, replica);
+      this.merkleTree.updateReplica(id, replica);
     } finally {
       lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.SHARED);
     }

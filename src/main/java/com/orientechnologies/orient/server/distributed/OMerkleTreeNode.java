@@ -142,7 +142,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     rehashParentNodes(hashPathNodes);
   }
 
-  public boolean putReplica(int level, long offset, long id, Record replica) {
+  public boolean updateReplica(int level, long offset, long id, Record replica) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 

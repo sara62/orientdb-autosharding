@@ -67,7 +67,7 @@ public class MerkleTreeNodeTestMultiThreadingTest {
       long childPos = OMerkleTreeNode.childIndex(0, entry.getKey());
       long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-      sampleTreeNode.putReplica(1, startKey, entry.getKey(), entry.getValue());
+      sampleTreeNode.updateReplica(1, startKey, entry.getKey(), entry.getValue());
     }
 
     System.out.println("Sample tree comparison.");

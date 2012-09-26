@@ -18,12 +18,14 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 15.08.12
  */
 public class ServerInstance implements MembershipListener, ODHTNodeLookup {
-  public static final Map<String, ServerInstance> INSTANCES   = new ConcurrentHashMap<String, ServerInstance>();
+  private static final int                        REPLICA_COUNT = 2;
 
-  private final ConcurrentHashMap<Long, Member>   idMemberMap = new ConcurrentHashMap<Long, Member>();
+  public static final Map<String, ServerInstance> INSTANCES     = new ConcurrentHashMap<String, ServerInstance>();
+
+  private final ConcurrentHashMap<Long, Member>   idMemberMap   = new ConcurrentHashMap<Long, Member>();
   private volatile OLocalDHTNode                  localNode;
   private volatile HazelcastInstance              hazelcastInstance;
-  private final Timer                             timer       = new Timer("DHT timer", true);
+  private final Timer                             timer         = new Timer("DHT timer", true);
 
   public ServerInstance() {
   }
@@ -32,7 +34,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
     XmlConfigBuilder xmlConfigBuilder = new XmlConfigBuilder(ServerInstance.class.getResourceAsStream("/hazelcast.xml"));
 
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
-    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()));
+    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), REPLICA_COUNT);
     localNode.setNodeLookup(this);
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 

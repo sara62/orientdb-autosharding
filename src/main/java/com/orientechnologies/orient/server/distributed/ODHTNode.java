@@ -33,6 +33,8 @@ public interface ODHTNode {
 
   public Record get(long id);
 
+  public Record getRecordFromNode(long id);
+
   public void update(long id, Record record);
 
   public void remove(long id, int version);
