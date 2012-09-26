@@ -5,38 +5,39 @@ package com.orientechnologies.orient.server.distributed;
  * @since 17.08.12
  */
 public interface ODHTNode {
-	public enum NodeState {
-		JOIN, MERGING, STABLE
-	}
+  public enum NodeState {
+    JOIN, MERGING, STABLE
+  }
 
-	public long getNodeId();
+  public long getNodeId();
 
-	public long getSuccessor();
-	public long[] getSuccessors(int depth);
-	public Long getPredecessor();
+  public long getSuccessor();
 
-	public void requestStabilization();
+  public long[] getSuccessors(int depth);
 
-	public long notifyParent(long nodeId);
-	public boolean join(long nodeId);
+  public Long getPredecessor();
 
-	public long findSuccessor(long id);
+  public void requestStabilization();
 
-	public NodeState state();
+  public long notifyParent(long nodeId);
 
-	public long create(String data);
-	public long create(long id, String data);
+  public boolean join(long nodeId);
 
-	public String get(long id);
-	public String get(long id, boolean checkOwnerShip);
+  public long findSuccessor(long id);
 
-	public void update(long id, String data);
-	public void update(long id, String data, boolean checkOwnerShip);
+  public NodeState state();
 
-	public boolean remove(long id);
-	public boolean remove(long id, boolean checkOwnerShip);
+  public Record create(String data);
 
-	public int size();
+  public Record create(long id, String data);
 
-	public long[] missingRecords(long[] ids, ODHTRecordVersion[] versions);
+  public Record get(long id);
+
+  public void update(long id, Record record);
+
+  public void remove(long id, int version);
+
+  public int size();
+
+  public long[] findMissingRecords(long[] ids, ODHTRecordVersion[] versions);
 }

@@ -1,22 +1,18 @@
 package com.orientechnologies.orient.server.distributed;
 
-import com.orientechnologies.common.concur.lock.OLockManager;
-import com.orientechnologies.common.util.MersenneTwisterFast;
-import com.orientechnologies.orient.server.hazelcast.ServerInstance;
-import org.testng.Assert;
-import org.testng.annotations.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.testng.Assert;
+import org.testng.annotations.Test;
+
+import com.orientechnologies.common.concur.lock.OLockManager;
+import com.orientechnologies.common.util.MersenneTwisterFast;
+import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
 /**
  * @author Andrey Lomakin
@@ -24,281 +20,275 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Test(enabled = false)
 public class DHTTest {
-	private final AtomicBoolean testIsStopped = new AtomicBoolean(false);
+  private final AtomicBoolean testIsStopped   = new AtomicBoolean(false);
 
-	private ExecutorService readerExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
-		public Thread newThread(Runnable r) {
-			final Thread thread = new Thread(r);
-			thread.setDaemon(true);
-			return thread;
-		}
-	});
+  private ExecutorService     readerExecutor  = Executors.newCachedThreadPool(new ThreadFactory() {
+                                                public Thread newThread(Runnable r) {
+                                                  final Thread thread = new Thread(r);
+                                                  thread.setDaemon(true);
+                                                  return thread;
+                                                }
+                                              });
 
-	private ExecutorService writerExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
-		public Thread newThread(Runnable r) {
-			final Thread thread = new Thread(r);
-			thread.setDaemon(true);
+  private ExecutorService     writerExecutor  = Executors.newCachedThreadPool(new ThreadFactory() {
+                                                public Thread newThread(Runnable r) {
+                                                  final Thread thread = new Thread(r);
+                                                  thread.setDaemon(true);
 
-			return thread;
-		}
-	});
+                                                  return thread;
+                                                }
+                                              });
 
-	private ExecutorService removalExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
-		public Thread newThread(Runnable r) {
-			final Thread thread = new Thread(r);
-			thread.setDaemon(true);
+  private ExecutorService     removalExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
+                                                public Thread newThread(Runnable r) {
+                                                  final Thread thread = new Thread(r);
+                                                  thread.setDaemon(true);
 
-			return thread;
-		}
-	});
+                                                  return thread;
+                                                }
+                                              });
 
+  public void addNode() {
+    ServerInstance serverInstance = new ServerInstance();
+    serverInstance.init();
+    while (true)
+      ;
+  }
 
-	public void addNode() {
-		ServerInstance serverInstance = new ServerInstance();
-		serverInstance.init();
-		while (true) ;
-	}
+  public void addRemoveData() throws Exception {
+    final ServerInstance serverInstance = new ServerInstance();
+    serverInstance.init();
 
-	public void addRemoveData() throws Exception {
-		final ServerInstance serverInstance = new ServerInstance();
-		serverInstance.init();
+    ServerInstance siNext = new ServerInstance();
+    siNext.init();
 
-		ServerInstance siNext = new ServerInstance();
-		siNext.init();
+    Thread.sleep(20000);
 
-		Thread.sleep(20000);
+    final Map<Long, Record> data = new ConcurrentHashMap<Long, Record>();
+    final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
 
-		final Map<Long, String> data = new ConcurrentHashMap<Long, String>();
-		final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
+    final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
 
-		final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
+    List<Future<Void>> futures = new ArrayList<Future<Void>>();
 
-		List<Future<Void>> futures = new ArrayList<Future<Void>>();
+    final int threadCount = 4;
 
-		final int threadCount = 4;
+    for (int i = 0; i < threadCount; i++)
+      readerFutures.add(readerExecutor.submit(new DataReader(data, lockManager, serverInstance)));
 
-		for (int i = 0; i < threadCount; i++)
-			readerFutures.add(readerExecutor.submit(new DataReader(data, lockManager, serverInstance)));
+    for (long i = 0; i < threadCount; i++)
+      futures.add(writerExecutor.submit(new DataWriter(data, lockManager, serverInstance, testIsStopped)));
 
+    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
 
-		for (long i = 0; i < threadCount; i++)
-			futures.add(writerExecutor.submit(new DataWriter(data, lockManager, serverInstance, testIsStopped)));
+    for (int i = 0; i < 5; i++) {
+      ServerInstance si = new ServerInstance();
+      si.init();
 
-		Future<Void> removeFuture =
-						removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
+      Thread.sleep(5000);
+    }
 
-		for (int i = 0; i < 5; i++) {
-			ServerInstance si = new ServerInstance();
-			si.init();
+    Thread.sleep(10000);
 
-			Thread.sleep(5000);
-		}
+    testIsStopped.set(true);
 
-		Thread.sleep(10000);
+    System.out.println("[stat] Wait for writers .");
+    for (Future<Void> future : futures)
+      future.get();
 
-		testIsStopped.set(true);
+    System.out.println("[stat] Wait for remover.");
+    removeFuture.get();
 
-		System.out.println("[stat] Wait for writers .");
-		for (Future<Void> future : futures)
-			future.get();
+    System.out.println("[stat] Wait for readers.");
+    for (Future<Void> future : readerFutures)
+      future.get();
 
-		System.out.println("[stat] Wait for remover.");
-		removeFuture.get();
+    ODHTNode startNode = serverInstance.findSuccessor(0);
+    System.out.println("[stat] Wait till all nodes will be stable.");
 
-		System.out.println("[stat] Wait for readers.");
-		for (Future<Void> future : readerFutures)
-			future.get();
+    boolean allNodesAreStable = false;
+    while (!allNodesAreStable) {
+      ODHTNode node = serverInstance.findById(startNode.getSuccessor());
+      allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
+      while (node.getNodeId() != startNode.getNodeId() && allNodesAreStable) {
+        allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
 
-		ODHTNode startNode = serverInstance.findSuccessor(0);
-		System.out.println("[stat] Wait till all nodes will be stable.");
+        node = serverInstance.findById(node.getSuccessor());
+      }
+    }
 
-		boolean allNodesAreStable = false;
-		while (!allNodesAreStable) {
-			ODHTNode node = serverInstance.findById(startNode.getSuccessor());
-			allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
-			while (node.getNodeId() != startNode.getNodeId() && allNodesAreStable) {
-				allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
+    System.out.println("[stat] Items check " + data.size() + " items.");
+    int i = 0;
+    for (Map.Entry<Long, Record> entry : data.entrySet()) {
+      Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
 
-				node = serverInstance.findById(node.getSuccessor());
-			}
-		}
+      i++;
+      if (i % 10000 == 0)
+        System.out.println("[stat] " + i + " items were processed");
+    }
 
-		System.out.println("[stat] Items check " + data.size() + " items.");
-		int i = 0;
-		for (Map.Entry<Long, String> entry : data.entrySet()) {
-			Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(),
-							"Key " + entry.getKey() + " is absent");
+    System.out.println("[stat] Node sizes : ");
 
-			i++;
-			if (i % 10000 == 0)
-				System.out.println("[stat] " + i + " items were processed");
-		}
+    int totalSize = 0;
 
-		System.out.println("[stat] Node sizes : ");
+    System.out.println("[stat] Node : " + startNode.getNodeId() + " size - " + startNode.size() + " state " + startNode.state());
+    totalSize += startNode.size();
 
-		int totalSize = 0;
+    ODHTNode node = serverInstance.findById(startNode.getSuccessor());
 
-		System.out.println("[stat] Node : " + startNode.getNodeId() + " size - " + startNode.size() +
-						" state " + startNode.state());
-		totalSize += startNode.size();
+    while (node.getNodeId() != startNode.getNodeId()) {
+      System.out.println("[stat] Node : " + node.getNodeId() + " size - " + node.size() + " state " + node.state());
 
-		ODHTNode node = serverInstance.findById(startNode.getSuccessor());
+      totalSize += node.size();
+      node = serverInstance.findById(node.getSuccessor());
+    }
 
-		while (node.getNodeId() != startNode.getNodeId()) {
-			System.out.println("[stat] Node : " + node.getNodeId() + " size - " + node.size() + " state " + node.state());
+    Assert.assertEquals(totalSize, data.size());
+  }
 
-			totalSize += node.size();
-			node = serverInstance.findById(node.getSuccessor());
-		}
+  private static class DataRemover implements Callable<Void> {
+    private final OLockManager<Long, Runnable> lockManager;
+    private final Map<Long, Record>            data;
 
-		Assert.assertEquals(totalSize, data.size());
-	}
+    private final Random                       random = new Random();
 
-	private static class DataRemover implements Callable<Void> {
-		private final OLockManager<Long, Runnable> lockManager;
-		private final Map<Long, String> data;
+    private final ServerInstance               serverInstance;
+    private final AtomicBoolean                testIsStopped;
 
-		private final Random random = new Random();
+    private DataRemover(ServerInstance serverInstance, Map<Long, Record> data, OLockManager<Long, Runnable> lockManager,
+        AtomicBoolean testIsStopped) {
+      this.data = data;
 
-		private final ServerInstance serverInstance;
-		private final AtomicBoolean testIsStopped;
+      this.lockManager = lockManager;
+      this.serverInstance = serverInstance;
+      this.testIsStopped = testIsStopped;
+    }
 
-		private DataRemover(ServerInstance serverInstance, Map<Long, String> data, OLockManager<Long, Runnable> lockManager,
-												AtomicBoolean testIsStopped) {
-			this.data = data;
+    public Void call() throws Exception {
+      while (!testIsStopped.get()) {
+        if (data.size() < 100) {
+          Thread.sleep(100);
+          continue;
+        }
 
-			this.lockManager = lockManager;
-			this.serverInstance = serverInstance;
-			this.testIsStopped = testIsStopped;
-		}
+        int n = random.nextInt(10);
 
-		public Void call() throws Exception {
-			while (!testIsStopped.get()) {
-				if (data.size() < 100) {
-					Thread.sleep(100);
-					continue;
-				}
+        if (n < 5)
+          n = 5;
 
-				int n = random.nextInt(10);
+        int i = 0;
+        for (Long key : data.keySet()) {
+          if (i % n == 0) {
+            lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+            try {
+              while (true)
+                try {
+                  final Record record = data.get(key);
 
-				if (n < 5)
-					n = 5;
+                  if (record != null) {
+                    serverInstance.remove(key, record.getShortVersion());
+                    data.remove(key);
+                  }
 
-				int i = 0;
-				for (Long key : data.keySet()) {
-					if (i % n == 0) {
-						lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-						try {
-							while (true)
-								try {
-									if (data.containsKey(key)) {
-										serverInstance.remove(key);
-										data.remove(key);
-									}
+                  break;
+                } catch (ODHTKeyOwnerIsAbsentException e) {
+                  System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + key);
+                  Thread.sleep(50);
+                }
 
-									break;
-								} catch (ODHTKeyOwnerIsAbsentException e) {
-									System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
-													+ key);
-									Thread.sleep(50);
-								}
+            } finally {
+              lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+            }
+          }
+          i++;
+        }
+      }
+      return null;
+    }
+  }
 
-						} finally {
-							lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-						}
-					}
-					i++;
-				}
-			}
-			return null;
-		}
-	}
+  private static class DataWriter implements Callable<Void> {
+    private final OLockManager<Long, Runnable> lockManager;
 
-	private static class DataWriter implements Callable<Void> {
-		private static volatile long seedOffset = 0;
+    private final MersenneTwisterFast          random = new MersenneTwisterFast();
+    private final Map<Long, Record>            data;
 
-		private final OLockManager<Long, Runnable> lockManager;
+    private final ServerInstance               serverInstance;
+    private final AtomicBoolean                testIsStopped;
 
-		private final MersenneTwisterFast random = new MersenneTwisterFast();
-		private final Map<Long, String> data;
+    private DataWriter(Map<Long, Record> data, OLockManager<Long, Runnable> lockManager, ServerInstance serverInstance,
+        AtomicBoolean testIsStopped) {
+      random.setSeed((new Random()).nextLong());
+      this.data = data;
+      this.lockManager = lockManager;
 
-		private final ServerInstance serverInstance;
-		private final AtomicBoolean testIsStopped;
+      this.serverInstance = serverInstance;
+      this.testIsStopped = testIsStopped;
+    }
 
-		private DataWriter(Map<Long, String> data, OLockManager<Long, Runnable> lockManager,
-											 ServerInstance serverInstance, AtomicBoolean testIsStopped) {
-			random.setSeed(System.nanoTime() + seedOffset++);
-			this.data = data;
-			this.lockManager = lockManager;
+    public Void call() throws Exception {
+      while (!testIsStopped.get()) {
+        long id = random.nextLong(Long.MAX_VALUE);
+        lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
+        try {
+          Record record;
+          while (true)
+            try {
+              record = serverInstance.create(id, String.valueOf(id));
+              break;
+            } catch (ODHTKeyOwnerIsAbsentException e) {
+              System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + id);
+              Thread.sleep(50);
+            }
+          data.put(id, record);
+        } finally {
+          lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
+        }
+      }
+      return null;
+    }
+  }
 
-			this.serverInstance = serverInstance;
-			this.testIsStopped = testIsStopped;
-		}
+  private class DataReader implements Callable<Void> {
+    private final Map<Long, Record>            data;
+    private final OLockManager<Long, Runnable> lockManager;
 
-		public Void call() throws Exception {
-			while (!testIsStopped.get()) {
-				long key = random.nextLong(Long.MAX_VALUE);
-				lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-				try {
-					while (true)
-						try {
-							serverInstance.put(key, String.valueOf(key));
-							break;
-						} catch (ODHTKeyOwnerIsAbsentException e) {
-							System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
-											+ key);
-							Thread.sleep(50);
-						}
-					data.put(key, String.valueOf(key));
-				} finally {
-					lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-				}
-			}
-			return null;
-		}
-	}
+    private final ServerInstance               serverInstance;
 
-	private class DataReader implements Callable<Void> {
-		private final Map<Long, String> data;
-		private final OLockManager<Long, Runnable> lockManager;
+    public DataReader(Map<Long, Record> data, OLockManager<Long, Runnable> lockManager, ServerInstance serverInstance) {
+      this.data = data;
+      this.lockManager = lockManager;
 
-		private final ServerInstance serverInstance;
+      this.serverInstance = serverInstance;
+    }
 
-		public DataReader(Map<Long, String> data, OLockManager<Long, Runnable> lockManager, ServerInstance serverInstance) {
-			this.data = data;
-			this.lockManager = lockManager;
+    public Void call() throws Exception {
+      while (!testIsStopped.get()) {
+        int i = 0;
+        for (Map.Entry<Long, Record> entry : data.entrySet()) {
+          while (true) {
+            lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+            try {
+              try {
+                if (data.containsKey(entry.getKey()))
+                  Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
+                i++;
+                if (i % 10000 == 0)
+                  System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
 
-			this.serverInstance = serverInstance;
-		}
-
-		public Void call() throws Exception {
-			while (!testIsStopped.get()) {
-				int i = 0;
-				for (Map.Entry<Long, String> entry : data.entrySet()) {
-					while (true) {
-						lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
-						try {
-							try {
-								if (data.containsKey(entry.getKey()))
-									Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(),
-													"Key " + entry.getKey() + " is absent");
-								i++;
-								if (i % 10000 == 0)
-									System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
-
-								break;
-							} catch (ODHTKeyOwnerIsAbsentException e) {
-								System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
-												+ entry.getKey());
-								Thread.sleep(50);
-							}
-						} finally {
-							lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
-						}
-					}
-				}
-			}
-			return null;
-		}
-	}
+                break;
+              } catch (ODHTKeyOwnerIsAbsentException e) {
+                System.out
+                    .println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + entry.getKey());
+                Thread.sleep(50);
+              }
+            } finally {
+              lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+            }
+          }
+        }
+      }
+      return null;
+    }
+  }
 }

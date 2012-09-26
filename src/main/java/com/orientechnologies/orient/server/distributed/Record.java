@@ -4,97 +4,108 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+
+
 /**
  * @author Andrey Lomakin
  * @since 19.09.12
  */
 public class Record implements Externalizable {
-	private String data;
+  private String            data;
+  private long              id;
 
-	private ODHTRecordVersion version;
+  private ODHTRecordVersion version;
 
-	public Record() {
-	}
+  public Record() {
+  }
 
-	public Record(String data) {
-		this.data = data;
+  public Record(long id, String data) {
+    this.id = id;
+    this.data = data;
 
-		version = new ODHTRecordVersion();
-		version.init();
-	}
+    version = new ODHTRecordVersion();
+    version.init();
+  }
 
-	public Record(String data, long shortVersion) {
-		this.data = data;
+  public Record(long id, String data, int shortVersion) {
+    this.id = id;
+    this.data = data;
 
-		version = new ODHTRecordVersion();
-		version.init(shortVersion);
-	}
+    version = new ODHTRecordVersion();
+    version.init(shortVersion);
+  }
 
-	public void updateData(String data, int shortVersion) {
-		if (isTombstone())
-			throw new IllegalStateException("Record was deleted and can not be updated.");
+  public void updateData(String data, int shortVersion) {
+    if (isTombstone())
+      throw new IllegalStateException("Record was deleted and can not be updated.");
 
-		if (this.version.getShortVersion() != shortVersion)
-			throw new IllegalStateException("Provided version is not up to date");
+    if (this.version.getShortVersion() != shortVersion)
+      throw new IllegalStateException("Provided version is not up to date");
 
-		this.version.updateVersion();
+    this.version.updateVersion();
 
-		this.data = data;
-	}
+    this.data = data;
+  }
 
-	public ODHTRecordVersion getVersion() {
-		return version;
-	}
+  public ODHTRecordVersion getVersion() {
+    return version;
+  }
 
-	public String getData() {
-		return data;
-	}
+  public String getData() {
+    return data;
+  }
 
-	public long getShortVersion() {
-		return version.getShortVersion();
-	}
+  public int getShortVersion() {
+    return version.getShortVersion();
+  }
 
-	public int compareVersions(Record record) {
-		return version.compareTo(record.version);
-	}
+  public int compareVersions(Record record) {
+    return version.compareTo(record.version);
+  }
 
-	public boolean isTombstone() {
-		return version.isTombstone();
-	}
+  public boolean isTombstone() {
+    return version.isTombstone();
+  }
 
-	public void convertToTombstone() {
-		data = null;
+  public void convertToTombstone() {
+    data = null;
 
-		this.version.convertToTombstone();
-	}
+    this.version.convertToTombstone();
+  }
 
-	@Override
-	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
+  @Override
+  public boolean equals(Object o) {
+    if (this == o)
+      return true;
+    if (o == null || getClass() != o.getClass())
+      return false;
 
-		Record record = (Record) o;
+    Record record = (Record) o;
 
-		if (data != null ? !data.equals(record.data) : record.data != null) return false;
-		if (version != null ? !version.equals(record.version) : record.version != null) return false;
+    if (id != record.id)
+      return false;
+    if (!version.equals(record.version))
+      return false;
 
-		return true;
-	}
+    return true;
+  }
 
-	@Override
-	public int hashCode() {
-		int result = data != null ? data.hashCode() : 0;
-		result = 31 * result + (version != null ? version.hashCode() : 0);
-		return result;
-	}
+  @Override
+  public int hashCode() {
+    int result = (int) (id ^ (id >>> 32));
+    result = 31 * result + version.hashCode();
+    return result;
+  }
 
-	public void writeExternal(ObjectOutput out) throws IOException {
-		out.writeUTF(data);
-		out.writeObject(version);
-	}
+  public void writeExternal(ObjectOutput out) throws IOException {
+    out.writeLong(id);
+    out.writeUTF(data);
+    out.writeObject(version);
+  }
 
-	public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-		data = in.readUTF();
-		version = (ODHTRecordVersion)in.readObject();
-	}
+  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+    id = in.readLong();
+    data = in.readUTF();
+    version = (ODHTRecordVersion) in.readObject();
+  }
 }
