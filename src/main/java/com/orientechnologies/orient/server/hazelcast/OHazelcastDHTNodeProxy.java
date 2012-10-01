@@ -57,8 +57,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     return callOnRemoteMember(new SizeNodeCall(nodeId, member.getUuid()), false);
   }
 
-  public long[] findMissingRecords(long[] ids, ODHTRecordVersion[] versions) {
-    return new long[0]; // To change body of implemented methods use File | Settings | File Templates.
+  public long[] findMissedRecords(long[] ids, ODHTRecordVersion[] versions) {
+    return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeId, member.getUuid(), ids, versions), false);
   }
 
   public NodeState state() {
@@ -90,15 +90,20 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
   @Override
   public void update(long id, Record record) {
-    callOnRemoteMember(new UpdateNodeCall(nodeId, member.getUuid(), id, record), true);
+    callOnRemoteMember(new UpdateNodeCall(nodeId, member.getUuid(), id, record), false);
   }
 
   @Override
   public void remove(long id, int version) {
-    callOnRemoteMember(new RemoveNodeCall(nodeId, member.getUuid(), id, version), true);
+    callOnRemoteMember(new RemoveNodeCall(nodeId, member.getUuid(), id, version), false);
   }
 
-  @Override
+	@Override
+	public void updateReplica(Record replica) {
+		callOnRemoteMember(new UpdateReplicaNodeCall(nodeId, member.getUuid(), replica), false);
+	}
+
+	@Override
   public Record getRecordFromNode(long id) {
     return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeId, member.getUuid(), id), true);
   }
@@ -155,7 +160,86 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
-  private static final class UpdateNodeCall extends NodeCall<Void> {
+	private static final class FindMissedRecordsNodeCall extends NodeCall<long[]> {
+		private long[] ids;
+		private ODHTRecordVersion[] versions;
+
+		public FindMissedRecordsNodeCall() {
+		}
+
+		private FindMissedRecordsNodeCall(long nodeId, String memberUUID, long[] ids, ODHTRecordVersion[] versions) {
+			super(nodeId, memberUUID);
+			this.ids = ids;
+			this.versions = versions;
+		}
+
+		@Override
+		protected long[] call(ODHTNode node) {
+			return node.findMissedRecords(ids, versions);
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+
+			out.writeInt(ids.length);
+
+			for (long id : ids)
+				out.writeLong(id);
+
+			for (ODHTRecordVersion version : versions)
+				out.writeObject(version);
+  	}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+
+			final int dataLength = in.readInt();
+			versions = new ODHTRecordVersion[dataLength];
+			ids = new long[dataLength];
+
+			for (int i = 0; i < dataLength; i++)
+				ids[i] = in.readLong();
+
+			for (int i = 0; i < dataLength; i++)
+				versions[i] = (ODHTRecordVersion)in.readObject();
+		}
+	}
+
+
+	private static final class UpdateReplicaNodeCall extends NodeCall<Void> {
+		private Record record;
+
+		public UpdateReplicaNodeCall() {
+		}
+
+		private UpdateReplicaNodeCall(long nodeId, String memberUUID, Record record) {
+			super(nodeId, memberUUID);
+			this.record = record;
+		}
+
+		@Override
+		protected Void call(ODHTNode node) {
+			node.updateReplica(record);
+
+			return null;
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeObject(record);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			record = (Record) in.readObject();
+		}
+	}
+
+	private static final class UpdateNodeCall extends NodeCall<Void> {
     private long   id;
     private Record record;
 
@@ -177,12 +261,14 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
+			out.writeLong(id);
       out.writeObject(record);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
+			id = in.readLong();
       record = (Record) in.readObject();
     }
   }

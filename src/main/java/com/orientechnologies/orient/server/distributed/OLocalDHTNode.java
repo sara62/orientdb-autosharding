@@ -1,14 +1,26 @@
 package com.orientechnologies.orient.server.distributed;
 
 import java.text.DateFormat;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NavigableMap;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
 
 import com.orientechnologies.common.concur.lock.OLockManager;
 import com.orientechnologies.common.util.MersenneTwister;
+import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
 
 /**
@@ -16,32 +28,29 @@ import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
  * @since 17.08.12
  */
 public class OLocalDHTNode implements ODHTNode {
-  private static final int                   MAX_RETRIES       = 10;
+  private static final int                   MAX_RETRIES    = 10;
 
-  private final MersenneTwister              random            = new MersenneTwister();
+  private final MersenneTwister              random         = new MersenneTwister();
 
   private final long                         id;
 
-  private final AtomicLongArray              fingerPoints      = new AtomicLongArray(63);
-  private AtomicLong                         predecessor       = new AtomicLong(-1);
+  private final AtomicLongArray              fingerPoints   = new AtomicLongArray(63);
+  private AtomicLong                         predecessor    = new AtomicLong(-1);
 
-  private final NavigableMap<Long, Record>   db                = new ConcurrentSkipListMap<Long, Record>();
+  private final NavigableMap<Long, Record>   db             = new ConcurrentSkipListMap<Long, Record>();
 
-  private volatile long                      migrationId       = -1;
+  private volatile long                      migrationId    = -1;
   private volatile ODHTNodeLookup            nodeLookup;
 
-  private AtomicInteger                      next              = new AtomicInteger(1);
-  private final OLockManager<Long, Runnable> lockManager       = new OLockManager<Long, Runnable>(true, 500);
+  private AtomicInteger                      next           = new AtomicInteger(1);
+  private final OLockManager<Long, Runnable> lockManager    = new OLockManager<Long, Runnable>(true, 500);
+  private volatile long[]                    successorsList = new long[0];
 
-  private volatile ExecutorService           executorService   = Executors.newCachedThreadPool();
-
-  private final Queue<Long>                  notificationQueue = new ConcurrentLinkedQueue<Long>();
-
-  private volatile long[]                    successorsList    = new long[0];
+  private final ExecutorService              gmExecutorService;
 
   private volatile NodeState                 state;
 
-  private final OMerkleTree                  merkleTree        = new OMerkleTree(db);
+  private final OMerkleTree                  merkleTree     = new OMerkleTree(db);
   private final int                          replicaCount;
 
   public OLocalDHTNode(long id, int replicaCount) {
@@ -50,6 +59,7 @@ public class OLocalDHTNode implements ODHTNode {
       fingerPoints.set(i, -1);
 
     this.replicaCount = replicaCount;
+    gmExecutorService = Executors.newSingleThreadExecutor(new GlobalMaintenanceProtocolThreadFactory(id));
   }
 
   public ODHTNodeLookup getNodeLookup() {
@@ -84,17 +94,8 @@ public class OLocalDHTNode implements ODHTNode {
         return false;
       }
 
-      if (state != null) {
-        executorService.shutdownNow();
-        executorService.awaitTermination(10, TimeUnit.MINUTES);
-
-        if (!executorService.isTerminated())
-          throw new IllegalStateException("Invalid node state . Not all background processes were terminated.");
-
-        executorService = Executors.newCachedThreadPool();
-
-        db.clear();
-      }
+      if (state == null)
+        gmExecutorService.submit(new GlobalMaintenanceProtocol());
 
       random.setSeed((new Random()).nextLong());
 
@@ -316,9 +317,6 @@ public class OLocalDHTNode implements ODHTNode {
       retryCount++;
 
       if (successorId == id) {
-        if (!checkLocalOwnerShip(id, retryCount))
-          continue;
-
         if (state == NodeState.MERGING) {
           final Record mergeData = getDataFromMigrationNode(id);
           if (mergeData != null)
@@ -352,9 +350,6 @@ public class OLocalDHTNode implements ODHTNode {
 
         return remoteNodeGetResult.data;
       }
-
-      if (!checkLocalOwnerShip(id, retryCount))
-        continue;
 
       if (state == NodeState.MERGING) {
         final Record mergeData = getDataFromMigrationNode(id);
@@ -396,9 +391,6 @@ public class OLocalDHTNode implements ODHTNode {
         return;
       }
 
-      if (!checkLocalOwnerShip(id, retryCount))
-        continue;
-
       if (state == NodeState.MERGING) {
         final Record mergeData = getDataFromMigrationNode(id);
         if (mergeData != null)
@@ -424,9 +416,6 @@ public class OLocalDHTNode implements ODHTNode {
         return;
       }
 
-      if (!checkLocalOwnerShip(id, retryCount))
-        continue;
-
       if (state == NodeState.MERGING) {
         final Record mergeData = getDataFromMigrationNode(id);
         if (mergeData != null)
@@ -437,8 +426,26 @@ public class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public long[] findMissingRecords(long[] ids, ODHTRecordVersion[] versions) {
-    return new long[0]; // To change body of implemented methods use File | Settings | File Templates.
+  public long[] findMissedRecords(long[] ids, ODHTRecordVersion[] versions) {
+    ArrayList<Long> result = new ArrayList<Long>();
+
+    for (int i = 0; i < ids.length; i++) {
+      final Record record = db.get(ids[i]);
+      if (record == null)
+        result.add(ids[i]);
+      else if (versions[i].compareTo(record.getVersion()) > 0)
+        result.add(ids[i]);
+    }
+
+    long[] missedRecords = new long[result.size()];
+    for (int i = 0; i < missedRecords.length; i++)
+      missedRecords[i] = result.get(i);
+
+    return missedRecords;
+  }
+
+  public void updateReplica(final Record replica) {
+    putReplica(replica.getId(), replica);
   }
 
   private RemoteNodeCallResult<Record> remoteNodeCreate(long id, String data, int retryCount, long nodeId) {
@@ -617,20 +624,6 @@ public class OLocalDHTNode implements ODHTNode {
         log("Node " + nodeId + " is offline, retry limit is reached.");
         throw e;
       }
-    }
-  }
-
-  private void processNotificationQueue() {
-    Long nodeToNotifyId = notificationQueue.poll();
-    while (nodeToNotifyId != null) {
-      final ODHTNode node = nodeLookup.findById(nodeToNotifyId);
-      if (node != null)
-        try {
-          // TODO node.notifyMigrationEnd(id);
-        } catch (ONodeOfflineException noe) {
-        }
-
-      nodeToNotifyId = notificationQueue.poll();
     }
   }
 
@@ -853,28 +846,6 @@ public class OLocalDHTNode implements ODHTNode {
         }
 
         if (result && predecessorId < 0 && state == NodeState.JOIN) {
-          int retryCount = 0;
-
-          while (true) {
-            migrationId = fingerPoints.get(0);
-
-            final ODHTNode mergeNode = nodeLookup.findById(migrationId);
-            if (mergeNode == null) {
-              handleSuccessorOfflineCase(retryCount, migrationId);
-
-              retryCount++;
-              continue;
-            }
-
-            try {
-              // TODO mergeNode.requestMigration(id);
-              break;
-            } catch (ONodeOfflineException noe) {
-              handleSuccessorOfflineCase(retryCount, migrationId);
-              retryCount++;
-            }
-          }
-
           state = NodeState.MERGING;
           log("Status was changed to " + state);
         }
@@ -889,40 +860,8 @@ public class OLocalDHTNode implements ODHTNode {
     return prevPredecessor;
   }
 
-  public void notifyMigrationEnd(long nodeId) {
-    log("Migration completion notification from " + nodeId);
-
-    waitTillJoin();
-
-    if (nodeId == migrationId) {
-      state = NodeState.STABLE;
-      log("State was changed to " + state);
-
-      processNotificationQueue();
-    }
-  }
-
   public void requestStabilization() {
     stabilize();
-  }
-
-  // TODO does this method is really needed if we have GM
-  private boolean checkLocalOwnerShip(final long key, final int retryCount) {
-    final long predecessorValue = predecessor.get();
-
-    if (predecessorValue > -1 && insideInterval(predecessorValue, id, key, true))
-      return true;
-
-    if (retryCount <= MAX_RETRIES) {
-      log("Owner for key " + key + " is absent. Predecessor " + predecessorValue + ". " + retryCount + " retry.");
-
-      return false;
-    }
-
-    log("Owner for key " + key + " is absent. Predecessor " + predecessorValue + ". Retry count is reached.");
-    drawRing();
-
-    throw new ODHTKeyOwnerIsAbsentException("Owner for key " + key + " is absent.", key);
   }
 
   private boolean insideInterval(long from, long to, long value, boolean rightIsIncluded) {
@@ -975,6 +914,139 @@ public class OLocalDHTNode implements ODHTNode {
       log(builder.toString());
     } catch (ONodeOfflineException noe) {
       // ignore
+    }
+  }
+
+  private final class GlobalMaintenanceProtocol implements Callable<Void> {
+    public Void call() throws Exception {
+      long idToTest = id;
+
+      mgCycle:
+			while (!Thread.currentThread().isInterrupted()) {
+        try {
+          if (state == null && !state.equals(NodeState.MERGING) && !state.equals(NodeState.STABLE))
+            continue;
+
+          long nextId = nextInDB(idToTest);
+
+          long successor = findSuccessor(nextId);
+          if (id == successor) {
+            idToTest = id;
+            continue;
+          }
+
+          final ODHTNode successorNode = nodeLookup.findById(successor);
+          long[] successors;
+          successors = successorNode.getSuccessors(replicaCount);
+
+          for (long s : successors) {
+            if (s == id) {
+              idToTest = id;
+              continue mgCycle;
+            }
+          }
+
+          List<Long> nodesToReplicate = new ArrayList<Long>();
+          nodesToReplicate.add(successor);
+          for (long s : successors)
+            nodesToReplicate.add(s);
+
+          final Iterator<Record> iterator = db.subMap(idToTest, true, successor, true).values().iterator();
+
+          List<Long> ids = new ArrayList<Long>(100);
+          List<ODHTRecordVersion> versions = new ArrayList<ODHTRecordVersion>(100);
+
+          for (long nodeId : nodesToReplicate) {
+            while (iterator.hasNext()) {
+              final ODHTNode node = nodeLookup.findById(nodeId);
+              if (node == null) {
+                idToTest = id;
+                continue;
+              }
+
+              final Record record = iterator.next();
+
+              ids.add(record.getId());
+              versions.add(record.getVersion());
+
+              if (ids.size() >= 100) {
+                final ODHTRecordVersion[] arrayVersions = new ODHTRecordVersion[versions.size()];
+                final long[] arrayIDs = new long[ids.size()];
+
+                for (int i = 0; i < arrayIDs.length; i++)
+                  arrayIDs[i] = ids.get(i);
+
+                versions.toArray(arrayVersions);
+
+                final long[] missingIds = node.findMissedRecords(arrayIDs, arrayVersions);
+
+                for (long missingId : missingIds) {
+                  final Record replica = db.get(missingId);
+                  if (replica != null)
+                    node.updateReplica(replica);
+
+                  try {
+                    removeData(replica.getId(), replica.getShortVersion());
+                  } catch (OConcurrentModificationException e) {
+                    // ignore
+                  }
+                }
+
+                ids.clear();
+                versions.clear();
+              }
+            }
+          }
+
+          idToTest = successor;
+        } catch (Exception e) {
+          log(e.toString());
+
+          idToTest = id;
+        } finally {
+          try {
+            Thread.sleep(100);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+        }
+      }
+
+      return null;
+    }
+
+    private Long nextInDB(long id) {
+      Long result = db.higherKey(id);
+
+      if (result != null)
+        return result;
+
+      if (id > 0)
+        result = db.ceilingKey(0L);
+
+      if (result != null && result != id)
+        return result;
+
+      return null;
+    }
+  }
+
+  private static final class GlobalMaintenanceProtocolThreadFactory implements ThreadFactory {
+    private static final AtomicInteger counter = new AtomicInteger();
+
+    private final long                 nodeId;
+
+    private GlobalMaintenanceProtocolThreadFactory(long nodeId) {
+      this.nodeId = nodeId;
+    }
+
+    public Thread newThread(Runnable r) {
+      final Thread thread = new Thread(r);
+
+      thread.setName("Global Maintenance Protocol for node '" + nodeId + "' [" + counter.incrementAndGet() + "]");
+      thread.setDaemon(true);
+
+      return thread;
     }
   }
 

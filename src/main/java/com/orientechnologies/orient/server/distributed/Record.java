@@ -47,9 +47,13 @@ public class Record implements Externalizable {
     this.data = data;
   }
 
-  public ODHTRecordVersion getVersion() {
+	public long getId() {
+		return id;
+	}
+
+	public ODHTRecordVersion getVersion() {
     return version;
-  }
+	}
 
   public String getData() {
     return data;

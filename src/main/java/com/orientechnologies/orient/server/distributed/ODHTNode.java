@@ -28,18 +28,16 @@ public interface ODHTNode {
   public NodeState state();
 
   public Record create(String data);
-
   public Record create(long id, String data);
-
   public Record get(long id);
+	public void update(long id, Record record);
+	public void remove(long id, int version);
 
-  public Record getRecordFromNode(long id);
+	public void updateReplica(Record replica);
 
-  public void update(long id, Record record);
-
-  public void remove(long id, int version);
+	public Record getRecordFromNode(long id);
 
   public int size();
 
-  public long[] findMissingRecords(long[] ids, ODHTRecordVersion[] versions);
+  public long[] findMissedRecords(long[] ids, ODHTRecordVersion[] versions);
 }
