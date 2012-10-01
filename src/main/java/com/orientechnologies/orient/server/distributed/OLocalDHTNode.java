@@ -323,7 +323,11 @@ public class OLocalDHTNode implements ODHTNode {
             putReplica(id, mergeData);
         }
 
-        return addData(id, data);
+        final Record result = addData(id, data);
+
+        replicateRecord(result);
+
+        return result;
       } else {
         final RemoteNodeCallResult<Record> result = remoteNodeCreate(id, data, retryCount, successorId);
         if (result.repeat)
@@ -398,10 +402,17 @@ public class OLocalDHTNode implements ODHTNode {
       }
 
       updateData(id, data);
+
+      if (retryCount < 1)
+        return;
+
+			replicateRecord(id);
+
+			return;
     }
   }
 
-  public void remove(long id, int version) {
+	public void remove(long id, int version) {
     waitTillJoin();
     int retryCount = 0;
 
@@ -423,7 +434,14 @@ public class OLocalDHTNode implements ODHTNode {
       }
 
       removeData(id, version);
-    }
+
+			if (replicaCount < 1)
+				return;
+
+			replicateRecord(id);
+
+			return;
+		}
   }
 
   public long[] findMissedRecords(long[] ids, ODHTRecordVersion[] versions) {
@@ -779,7 +797,31 @@ public class OLocalDHTNode implements ODHTNode {
     // log("Stabilization is finished");
   }
 
-  private void handleSuccessorOfflineCase(int retryCount, long successorId) {
+	private void replicateRecord(Record result) {
+		if(replicaCount < 1)
+			return;
+
+		long[] replicaHolders = getSuccessors(replicaCount);
+
+		for (long replicaHolderId : replicaHolders) {
+			final ODHTNode replicaHolderNode = nodeLookup.findById(replicaHolderId);
+			if (replicaHolderNode == null)
+				continue;
+
+			try {
+				replicaHolderNode.updateReplica(result);
+			} catch (ONodeOfflineException noe) {
+				// ignore
+			}
+		}
+	}
+
+	private void replicateRecord(long id) {
+		final Record replica = readData(id);
+		replicateRecord(replica);
+	}
+
+	private void handleSuccessorOfflineCase(int retryCount, long successorId) {
     if (retryCount < MAX_RETRIES) {
       log("Successor " + successorId + " is offline will try to find new one and retry. " + retryCount + "-d retry.");
 
@@ -921,8 +963,7 @@ public class OLocalDHTNode implements ODHTNode {
     public Void call() throws Exception {
       long idToTest = id;
 
-      mgCycle:
-			while (!Thread.currentThread().isInterrupted()) {
+      mgCycle: while (!Thread.currentThread().isInterrupted()) {
         try {
           if (state == null && !state.equals(NodeState.MERGING) && !state.equals(NodeState.STABLE))
             continue;
