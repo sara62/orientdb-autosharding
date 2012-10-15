@@ -4,7 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.testng.Assert;
@@ -18,7 +23,7 @@ import com.orientechnologies.orient.server.hazelcast.ServerInstance;
  * @author Andrey Lomakin
  * @since 20.08.12
  */
-@Test(enabled = false)
+@Test
 public class DHTTest {
   private final AtomicBoolean testIsStopped   = new AtomicBoolean(false);
 
@@ -71,7 +76,7 @@ public class DHTTest {
 
     List<Future<Void>> futures = new ArrayList<Future<Void>>();
 
-    final int threadCount = 4;
+    final int threadCount = 2;
 
     for (int i = 0; i < threadCount; i++)
       readerFutures.add(readerExecutor.submit(new DataReader(data, lockManager, serverInstance)));
@@ -79,9 +84,9 @@ public class DHTTest {
     for (long i = 0; i < threadCount; i++)
       futures.add(writerExecutor.submit(new DataWriter(data, lockManager, serverInstance, testIsStopped)));
 
-    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
+    // Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 2; i++) {
       ServerInstance si = new ServerInstance();
       si.init();
 
@@ -96,8 +101,8 @@ public class DHTTest {
     for (Future<Void> future : futures)
       future.get();
 
-    System.out.println("[stat] Wait for remover.");
-    removeFuture.get();
+    // System.out.println("[stat] Wait for remover.");
+    // removeFuture.get();
 
     System.out.println("[stat] Wait for readers.");
     for (Future<Void> future : readerFutures)
@@ -109,9 +114,9 @@ public class DHTTest {
     boolean allNodesAreStable = false;
     while (!allNodesAreStable) {
       ODHTNode node = serverInstance.findById(startNode.getSuccessor());
-      allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
+      allNodesAreStable = node.state().equals(ODHTNode.NodeState.PRODUCTION);
       while (node.getNodeId() != startNode.getNodeId() && allNodesAreStable) {
-        allNodesAreStable = node.state().equals(ODHTNode.NodeState.STABLE);
+        allNodesAreStable = node.state().equals(ODHTNode.NodeState.PRODUCTION);
 
         node = serverInstance.findById(node.getSuccessor());
       }
@@ -126,6 +131,10 @@ public class DHTTest {
       if (i % 10000 == 0)
         System.out.println("[stat] " + i + " items were processed");
     }
+
+    System.out.println("[stat] wait to finish all asynchronous replications");
+
+    Thread.sleep(60000);
 
     System.out.println("[stat] Node sizes : ");
 
@@ -143,7 +152,7 @@ public class DHTTest {
       node = serverInstance.findById(node.getSuccessor());
     }
 
-    Assert.assertEquals(totalSize, data.size());
+    Assert.assertEquals(totalSize, data.size() * (ServerInstance.REPLICA_COUNT + 1));
   }
 
   private static class DataRemover implements Callable<Void> {
@@ -186,7 +195,7 @@ public class DHTTest {
                   final Record record = data.get(key);
 
                   if (record != null) {
-                    serverInstance.remove(key, record.getShortVersion());
+                    serverInstance.remove(key, record.getVersion());
                     data.remove(key);
                   }
 

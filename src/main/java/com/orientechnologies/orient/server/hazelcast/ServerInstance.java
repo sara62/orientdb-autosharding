@@ -6,10 +6,15 @@ import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.hazelcast.config.XmlConfigBuilder;
-import com.hazelcast.core.*;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.Member;
+import com.hazelcast.core.MembershipEvent;
+import com.hazelcast.core.MembershipListener;
 import com.orientechnologies.common.hash.OMurmurHash3;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
+import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -18,14 +23,15 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 15.08.12
  */
 public class ServerInstance implements MembershipListener, ODHTNodeLookup {
-  private static final int                        REPLICA_COUNT = 2;
+  public static final int                         REPLICA_COUNT      = 2;
+  private static final int                        SYNC_REPLICA_COUNT = 1;
 
-  public static final Map<String, ServerInstance> INSTANCES     = new ConcurrentHashMap<String, ServerInstance>();
+  public static final Map<String, ServerInstance> INSTANCES          = new ConcurrentHashMap<String, ServerInstance>();
 
-  private final ConcurrentHashMap<Long, Member>   idMemberMap   = new ConcurrentHashMap<Long, Member>();
+  private final ConcurrentHashMap<Long, Member>   idMemberMap        = new ConcurrentHashMap<Long, Member>();
   private volatile OLocalDHTNode                  localNode;
   private volatile HazelcastInstance              hazelcastInstance;
-  private final Timer                             timer         = new Timer("DHT timer", true);
+  private final Timer                             timer              = new Timer("DHT timer", true);
 
   public ServerInstance() {
   }
@@ -34,7 +40,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
     XmlConfigBuilder xmlConfigBuilder = new XmlConfigBuilder(ServerInstance.class.getResourceAsStream("/hazelcast.xml"));
 
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
-    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), REPLICA_COUNT);
+    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), REPLICA_COUNT, SYNC_REPLICA_COUNT);
     localNode.setNodeLookup(this);
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
@@ -47,11 +53,11 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
     }
 
     if (idMemberMap.isEmpty())
-      localNode.create();
+      localNode.createDHT();
     else {
       long oldestNodeId = getNodeId(hazelcastInstance.getCluster().getMembers().iterator().next());
 
-      while (!localNode.join(oldestNodeId))
+      while (!localNode.joinDHT(oldestNodeId))
         oldestNodeId = getNodeId(hazelcastInstance.getCluster().getMembers().iterator().next());
     }
 
@@ -65,15 +71,15 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
   }
 
   public Record create(long id, String data) {
-    return localNode.create(id, data);
+    return localNode.createRecord(id, data);
   }
 
   public Record get(long id) {
-    return localNode.get(id);
+    return localNode.getRecord(id);
   }
 
-  public void remove(long id, int version) {
-    localNode.remove(id, version);
+  public void remove(long id, ODHTRecordVersion version) {
+    localNode.deleteRecord(id, version);
   }
 
   public void memberAdded(MembershipEvent membershipEvent) {

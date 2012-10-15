@@ -31,14 +31,14 @@ public final class ODHTRecordVersion implements Externalizable, Comparable<ODHTR
   public void init() {
     version = 0;
 
-    ts = System.nanoTime();
+    ts = System.currentTimeMillis();
     mac = CURRENT_MAC;
   }
 
   public void init(int shortVersion) {
     version = shortVersion;
 
-    ts = System.nanoTime();
+    ts = System.currentTimeMillis();
     mac = CURRENT_MAC;
   }
 
@@ -48,7 +48,7 @@ public final class ODHTRecordVersion implements Externalizable, Comparable<ODHTR
 
     this.version++;
 
-    ts = System.nanoTime();
+    ts = System.currentTimeMillis();
     mac = CURRENT_MAC;
   }
 
@@ -65,7 +65,7 @@ public final class ODHTRecordVersion implements Externalizable, Comparable<ODHTR
 
     version = Integer.MIN_VALUE + (version + 1);
 
-    ts = System.nanoTime();
+    ts = System.currentTimeMillis();
     mac = CURRENT_MAC;
   }
 
@@ -146,6 +146,11 @@ public final class ODHTRecordVersion implements Externalizable, Comparable<ODHTR
     result = 31 * result + (int) (ts ^ (ts >>> 32));
     result = 31 * result + Arrays.hashCode(mac);
     return result;
+  }
+
+  @Override
+  public String toString() {
+    return "ODHTRecordVersion{" + "version=" + version + ", ts=" + ts + ", mac=" + Arrays.toString(mac) + '}';
   }
 
   public ByteBuffer toStream() {

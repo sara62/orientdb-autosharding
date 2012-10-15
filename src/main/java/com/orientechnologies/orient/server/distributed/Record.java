@@ -35,11 +35,11 @@ public class Record implements Externalizable {
     version.init(shortVersion);
   }
 
-  public void updateData(String data, int shortVersion) {
+  public void updateData(String data, ODHTRecordVersion version) {
     if (isTombstone())
       throw new IllegalStateException("Record was deleted and can not be updated.");
 
-    if (this.version.getShortVersion() != shortVersion)
+    if (this.version.compareTo(version) != 0)
       throw new IllegalStateException("Provided version is not up to date");
 
     this.version.updateVersion();
@@ -47,13 +47,13 @@ public class Record implements Externalizable {
     this.data = data;
   }
 
-	public long getId() {
-		return id;
-	}
+  public long getId() {
+    return id;
+  }
 
-	public ODHTRecordVersion getVersion() {
+  public ODHTRecordVersion getVersion() {
     return version;
-	}
+  }
 
   public String getData() {
     return data;

@@ -6,14 +6,14 @@ package com.orientechnologies.orient.server.distributed;
  */
 public interface ODHTNode {
   public enum NodeState {
-    JOIN, MERGING, STABLE
+    JOIN, PRODUCTION
   }
 
   public long getNodeId();
 
   public long getSuccessor();
 
-  public long[] getSuccessors(int depth);
+  public long[] getSuccessors(int depth, long requestorId);
 
   public Long getPredecessor();
 
@@ -21,21 +21,31 @@ public interface ODHTNode {
 
   public long notifyParent(long nodeId);
 
-  public boolean join(long nodeId);
+  public boolean joinDHT(long nodeId);
 
   public long findSuccessor(long id);
 
   public NodeState state();
 
-  public Record create(String data);
-  public Record create(long id, String data);
-  public Record get(long id);
-	public void update(long id, Record record);
-	public void remove(long id, int version);
+  public Record createRecord(String data);
 
-	public void updateReplica(Record replica);
+  public Record createRecord(long id, String data);
 
-	public Record getRecordFromNode(long id);
+  public Record getRecord(long id);
+
+  public void updateRecord(long id, Record record);
+
+  public void deleteRecord(long id, ODHTRecordVersion version);
+
+  public void updateReplica(Record replica, boolean async);
+
+  public Record getRecordFromNode(long id);
+
+  public RecordMetadata getRecordMetadataFromNode(long id);
+
+  public RecordMetadata[] getNodeRecordsForInterval(long startId, long endId);
+
+  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node, long requestorId);
 
   public int size();
 
