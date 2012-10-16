@@ -4,6 +4,7 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+import java.util.Arrays;
 
 
 /**
@@ -74,6 +75,13 @@ public class ODetachedMerkleTreeNode implements Externalizable {
 
   public boolean isLeaf() {
     return recordMetadata != null;
+  }
+
+  @Override
+  public String toString() {
+    return "ODetachedMerkleTreeNode{" + "hash=" + hash + ", startId=" + startId + ", endId=" + endId + ", recordMetadata="
+        + (recordMetadata == null ? null : Arrays.asList(recordMetadata)) + ", childrenHash="
+        + (childrenHash == null ? null : Arrays.asList(childrenHash)) + ", path=" + path + '}';
   }
 
   @Override

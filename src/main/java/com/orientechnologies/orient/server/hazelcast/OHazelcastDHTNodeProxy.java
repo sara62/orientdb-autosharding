@@ -146,7 +146,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
       if (ee.getCause() instanceof ODHTKeyOwnerIsAbsentException)
         throw new ODHTKeyOwnerIsAbsentException(ee.getCause(), ((ODHTKeyOwnerIsAbsentException) ee.getCause()).getKey());
 
-      throw new ORemoteNodeCallException("Error during remote call of merkleTreeNode " + nodeId, ee, nodeId);
+      throw new ORemoteNodeCallException("Error during remote call of node " + nodeId, ee, nodeId);
     }
 
     return null;

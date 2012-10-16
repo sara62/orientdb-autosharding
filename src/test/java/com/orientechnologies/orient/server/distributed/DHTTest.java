@@ -85,13 +85,13 @@ public class DHTTest {
     for (long i = 0; i < threadCount; i++)
       futures.add(writerExecutor.submit(new DataWriter(data, lockManager, serverInstance, testIsStopped)));
 
-    // Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
+    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
       ServerInstance si = new ServerInstance();
       si.init();
 
-      Thread.sleep(600000);
+      Thread.sleep(60000);
     }
 
     Thread.sleep(10000);
@@ -102,8 +102,8 @@ public class DHTTest {
     for (Future<Void> future : futures)
       future.get();
 
-    // System.out.println("[stat] Wait for remover.");
-    // removeFuture.get();
+    System.out.println("[stat] Wait for remover.");
+    removeFuture.get();
 
     System.out.println("[stat] Wait for readers.");
     for (Future<Void> future : readerFutures)
@@ -175,45 +175,53 @@ public class DHTTest {
     }
 
     public Void call() throws Exception {
-      while (!testIsStopped.get()) {
-        if (data.size() < 100) {
-          Thread.sleep(100);
-          continue;
-        }
+      try {
+        while (!testIsStopped.get()) {
+          if (data.size() < 100) {
+            Thread.sleep(100);
+            continue;
+          }
 
-        int n = random.nextInt(10);
+          int n = random.nextInt(10);
 
-        if (n < 5)
-          n = 5;
+          if (n < 5)
+            n = 5;
 
-        int i = 0;
-        for (Long key : data.keySet()) {
-          if (i % n == 0) {
-            lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
-            try {
-              while (true)
-                try {
-                  final Record record = data.get(key);
+          int i = 0;
+          for (Long key : data.keySet()) {
+            if (testIsStopped.get())
+              break;
 
-                  if (record != null) {
-                    serverInstance.remove(key, record.getVersion());
-                    data.remove(key);
+            if (i % n == 0) {
+              lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+              try {
+                while (true)
+                  try {
+                    final Record record = data.get(key);
+
+                    if (record != null) {
+                      serverInstance.remove(key, record.getVersion());
+                      data.remove(key);
+                    }
+
+                    break;
+                  } catch (ODHTKeyOwnerIsAbsentException e) {
+                    System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + key);
+                    Thread.sleep(50);
                   }
 
-                  break;
-                } catch (ODHTKeyOwnerIsAbsentException e) {
-                  System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + key);
-                  Thread.sleep(50);
-                }
-
-            } finally {
-              lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+              } finally {
+                lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
+              }
             }
+            i++;
           }
-          i++;
         }
+        return null;
+      } catch (Exception e) {
+        System.out.println(e);
+        throw e;
       }
-      return null;
     }
   }
 

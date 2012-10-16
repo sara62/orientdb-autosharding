@@ -62,6 +62,8 @@ public class OLocalDHTNode implements ODHTNode {
   private final int                          replicaCount;
   private final int                          syncReplicaCount;
 
+  private volatile int                       size;
+
   public OLocalDHTNode(long nodeId, int replicaCount, int syncReplicaCount) {
     this.nodeId = nodeId;
     for (int i = 0; i < fingerPoints.length(); i++)
@@ -599,7 +601,7 @@ public class OLocalDHTNode implements ODHTNode {
 
       final long successorId = findSuccessor(recordId);
 
-      if (successorId != recordId) {
+      if (successorId != nodeId) {
         if (!remoteNodeDelete(recordId, version, retryCount, successorId))
           continue;
 
@@ -862,7 +864,14 @@ public class OLocalDHTNode implements ODHTNode {
   }
 
   public int size() {
-    return db.size();
+    int count = 0;
+
+    for (Record record : db.values()) {
+      if (!record.isTombstone())
+        count++;
+    }
+
+    return count;
   }
 
   public NodeState state() {
@@ -1178,7 +1187,13 @@ public class OLocalDHTNode implements ODHTNode {
     if (localPredecessor < 0)
       throw new NodeSynchronizationFailedException("Node predecessor is absent.");
 
+    final Logger logger = LoggerFactory.getLogger(LocalMaintenanceProtocol.class);
+
+    logger.debug("Comparing nodes local: {} and remote: {}", localNode, remoteNode);
+
     if (remoteNode.isLeaf()) {
+      logger.debug("Comparing nodes remote node {} is a leaf.", remoteNode);
+
       for (int i = 0; i < remoteNode.getRecordsCount(); i++) {
         final RecordMetadata recordMetadata = remoteNode.getRecordMetadata(i);
         if (insideInterval(localPredecessor, nodeId, recordMetadata.getId(), true)) {
@@ -1188,6 +1203,8 @@ public class OLocalDHTNode implements ODHTNode {
         }
       }
     } else if (localNode.isLeaf()) {
+      logger.debug("Comparing nodes local node {} is leaf.", localNode);
+
       long startId = localNode.getStartId();
 
       final long endId = localNode.getEndId();
@@ -1201,6 +1218,8 @@ public class OLocalDHTNode implements ODHTNode {
           if (dbRecord == null || dbRecord.getVersion().compareTo(nodeMetadata.getVersion()) < 0)
             missingRecord(nodeMetadata.getId(), remoteNodeId);
         }
+
+        startId = nodeMetadatas[nodeMetadatas.length - 1].getId() + 1;
 
         nodeMetadatas = getNodeRecordsForInterval(startId, endId);
       }
@@ -1219,15 +1238,23 @@ public class OLocalDHTNode implements ODHTNode {
     return localNode;
   }
 
-  private void missingRecord(long id, long remoteNodeId) {
+  private void missingRecord(long recordId, long remoteNodeId) {
     final ODHTNode remoteNode = nodeLookup.findById(remoteNodeId);
     if (remoteNode == null)
       throw new NodeSynchronizationFailedException("Node with id " + remoteNodeId + " is absent in ring.");
 
-    final Record replica = remoteNode.getRecordFromNode(id);
+    final Logger logger = LoggerFactory.getLogger(GlobalMaintenanceProtocol.class);
+    logger.debug("Record with id {} is missed for current node {} will get it from node {}", new Object[] { recordId, nodeId,
+        remoteNodeId });
 
-    if (replica != null)
-      putReplica(id, replica);
+    final Record replica = remoteNode.getRecordFromNode(recordId);
+    logger.debug("Replica with id {} was found for node {} with content {}", new Object[] { recordId, nodeId, replica });
+
+    if (replica != null) {
+      putReplica(recordId, replica);
+
+      logger.debug("Replica with id {} was updated for node {}", new Object[] { recordId, nodeId });
+    }
   }
 
   private final class GlobalMaintenanceProtocol implements Callable<Void> {
@@ -1447,18 +1474,28 @@ public class OLocalDHTNode implements ODHTNode {
     public Void call() throws Exception {
       lmCycle: while (!Thread.currentThread().isInterrupted()) {
         try {
-          if (state == null || !state.equals(NodeState.PRODUCTION))
+          if (state == null || !state.equals(NodeState.PRODUCTION)) {
+            logger.debug("Node is not in production, wait till status will be changed.");
+
             continue;
+          }
 
           final long localPredecessor = predecessor.get();
+          logger.debug("Predecessor of node is {}", localPredecessor);
 
-          if (localPredecessor == -1)
+          if (localPredecessor == -1) {
+            logger.debug("Predecessor for node {} is absent. Start from the beginning.", nodeId);
             continue;
+          }
 
+          logger.debug("Retrieving successors for node {}", nodeId);
           final long[] replicaHolderIDs = getSuccessors(replicaCount, nodeId);
+          logger.debug("Replica holders for node {} are {}", nodeId, replicaHolderIDs);
 
           for (long replicaHolderID : replicaHolderIDs) {
             final List<ODetachedMerkleTreeNode> roots = merkleTree.getRootNodesForInterval(localPredecessor + 1, nodeId);
+            logger.debug("Merkle roots for node {} for interval from {} to {} are {}", new Object[] { replicaHolderID,
+                localPredecessor + 1, nodeId, roots });
 
             for (final ODetachedMerkleTreeNode rootNode : roots)
               synchronizeNode(rootNode, replicaHolderID);
@@ -1498,7 +1535,12 @@ public class OLocalDHTNode implements ODHTNode {
         throw new NodeSynchronizationFailedException("Node with id " + remoteNodeId + " is absent.");
 
       if (!localTreeNode.isLeaf() && !remoteTreeNode.isLeaf()) {
+        logger.debug("Comparing children for Merkle tree node {} ", localTreeNode);
+
         for (int i = 0; i < 64; i++) {
+
+          logger.debug("Compare {}-th children", i);
+
           ODetachedMerkleTreeNode childNode = merkleTree.getChildNode(localTreeNode, i);
           final long startNodeId = childNode.getStartId();
           final long endNodeId = childNode.getEndId();
@@ -1506,7 +1548,8 @@ public class OLocalDHTNode implements ODHTNode {
           if (insideInterval(localPredecessor, nodeId, startNodeId, true)
               || insideInterval(localPredecessor, nodeId, endNodeId, true)) {
             if (!Arrays.equals(childNode.getHash(), remoteTreeNode.getChildHash(i)))
-              synchronizeNode(localTreeNode, remoteNodeId);
+              logger.debug("Children of {}-th node are not equal.");
+            synchronizeNode(localTreeNode, remoteNodeId);
           }
         }
       }

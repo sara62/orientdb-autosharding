@@ -305,7 +305,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
     try {
       final Record record = db.get(id);
-      if (record != null && !record.isTombstone()) {
+      if (record != null) {
         if (record.getVersion().compareTo(version) == 0) {
           db.remove(id);
 
@@ -316,7 +316,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
           throw new OConcurrentModificationException(new ORecordId(1, id), record.getShortVersion(), version.getShortVersion(),
               ORecordOperation.UPDATED);
       } else
-        throw new ORecordNotFoundException("Record with id " + id + " can not be deleted from database because it is absent");
+        throw new ORecordNotFoundException("Record with id " + id + " can not be cleaned out from database because it is absent");
     } finally {
       treeNode.releaseExclusiveLock();
     }

@@ -103,13 +103,22 @@ public class Record implements Externalizable {
 
   public void writeExternal(ObjectOutput out) throws IOException {
     out.writeLong(id);
-    out.writeUTF(data);
     out.writeObject(version);
+
+    final boolean dataIsNotNull = data != null;
+    out.writeBoolean(dataIsNotNull);
+
+    if (dataIsNotNull)
+      out.writeUTF(data);
   }
 
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     id = in.readLong();
-    data = in.readUTF();
     version = (ODHTRecordVersion) in.readObject();
+
+    final boolean dataIsNotNull = in.readBoolean();
+
+    if (dataIsNotNull)
+      data = in.readUTF();
   }
 }
