@@ -115,6 +115,10 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
     return hazelcastInstance.getCluster().getMembers().size();
   }
 
+  public OLocalDHTNode getLocalNode() {
+    return localNode;
+  }
+
   protected long getNodeId(final Member iMember) {
     final String address = iMember.getInetSocketAddress().toString();
     final long nodeId = OMurmurHash3.murmurHash3_x64_64(address.getBytes(), 0);
@@ -124,7 +128,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
     return nodeId;
   }
 
-  public ODHTNode findSuccessor(int id) {
+  public ODHTNode findSuccessor(long id) {
     return findById(localNode.findSuccessor(id));
   }
 }

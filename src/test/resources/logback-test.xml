@@ -6,6 +6,7 @@
     </appender>
 
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.replicateRecord" level="error"/>
+    <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.synchronizeReplicas" level="error"/>
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode$GlobalMaintenanceProtocol"
             level="error"/>
 

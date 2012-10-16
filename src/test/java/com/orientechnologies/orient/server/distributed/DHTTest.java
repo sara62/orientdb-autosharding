@@ -3,9 +3,10 @@ package com.orientechnologies.orient.server.distributed;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Random;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -69,7 +70,7 @@ public class DHTTest {
 
     Thread.sleep(20000);
 
-    final Map<Long, Record> data = new ConcurrentHashMap<Long, Record>();
+    final NavigableMap<Long, Record> data = new ConcurrentSkipListMap<Long, Record>();
     final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
 
     final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
@@ -86,11 +87,11 @@ public class DHTTest {
 
     // Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
       ServerInstance si = new ServerInstance();
       si.init();
 
-      Thread.sleep(5000);
+      Thread.sleep(600000);
     }
 
     Thread.sleep(10000);
@@ -236,25 +237,30 @@ public class DHTTest {
     }
 
     public Void call() throws Exception {
-      while (!testIsStopped.get()) {
-        long id = random.nextLong(Long.MAX_VALUE);
-        lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
-        try {
-          Record record;
-          while (true)
-            try {
-              record = serverInstance.create(id, String.valueOf(id));
-              break;
-            } catch (ODHTKeyOwnerIsAbsentException e) {
-              System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + id);
-              Thread.sleep(50);
-            }
-          data.put(id, record);
-        } finally {
-          lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
+      try {
+        while (!testIsStopped.get()) {
+          long id = random.nextLong(Long.MAX_VALUE);
+          lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
+          try {
+            Record record;
+            while (true)
+              try {
+                record = serverInstance.create(id, String.valueOf(id));
+                break;
+              } catch (ODHTKeyOwnerIsAbsentException e) {
+                System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + id);
+                Thread.sleep(50);
+              }
+            data.put(id, record);
+          } finally {
+            lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
+          }
         }
+        return null;
+      } catch (Exception e) {
+        System.out.println(e);
+        throw e;
       }
-      return null;
     }
   }
 
@@ -272,32 +278,43 @@ public class DHTTest {
     }
 
     public Void call() throws Exception {
-      while (!testIsStopped.get()) {
-        int i = 0;
-        for (Map.Entry<Long, Record> entry : data.entrySet()) {
-          while (true) {
-            lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
-            try {
-              try {
-                if (data.containsKey(entry.getKey()))
-                  Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
-                i++;
-                if (i % 10000 == 0)
-                  System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
+      try {
+        while (!testIsStopped.get()) {
+          int i = 0;
+          for (Map.Entry<Long, Record> entry : data.entrySet()) {
+            if (testIsStopped.get())
+              break;
 
-                break;
-              } catch (ODHTKeyOwnerIsAbsentException e) {
-                System.out
-                    .println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + entry.getKey());
-                Thread.sleep(50);
+            while (true) {
+              lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+              try {
+                try {
+                  if (data.containsKey(entry.getKey()))
+                    Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey()
+                        + " is absent");
+                  i++;
+                  if (i % 10000 == 0)
+                    System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
+
+                  break;
+                } catch (ODHTKeyOwnerIsAbsentException e) {
+                  System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
+                      + entry.getKey());
+                  Thread.sleep(50);
+                }
+              } finally {
+                lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
               }
-            } finally {
-              lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
             }
           }
         }
+
+        return null;
+      } catch (Exception e) {
+        System.out.println(e);
+        throw e;
       }
-      return null;
+
     }
   }
 }

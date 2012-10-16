@@ -1022,15 +1022,10 @@ public class OLocalDHTNode implements ODHTNode {
 
     final Set<Long> replicas = new HashSet<Long>();
 
-    final Random rnd = new Random();
-
-    int holdersSize = replicaHolders.length;
+    int holderIndex = 0;
     while (replicas.size() < replicaCount) {
-      final int holderIndex = rnd.nextInt(holdersSize);
-
       replicas.add(replicaHolders[holderIndex]);
-      System.arraycopy(replicaHolders, holderIndex + 1, replicaHolders, holderIndex, holdersSize - holderIndex - 1);
-      holdersSize--;
+      holderIndex++;
     }
 
     return replicas;
@@ -1280,7 +1275,7 @@ public class OLocalDHTNode implements ODHTNode {
 
           logger.debug("Find the successors for node {}", successor);
           long[] successors = successorNode.getSuccessors(replicaCount, successor);
-          logger.debug("Successors list for node {} is {}", nodeId, successors);
+          logger.debug("Successors list for node {} is {}", successor, successors);
 
           for (long s : successors) {
             if (s == nodeId) {
@@ -1297,7 +1292,8 @@ public class OLocalDHTNode implements ODHTNode {
           for (long s : successors)
             nodesToReplicate.add(s);
 
-          logger.debug("List of nodes to replicate records starting from {} is {}", nextId, nodesToReplicate);
+          logger.debug("List of nodes to replicate records starting from {} to {} is {}", new Object[] { nextId, successor,
+              nodesToReplicate });
 
           final Iterator<RecordMetadata> iterator = new ODHTRingIterator(db, idToTest, successor);
 
