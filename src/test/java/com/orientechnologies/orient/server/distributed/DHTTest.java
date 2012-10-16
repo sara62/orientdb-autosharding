@@ -195,21 +195,12 @@ public class DHTTest {
             if (i % n == 0) {
               lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
               try {
-                while (true)
-                  try {
-                    final Record record = data.get(key);
+                final Record record = data.get(key);
 
-                    if (record != null) {
-                      serverInstance.remove(key, record.getVersion());
-                      data.remove(key);
-                    }
-
-                    break;
-                  } catch (ODHTKeyOwnerIsAbsentException e) {
-                    System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + key);
-                    Thread.sleep(50);
-                  }
-
+                if (record != null) {
+                  serverInstance.remove(key, record.getVersion());
+                  data.remove(key);
+                }
               } finally {
                 lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
               }
@@ -250,15 +241,7 @@ public class DHTTest {
           long id = random.nextLong(Long.MAX_VALUE);
           lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
           try {
-            Record record;
-            while (true)
-              try {
-                record = serverInstance.create(id, String.valueOf(id));
-                break;
-              } catch (ODHTKeyOwnerIsAbsentException e) {
-                System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key " + id);
-                Thread.sleep(50);
-              }
+            final Record record = serverInstance.create(id, String.valueOf(id));
             data.put(id, record);
           } finally {
             lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
@@ -293,30 +276,19 @@ public class DHTTest {
             if (testIsStopped.get())
               break;
 
-            while (true) {
-              lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
-              try {
-                try {
-                  if (data.containsKey(entry.getKey()))
-                    Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey()
-                        + " is absent");
-                  i++;
-                  if (i % 10000 == 0)
-                    System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
+            lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
+            try {
+              if (data.containsKey(entry.getKey()))
+                Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
+              i++;
+              if (i % 10000 == 0)
+                System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
 
-                  break;
-                } catch (ODHTKeyOwnerIsAbsentException e) {
-                  System.out.println(Thread.currentThread().getName() + " DHT node is absent, sleep and retry. key "
-                      + entry.getKey());
-                  Thread.sleep(50);
-                }
-              } finally {
-                lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
-              }
+            } finally {
+              lockManager.releaseLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
             }
           }
         }
-
         return null;
       } catch (Exception e) {
         System.out.println(e);

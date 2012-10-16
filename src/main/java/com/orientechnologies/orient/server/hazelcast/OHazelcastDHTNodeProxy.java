@@ -12,7 +12,6 @@ import com.hazelcast.core.DistributedTask;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.MemberLeftException;
-import com.orientechnologies.orient.server.distributed.ODHTKeyOwnerIsAbsentException;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.ODetachedMerkleTreeNode;
@@ -143,9 +142,6 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     } catch (MemberLeftException mle) {
       throw new ONodeOfflineException("Member with id " + nodeId + " was left.", mle, nodeId);
     } catch (ExecutionException ee) {
-      if (ee.getCause() instanceof ODHTKeyOwnerIsAbsentException)
-        throw new ODHTKeyOwnerIsAbsentException(ee.getCause(), ((ODHTKeyOwnerIsAbsentException) ee.getCause()).getKey());
-
       throw new ORemoteNodeCallException("Error during remote call of node " + nodeId, ee, nodeId);
     }
 
