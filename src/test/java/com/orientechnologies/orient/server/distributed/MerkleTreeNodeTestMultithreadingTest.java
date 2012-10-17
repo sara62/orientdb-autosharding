@@ -25,7 +25,7 @@ import com.orientechnologies.common.concur.lock.OLockManager;
  * @since 13.09.12
  */
 @Test
-public class MerkleTreeNodeTestMultithreadingTest {
+public class MerkleTreeNodeTestMultiThreadingTest {
   public void testConcurrentModifications() throws Exception {
     final ExecutorService adderExecutorService = Executors.newCachedThreadPool(new AdderThreadFactory());
     final ExecutorService readerExecutorService = Executors.newCachedThreadPool(new ReaderThreadFactory());
