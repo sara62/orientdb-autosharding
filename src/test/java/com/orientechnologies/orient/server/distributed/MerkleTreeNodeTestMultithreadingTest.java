@@ -1,7 +1,17 @@
 package com.orientechnologies.orient.server.distributed;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -15,7 +25,7 @@ import com.orientechnologies.common.concur.lock.OLockManager;
  * @since 13.09.12
  */
 @Test
-public class MerkleTreeNodeTestMultiThreadingTest {
+public class MerkleTreeNodeTestMultithreadingTest {
   public void testConcurrentModifications() throws Exception {
     final ExecutorService adderExecutorService = Executors.newCachedThreadPool(new AdderThreadFactory());
     final ExecutorService readerExecutorService = Executors.newCachedThreadPool(new ReaderThreadFactory());
@@ -33,6 +43,8 @@ public class MerkleTreeNodeTestMultiThreadingTest {
     final AtomicBoolean testIsFinished = new AtomicBoolean(false);
 
     final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
+
+    final long start = System.currentTimeMillis();
 
     final int interval = 500000;
 
@@ -57,6 +69,8 @@ public class MerkleTreeNodeTestMultiThreadingTest {
 
     for (Future<Void> future : deleterFutures)
       future.get();
+
+    System.out.println("Time spent : " + (System.currentTimeMillis() - start));
 
     final NavigableMap<Long, Record> dbTwo = new ConcurrentSkipListMap<Long, Record>();
     final OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(dbTwo);
@@ -162,7 +176,7 @@ public class MerkleTreeNodeTestMultiThreadingTest {
           final long childPos = OMerkleTreeNode.childIndex(0, key);
           final long startKey = OMerkleTreeNode.startNodeId(1, childPos, 0);
 
-          node.deleteRecord(1, startKey, key, record.getShortVersion());
+          node.deleteRecord(1, startKey, key, record.getVersion());
         } finally {
           lockManager.releaseLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
         }
