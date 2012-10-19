@@ -89,10 +89,10 @@ public class DHTTest {
       ServerInstance si = new ServerInstance();
       si.init();
 
-      Thread.sleep(60000);
+      Thread.sleep(20000);
     }
 
-    Thread.sleep(60000);
+    Thread.sleep(20000);
 
     Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
 

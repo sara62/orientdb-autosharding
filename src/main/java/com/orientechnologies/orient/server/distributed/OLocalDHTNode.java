@@ -985,6 +985,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
     logger.debug("Async replica holders for record {} are {}", record.getId(), asyncReplicas);
 
+    int processedReplicaHolders = 0;
     for (long replicaHolderId : replicaHolders) {
       final ODHTNode replicaHolderNode = nodeLookup.findById(replicaHolderId);
       if (replicaHolderNode == null) {
@@ -1007,6 +1008,9 @@ public final class OLocalDHTNode implements ODHTNode {
         logger.error("Exception during replication of record " + record.getId() + " to node " + replicaHolderId);
         // ignore
       }
+      processedReplicaHolders++;
+      if (processedReplicaHolders >= replicaCount)
+        break;
     }
 
     logger.debug("Replication of record {} was finished.", record.getId());
@@ -1287,7 +1291,15 @@ public final class OLocalDHTNode implements ODHTNode {
           }
 
           logger.debug("Find the successors for node {}", successor);
+
           long[] successors = successorNode.getSuccessors();
+          if (successors.length > replicaCount) {
+            final long[] oldSuccessors = successors;
+            successors = new long[replicaCount];
+
+            System.arraycopy(oldSuccessors, 0, successors, 0, successors.length);
+          }
+
           logger.debug("Successors list for node {} is {}", successor, successors);
 
           for (long s : successors) {
