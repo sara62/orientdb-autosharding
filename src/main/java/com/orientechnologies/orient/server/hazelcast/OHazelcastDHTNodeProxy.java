@@ -71,8 +71,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     return callOnRemoteMember(new StateNodeCall(nodeId, member.getUuid()), false);
   }
 
-  public long[] getSuccessors(int depth, long requesterId) {
-    return callOnRemoteMember(new SuccessorsNodeCall(nodeId, member.getUuid(), depth, requesterId), false);
+  public long[] getSuccessors() {
+    return callOnRemoteMember(new SuccessorsNodeCall(nodeId, member.getUuid()), false);
   }
 
   public void requestStabilization() {
@@ -110,8 +110,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public Record getRecordFromNode(long id) {
-    return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeId, member.getUuid(), id), false);
+  public Record getRecordFromNode(long id, boolean replicate) {
+    return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeId, member.getUuid(), id, replicate), false);
   }
 
   @Override
@@ -127,6 +127,21 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   @Override
   public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node, long requestorId) {
     return callOnRemoteMember(new FindMerkleTreeNodeNodeCall(nodeId, member.getUuid(), node, requestorId), false);
+  }
+
+  @Override
+  public Record createRecordInNode(long id, String data) {
+    return callOnRemoteMember(new CreateWithIdInNodeNodeCall(nodeId, member.getUuid(), id, data), false);
+  }
+
+  @Override
+  public void updateRecordInNode(long id, Record record) {
+    callOnRemoteMember(new UpdateRecordInNodeCall(nodeId, member.getUuid(), id, record), false);
+  }
+
+  @Override
+  public void deleteRecordFromNode(long id, ODHTRecordVersion version) {
+    callOnRemoteMember(new RemoveRecordFromNodeNodeCall(nodeId, member.getUuid(), id, version), false);
   }
 
   private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
@@ -290,6 +305,40 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
+  private static final class UpdateRecordInNodeCall extends NodeCall<Void> {
+    private long   id;
+    private Record record;
+
+    public UpdateRecordInNodeCall() {
+    }
+
+    private UpdateRecordInNodeCall(long nodeId, String memberUUID, long id, Record record) {
+      super(nodeId, memberUUID);
+      this.id = id;
+      this.record = record;
+    }
+
+    @Override
+    protected Void call(ODHTNode node) {
+      node.updateRecordInNode(id, record);
+      return null;
+    }
+
+    @Override
+    public void writeExternal(ObjectOutput out) throws IOException {
+      super.writeExternal(out);
+      out.writeLong(id);
+      out.writeObject(record);
+    }
+
+    @Override
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+      super.readExternal(in);
+      id = in.readLong();
+      record = (Record) in.readObject();
+    }
+  }
+
   private static final class CreateNodeCall extends NodeCall<Record> {
     private String data;
 
@@ -352,6 +401,39 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
+  private static final class CreateWithIdInNodeNodeCall extends NodeCall<Record> {
+    private String data;
+    private long   id;
+
+    public CreateWithIdInNodeNodeCall() {
+    }
+
+    private CreateWithIdInNodeNodeCall(long nodeId, String memberUUID, long id, String data) {
+      super(nodeId, memberUUID);
+      this.data = data;
+      this.id = id;
+    }
+
+    @Override
+    protected Record call(ODHTNode node) {
+      return node.createRecordInNode(id, data);
+    }
+
+    @Override
+    public void writeExternal(ObjectOutput out) throws IOException {
+      super.writeExternal(out);
+      out.writeLong(id);
+      out.writeUTF(data);
+    }
+
+    @Override
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+      super.readExternal(in);
+      id = in.readLong();
+      data = in.readUTF();
+    }
+  }
+
   private static final class GetSuccessorNodeCall extends NodeCall<Long> {
     public GetSuccessorNodeCall() {
     }
@@ -367,35 +449,16 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   private static final class SuccessorsNodeCall extends NodeCall<long[]> {
-    private int  depth;
-    private long requesterId;
-
     public SuccessorsNodeCall() {
     }
 
-    private SuccessorsNodeCall(long nodeId, String memberUUID, int depth, long requesterId) {
+    private SuccessorsNodeCall(long nodeId, String memberUUID) {
       super(nodeId, memberUUID);
-      this.depth = depth;
-      this.requesterId = requesterId;
     }
 
     @Override
     protected long[] call(ODHTNode node) {
-      return node.getSuccessors(depth, requesterId);
-    }
-
-    @Override
-    public void writeExternal(ObjectOutput out) throws IOException {
-      super.writeExternal(out);
-      out.writeInt(depth);
-      out.writeLong(requesterId);
-    }
-
-    @Override
-    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-      super.readExternal(in);
-      depth = in.readInt();
-      requesterId = in.readLong();
+      return node.getSuccessors();
     }
   }
 
@@ -627,31 +690,35 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   private static final class GetRecordFromNodeNodeCall extends NodeCall<Record> {
-    private long id;
+    private long    id;
+    private boolean replicate;
 
     public GetRecordFromNodeNodeCall() {
     }
 
-    private GetRecordFromNodeNodeCall(long nodeId, String memberUUID, long id) {
+    private GetRecordFromNodeNodeCall(long nodeId, String memberUUID, long id, boolean replicate) {
       super(nodeId, memberUUID);
       this.id = id;
+      this.replicate = replicate;
     }
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.getRecordFromNode(id);
+      return node.getRecordFromNode(id, replicate);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
       out.writeLong(id);
+      out.writeBoolean(replicate);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
       id = in.readLong();
+      replicate = in.readBoolean();
     }
   }
 
@@ -700,6 +767,40 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     @Override
     protected Void call(ODHTNode node) {
       node.deleteRecord(id, version);
+      return null;
+    }
+
+    @Override
+    public void writeExternal(ObjectOutput out) throws IOException {
+      super.writeExternal(out);
+      out.writeLong(id);
+      out.writeObject(version);
+    }
+
+    @Override
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+      super.readExternal(in);
+      id = in.readLong();
+      version = (ODHTRecordVersion) in.readObject();
+    }
+  }
+
+  private static final class RemoveRecordFromNodeNodeCall extends NodeCall<Void> {
+    private long              id;
+    private ODHTRecordVersion version;
+
+    public RemoveRecordFromNodeNodeCall() {
+    }
+
+    private RemoveRecordFromNodeNodeCall(long nodeId, String memberUUID, long id, ODHTRecordVersion version) {
+      super(nodeId, memberUUID);
+      this.id = id;
+      this.version = version;
+    }
+
+    @Override
+    protected Void call(ODHTNode node) {
+      node.deleteRecordFromNode(id, version);
       return null;
     }
 

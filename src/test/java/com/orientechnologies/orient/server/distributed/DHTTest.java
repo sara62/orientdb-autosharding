@@ -54,7 +54,7 @@ public class DHTTest {
                                                 }
                                               });
 
-  public void addNode() {
+  public void addNode() throws Exception {
     ServerInstance serverInstance = new ServerInstance();
     serverInstance.init();
     while (true)
@@ -68,7 +68,7 @@ public class DHTTest {
     ServerInstance siNext = new ServerInstance();
     siNext.init();
 
-    Thread.sleep(20000);
+    Thread.sleep(5000);
 
     final NavigableMap<Long, Record> data = new ConcurrentSkipListMap<Long, Record>();
     final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
@@ -85,16 +85,16 @@ public class DHTTest {
     for (long i = 0; i < threadCount; i++)
       futures.add(writerExecutor.submit(new DataWriter(data, lockManager, serverInstance, testIsStopped)));
 
-    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
-
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
       ServerInstance si = new ServerInstance();
       si.init();
 
       Thread.sleep(60000);
     }
 
-    Thread.sleep(10000);
+    Thread.sleep(60000);
+
+    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
 
     testIsStopped.set(true);
 
@@ -125,12 +125,19 @@ public class DHTTest {
 
     System.out.println("[stat] Items check " + data.size() + " items.");
     int i = 0;
-    for (Map.Entry<Long, Record> entry : data.entrySet()) {
-      Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
 
+    long start = System.currentTimeMillis();
+    for (Map.Entry<Long, Record> entry : data.entrySet()) {
+
+      serverInstance.get(entry.getKey());
+      Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
       i++;
-      if (i % 10000 == 0)
-        System.out.println("[stat] " + i + " items were processed");
+
+      if (i % 10000 == 0) {
+        System.out.println("[stat] " + i + " items were processed for " + (System.currentTimeMillis() - start) + " ms.");
+        start = System.currentTimeMillis();
+      }
+
     }
 
     System.out.println("[stat] wait to finish all asynchronous replications");
@@ -236,9 +243,10 @@ public class DHTTest {
     }
 
     public Void call() throws Exception {
+      long id = 0;
       try {
         while (!testIsStopped.get()) {
-          long id = random.nextLong(Long.MAX_VALUE);
+          id = random.nextLong(Long.MAX_VALUE);
           lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
           try {
             final Record record = serverInstance.create(id, String.valueOf(id));

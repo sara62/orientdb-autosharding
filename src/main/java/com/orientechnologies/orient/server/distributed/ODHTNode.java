@@ -13,7 +13,7 @@ public interface ODHTNode {
 
   public long getSuccessor();
 
-  public long[] getSuccessors(int depth, long requestorId);
+  public long[] getSuccessors();
 
   public Long getPredecessor();
 
@@ -39,7 +39,13 @@ public interface ODHTNode {
 
   public void updateReplica(Record replica, boolean async);
 
-  public Record getRecordFromNode(long id);
+  public Record getRecordFromNode(long id, boolean replicate);
+
+  public Record createRecordInNode(long id, String data);
+
+  public void updateRecordInNode(long id, Record record);
+
+  public void deleteRecordFromNode(long id, ODHTRecordVersion version);
 
   public RecordMetadata getRecordMetadataFromNode(long id);
 

@@ -5,7 +5,11 @@
         </encoder>
     </appender>
 
+    <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode" level="error"/>
+    <logger name="com.orientechnologies.orient.server.jgroups.ServerInstance" level="debug"/>
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.replicateRecord" level="error"/>
+    <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.createRecord" level="error"/>
+    <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.findSuccessor" level="error"/>
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.synchronizeReplicas" level="error"/>
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode$GlobalMaintenanceProtocol"
             level="error"/>
