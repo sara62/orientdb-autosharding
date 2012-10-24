@@ -71,7 +71,7 @@ public class OMerkleTree {
 
   public ODetachedMerkleTreeNode getRootNode(int index) {
     long startId = OMerkleTreeNode.startNodeId(1, index, 0);
-    long endId = OMerkleTreeNode.startNodeId(1, index + 1, 0);
+    long endId = OMerkleTreeNode.startNodeId(1, index + 1, 0) - 1;
 
     return convertToDetachedNode(new int[] { index }, startId, endId, roots[index]);
   }
@@ -84,7 +84,7 @@ public class OMerkleTree {
 
     for (int childIndex = startChildIndex; childIndex <= endChildIndex; childIndex++) {
       final long startRootId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
-      final long endRootId = OMerkleTreeNode.startNodeId(1, childIndex + 1, 0);
+      final long endRootId = OMerkleTreeNode.startNodeId(1, childIndex + 1, 0) - 1;
 
       detachedRoots.add(convertToDetachedNode(new int[] { childIndex }, startRootId, endRootId, roots[childIndex]));
     }
@@ -110,7 +110,8 @@ public class OMerkleTree {
       return null;
 
     long startId = OMerkleTreeNode.startNodeId(parent.getLevel() + 1, index, parent.getStartId());
-    long endId = OMerkleTreeNode.startNodeId(parent.getLevel() + +1, index + 1, parent.getStartId());
+    long endId = OMerkleTreeNode.startNodeId(parent.getLevel() + +1, index + 1, parent.getStartId()) - 1;
+
     final int[] childPath = new int[parent.getLevel() + 1];
 
     System.arraycopy(parent.getPath(), 0, childPath, 0, parent.getLevel());

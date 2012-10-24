@@ -49,11 +49,11 @@ public interface ODHTNode {
 
   public RecordMetadata getRecordMetadataFromNode(long id);
 
-  public RecordMetadata[] getNodeRecordsForInterval(long startId, long endId);
+  public RecordMetadata[] getRecordsForIntervalFromNode(long startId, long endId);
 
-  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node, long requestorId);
+  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node);
 
   public int size();
 
-  public long[] findMissedRecords(long[] ids, ODHTRecordVersion[] versions);
+  public long[] findMissedRecords(RecordMetadata[] recordMetadatas);
 }

@@ -25,7 +25,7 @@ import com.orientechnologies.orient.server.hazelcast.ServerInstance;
  * @since 20.08.12
  */
 @Test
-public class DHTTest {
+public class DHTConcurrencyTest {
   private final AtomicBoolean testIsStopped   = new AtomicBoolean(false);
 
   private ExecutorService     readerExecutor  = Executors.newCachedThreadPool(new ThreadFactory() {
@@ -77,7 +77,7 @@ public class DHTTest {
 
     List<Future<Void>> futures = new ArrayList<Future<Void>>();
 
-    final int threadCount = 2;
+    final int threadCount = 5;
 
     for (int i = 0; i < threadCount; i++)
       readerFutures.add(readerExecutor.submit(new DataReader(data, lockManager, serverInstance)));

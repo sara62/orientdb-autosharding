@@ -13,6 +13,9 @@
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode.synchronizeReplicas" level="error"/>
     <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode$GlobalMaintenanceProtocol"
             level="error"/>
+    <logger name="com.orientechnologies.orient.server.distributed.OLocalDHTNode$LocalMaintenanceProtocol"
+            level="error"/>
+
 
     <root level="error">
         <appender-ref ref="STDOUT"/>

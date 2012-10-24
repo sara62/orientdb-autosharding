@@ -39,6 +39,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     return nodeId;
   }
 
+  public String getMemberUUID() {
+    return member.getUuid();
+  }
+
   public long getSuccessor() {
     return callOnRemoteMember(new GetSuccessorNodeCall(nodeId, member.getUuid()), false);
   }
@@ -63,8 +67,8 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     return callOnRemoteMember(new SizeNodeCall(nodeId, member.getUuid()), false);
   }
 
-  public long[] findMissedRecords(long[] ids, ODHTRecordVersion[] versions) {
-    return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeId, member.getUuid(), ids, versions), false);
+  public long[] findMissedRecords(RecordMetadata[] recordMetadatas) {
+    return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeId, member.getUuid(), recordMetadatas), false);
   }
 
   public NodeState state() {
@@ -120,13 +124,13 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public RecordMetadata[] getNodeRecordsForInterval(long startId, long endId) {
+  public RecordMetadata[] getRecordsForIntervalFromNode(long startId, long endId) {
     return callOnRemoteMember(new GetExistingRecordsForIntervalNodeCall(nodeId, member.getUuid(), startId, endId), false);
   }
 
   @Override
-  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node, long requestorId) {
-    return callOnRemoteMember(new FindMerkleTreeNodeNodeCall(nodeId, member.getUuid(), node, requestorId), false);
+  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node) {
+    return callOnRemoteMember(new FindMerkleTreeNodeNodeCall(nodeId, member.getUuid(), node), false);
   }
 
   @Override
@@ -194,34 +198,29 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   private static final class FindMissedRecordsNodeCall extends NodeCall<long[]> {
-    private long[]              ids;
-    private ODHTRecordVersion[] versions;
+    private RecordMetadata[] recordMetadatas;
 
     public FindMissedRecordsNodeCall() {
     }
 
-    private FindMissedRecordsNodeCall(long nodeId, String memberUUID, long[] ids, ODHTRecordVersion[] versions) {
+    private FindMissedRecordsNodeCall(long nodeId, String memberUUID, RecordMetadata[] recordMetadatas) {
       super(nodeId, memberUUID);
-      this.ids = ids;
-      this.versions = versions;
+      this.recordMetadatas = recordMetadatas;
     }
 
     @Override
     protected long[] call(ODHTNode node) {
-      return node.findMissedRecords(ids, versions);
+      return node.findMissedRecords(recordMetadatas);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
 
-      out.writeInt(ids.length);
+      out.writeInt(recordMetadatas.length);
 
-      for (long id : ids)
-        out.writeLong(id);
-
-      for (ODHTRecordVersion version : versions)
-        out.writeObject(version);
+      for (RecordMetadata recordMetadata : recordMetadatas)
+        out.writeObject(recordMetadata);
     }
 
     @Override
@@ -229,14 +228,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
       super.readExternal(in);
 
       final int dataLength = in.readInt();
-      versions = new ODHTRecordVersion[dataLength];
-      ids = new long[dataLength];
+      recordMetadatas = new RecordMetadata[dataLength];
 
       for (int i = 0; i < dataLength; i++)
-        ids[i] = in.readLong();
-
-      for (int i = 0; i < dataLength; i++)
-        versions[i] = (ODHTRecordVersion) in.readObject();
+        recordMetadatas[i] = (RecordMetadata) in.readObject();
     }
   }
 
@@ -564,33 +559,29 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
   private static final class FindMerkleTreeNodeNodeCall extends NodeCall<ODetachedMerkleTreeNode> {
     private ODetachedMerkleTreeNode merkleTreeNode;
-    private long                    requestorId;
 
     public FindMerkleTreeNodeNodeCall() {
     }
 
-    private FindMerkleTreeNodeNodeCall(long nodeId, String memberUUID, ODetachedMerkleTreeNode merkleTreeNode, long requestorId) {
+    private FindMerkleTreeNodeNodeCall(long nodeId, String memberUUID, ODetachedMerkleTreeNode merkleTreeNode) {
       super(nodeId, memberUUID);
       this.merkleTreeNode = merkleTreeNode;
-      this.requestorId = requestorId;
     }
 
     @Override
     protected ODetachedMerkleTreeNode call(ODHTNode node) {
-      return node.findMerkleTreeNode(merkleTreeNode, requestorId);
+      return node.findMerkleTreeNode(merkleTreeNode);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
-      out.writeLong(requestorId);
       out.writeObject(merkleTreeNode);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-      requestorId = in.readLong();
       merkleTreeNode = (ODetachedMerkleTreeNode) in.readObject();
     }
   }
@@ -669,7 +660,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected RecordMetadata[] call(ODHTNode node) {
-      return node.getNodeRecordsForInterval(startNodeId, endNodeId);
+      return node.getRecordsForIntervalFromNode(startNodeId, endNodeId);
     }
 
     @Override

@@ -33,14 +33,29 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
   private volatile HazelcastInstance              hazelcastInstance;
   private final Timer                             timer              = new Timer("DHT timer", true);
 
+  private final boolean                           useReadRepair;
+  private final boolean                           useAntiEntropy;
+  private final boolean                           useGlobalMaintainence;
+
   public ServerInstance() {
+    useReadRepair = true;
+    useAntiEntropy = true;
+    useGlobalMaintainence = true;
+  }
+
+  public ServerInstance(boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence) {
+    this.useReadRepair = useReadRepair;
+    this.useAntiEntropy = useAntiEntropy;
+    this.useGlobalMaintainence = useGlobalMaintainence;
   }
 
   public void init() {
     XmlConfigBuilder xmlConfigBuilder = new XmlConfigBuilder(ServerInstance.class.getResourceAsStream("/hazelcast.xml"));
 
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
-    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), REPLICA_COUNT, SYNC_REPLICA_COUNT);
+    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), REPLICA_COUNT, SYNC_REPLICA_COUNT,
+        useReadRepair, useAntiEntropy, useGlobalMaintainence);
+
     localNode.setNodeLookup(this);
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
@@ -72,6 +87,10 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 
   public Record create(long id, String data) {
     return localNode.createRecord(id, data);
+  }
+
+  public Record create(String data) {
+    return localNode.createRecord(data);
   }
 
   public Record get(long id) {
@@ -117,6 +136,10 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 
   public OLocalDHTNode getLocalNode() {
     return localNode;
+  }
+
+  public String getMemberUUID() {
+    return hazelcastInstance.getCluster().getLocalMember().getUuid();
   }
 
   protected long getNodeId(final Member iMember) {

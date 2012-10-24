@@ -79,9 +79,9 @@ public class ODetachedMerkleTreeNode implements Externalizable {
 
   @Override
   public String toString() {
-    return "ODetachedMerkleTreeNode{" + "hash=" + hash + ", startId=" + startId + ", endId=" + endId + ", recordMetadata="
-        + (recordMetadata == null ? null : Arrays.asList(recordMetadata)) + ", childrenHash="
-        + (childrenHash == null ? null : Arrays.asList(childrenHash)) + ", path=" + path + '}';
+    return "ODetachedMerkleTreeNode{" + "hash=" + Arrays.toString(hash) + ", startId=" + startId + ", endId=" + endId
+        + ", recordMetadata=" + (recordMetadata == null ? null : Arrays.asList(recordMetadata)) + ", childrenHash="
+        + (childrenHash == null ? null : Arrays.asList(childrenHash)) + ", path=" + Arrays.toString(path) + '}';
   }
 
   @Override
