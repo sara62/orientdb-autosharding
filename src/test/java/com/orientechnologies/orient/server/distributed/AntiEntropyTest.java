@@ -42,9 +42,19 @@ public class AntiEntropyTest {
     si.init();
 
     System.out.println("[stat] Local maintenance protocol check");
-    Thread.sleep(30000);
+    Thread.sleep(240000);
 
     checkDataRedistribution(serverInstance);
+
+    final OLocalDHTNode localDHTNode = si.getLocalNode();
+    final OLocalDHTNode localPredecessorOne = getLocalNode(si.findById(localDHTNode.getPredecessor()));
+    final OLocalDHTNode localPredecessorTwo = getLocalNode(si.findById(localPredecessorOne.getPredecessor()));
+
+    int dhtNodeRecords = gerOwnRecordsCount(localDHTNode);
+    int predecessorOneRecords = gerOwnRecordsCount(localPredecessorOne);
+    int predecessorTwoRecords = gerOwnRecordsCount(localPredecessorTwo);
+
+    Assert.assertEquals(localDHTNode.getDb().size(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
   }
 
   private void checkDataRedistribution(ServerInstance serverInstance) throws Exception {
@@ -89,5 +99,20 @@ public class AntiEntropyTest {
       localDHTNode = ServerInstance.INSTANCES.get(((OHazelcastDHTNodeProxy) dhtNode).getMemberUUID()).getLocalNode();
 
     return localDHTNode;
+  }
+
+  private int gerOwnRecordsCount(OLocalDHTNode localDHTNode) {
+    final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
+
+    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.nextValue(localDHTNode.getPredecessor()),
+        localDHTNode.getNodeId());
+
+    int count = 0;
+    while (ringIterator.hasNext()) {
+      final RecordMetadata recordMetadata = ringIterator.next();
+      count++;
+    }
+
+    return count;
   }
 }

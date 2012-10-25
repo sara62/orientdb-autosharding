@@ -85,16 +85,16 @@ public class DHTConcurrencyTest {
     for (long i = 0; i < threadCount; i++)
       futures.add(writerExecutor.submit(new DataWriter(data, lockManager, serverInstance, testIsStopped)));
 
+    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
+
     for (int i = 0; i < 5; i++) {
       ServerInstance si = new ServerInstance();
       si.init();
 
-      Thread.sleep(20000);
+      Thread.sleep(60000);
     }
 
-    Thread.sleep(20000);
-
-    Future<Void> removeFuture = removalExecutor.submit(new DataRemover(serverInstance, data, lockManager, testIsStopped));
+    Thread.sleep(60000);
 
     testIsStopped.set(true);
 

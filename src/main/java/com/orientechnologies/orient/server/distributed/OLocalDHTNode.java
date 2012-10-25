@@ -212,7 +212,9 @@ public final class OLocalDHTNode implements ODHTNode {
       logger.debug("Successor request for key {}", key);
       final long successorId = fingerPoints.get(0);
 
-      if (insideInterval(nodeId, successorId, key, true)) {
+      final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.nextValue(nodeId), successorId);
+
+      if (ringInterval.insideInterval(key)) {
         logger.debug("Key {} inside interval {} - {} ", new Object[] { key, nodeId, successorId });
         return successorId;
       }
@@ -306,9 +308,10 @@ public final class OLocalDHTNode implements ODHTNode {
   private long findClosestPrecedingFinger(long key) {
     // log("Closest preceding request for key " + key);
 
+    final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.nextValue(nodeId), ODHTRingInterval.prevValue(key));
     for (int i = fingerPoints.length() - 1; i >= 0; i--) {
       final long fingerPoint = fingerPoints.get(i);
-      if (fingerPoint > -1 && insideInterval(this.nodeId, key, fingerPoint, false)) {
+      if (fingerPoint > -1 && ringInterval.insideInterval(fingerPoint)) {
         // log("Closest preceding finger for key " + key + " is " + fingerPoint);
         return fingerPoint;
       }
@@ -871,7 +874,7 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   public void stabilize() {
-    Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".stabilize");
+    final Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".stabilize");
 
     try {
       boolean result = false;
@@ -901,7 +904,10 @@ public final class OLocalDHTNode implements ODHTNode {
           continue;
         }
 
-        if (predecessor > -1 && insideInterval(this.nodeId, successorId, predecessor, false)) {
+        final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.nextValue(this.nodeId),
+            ODHTRingInterval.prevValue(successorId));
+
+        if (predecessor > -1 && ringInterval.insideInterval(predecessor)) {
           logger.debug("Successor {} is going to be changed to {}", successorId, predecessor);
 
           result = fingerPoints.compareAndSet(0, successorId, predecessor);
@@ -997,13 +1003,6 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private static long nextID(long id) {
-    if (id < Long.MAX_VALUE)
-      return id + 1;
-
-    return 0;
-  }
-
   private void replicateRecord(Record record) {
     if (replicaCount < 1)
       return;
@@ -1096,33 +1095,44 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   public void fixFingers() {
-    int nextValue = next.intValue();
+    final Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".fixPredecessor");
+    try {
 
-    fingerPoints.set(nextValue, findSuccessor((nodeId + 1 << nextValue) & Long.MAX_VALUE));
+      int nextValue = next.intValue();
 
-    next.compareAndSet(nextValue, nextValue + 1);
+      fingerPoints.set(nextValue, findSuccessor((nodeId + 1 << nextValue) & Long.MAX_VALUE));
 
-    while (next.intValue() > 62) {
-      nextValue = next.intValue();
-      if (nextValue > 62)
-        next.compareAndSet(nextValue, 1);
+      next.compareAndSet(nextValue, nextValue + 1);
+
+      while (next.intValue() > 62) {
+        nextValue = next.intValue();
+        if (nextValue > 62)
+          next.compareAndSet(nextValue, 1);
+      }
+    } catch (Exception e) {
+      logger.error("Error during fingers fix", e);
     }
   }
 
   public void fixPredecessor() {
-    boolean result = false;
+    final Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".fixPredecessor");
+    try {
+      boolean result = false;
 
-    while (!result) {
-      long predecessorId = predecessor.longValue();
+      while (!result) {
+        long predecessorId = predecessor.longValue();
 
-      if (predecessorId > -1 && nodeLookup.findById(predecessorId) == null) {
-        result = predecessor.compareAndSet(predecessorId, -1);
-      } else
-        result = true;
+        if (predecessorId > -1 && nodeLookup.findById(predecessorId) == null) {
+          result = predecessor.compareAndSet(predecessorId, -1);
+        } else
+          result = true;
+      }
+    } catch (Exception e) {
+      logger.error("Exception during predecessor fix", e);
     }
   }
 
-  public long notifyParent(long nodeId) {
+  public long notifyParent(long predecessorCandidateId) {
     boolean result = false;
     long prevPredecessor = -1;
 
@@ -1131,12 +1141,15 @@ public final class OLocalDHTNode implements ODHTNode {
     while (!result) {
       long predecessorId = predecessor.longValue();
 
-      if (predecessorId < 0 || (insideInterval(predecessorId, this.nodeId, nodeId, false))) {
+      final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.nextValue(predecessorId),
+          ODHTRingInterval.prevValue(this.nodeId));
+
+      if (predecessorId < 0 || ringInterval.insideInterval(predecessorCandidateId)) {
         prevPredecessor = predecessorId;
 
-        result = predecessor.compareAndSet(predecessorId, nodeId);
+        result = predecessor.compareAndSet(predecessorId, predecessorCandidateId);
         if (result)
-          logger.info("New predecessor is {}", nodeId);
+          logger.info("New predecessor is {}", predecessorCandidateId);
         else {
           logger.info("Predecessor setup was failed.");
           prevPredecessor = -1;
@@ -1159,20 +1172,6 @@ public final class OLocalDHTNode implements ODHTNode {
 
   public void requestStabilization() {
     stabilize();
-  }
-
-  private static boolean insideInterval(long from, long to, long value, boolean rightIsIncluded) {
-    if (to > from) {
-      if (rightIsIncluded)
-        return from < value && to >= value;
-      else
-        return from < value && to > value;
-    } else {
-      if (rightIsIncluded)
-        return !(value > to && value <= from);
-      else
-        return !(value >= to && value <= from);
-    }
   }
 
   private void drawRing() {
@@ -1479,7 +1478,7 @@ public final class OLocalDHTNode implements ODHTNode {
           logger.error(e.toString(), e);
         } finally {
           try {
-            Thread.sleep(100);
+            Thread.sleep(60000);
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
           }
@@ -1573,8 +1572,6 @@ public final class OLocalDHTNode implements ODHTNode {
       final ODHTNode remoteDHTNode = nodeLookup.findById(remoteNodeId);
       if (remoteDHTNode == null)
         throw new NodeSynchronizationFailedException("Remote node with id " + remoteNodeId + " is offline.");
-
-      final Logger logger = LoggerFactory.getLogger(LocalMaintenanceProtocol.class);
 
       final ODHTRingInterval dhtNodeInterval = new ODHTRingInterval(ODHTRingInterval.nextValue(localPredecessor), nodeId);
       final ODHTRingInterval treeNodeInterval = new ODHTRingInterval(localNode.getStartId(), localNode.getEndId());
