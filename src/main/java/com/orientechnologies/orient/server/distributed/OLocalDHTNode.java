@@ -1622,7 +1622,7 @@ public final class OLocalDHTNode implements ODHTNode {
           startId = ODHTRingInterval.nextValue(recordMetadatas[recordMetadatas.length - 1].getId());
 
           if (recordsInterval.insideInterval(startId))
-            recordMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(startId, endId);
+            recordMetadatas = getRecordsForIntervalFromNode(startId, endId);
         }
 
       }

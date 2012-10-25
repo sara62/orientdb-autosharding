@@ -29,24 +29,25 @@ public class AntiEntropyTest {
     System.out.println("[stat] Ring was initialized.");
     System.out.println("[stat] Start data filling.");
 
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 100000; i++) {
       serverInstance.create("data" + i);
     }
 
     System.out.println("[stat] Data were added.");
-    Thread.sleep(10000);
+    Thread.sleep(5000);
 
     checkDataRedistribution(serverInstance);
 
     ServerInstance si = new ServerInstance(false, true, false);
     si.init();
 
-    Thread.sleep(10000);
+    System.out.println("[stat] Local maintenance protocol check");
+    Thread.sleep(30000);
 
     checkDataRedistribution(serverInstance);
   }
 
-  private void checkDataRedistribution(ServerInstance serverInstance) {
+  private void checkDataRedistribution(ServerInstance serverInstance) throws Exception {
     final ODHTNode startNode = serverInstance.findSuccessor(0);
 
     ODHTNode dhtNode = serverInstance.findSuccessor(0);
