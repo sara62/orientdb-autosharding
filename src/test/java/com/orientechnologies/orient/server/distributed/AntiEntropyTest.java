@@ -1,6 +1,9 @@
 package com.orientechnologies.orient.server.distributed;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.NavigableMap;
+import java.util.Random;
 
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -17,10 +20,10 @@ public class AntiEntropyTest {
   public void testDataSynchronizationAfterAdd() throws Exception {
     System.out.println("[stat] Ring initialization.");
 
-    final ServerInstance serverInstance = new ServerInstance();
+    final ServerInstance serverInstance = new ServerInstance(false, true, false);
     serverInstance.init();
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
       ServerInstance si = new ServerInstance(false, true, false);
       si.init();
     }
@@ -57,6 +60,107 @@ public class AntiEntropyTest {
     Assert.assertEquals(localDHTNode.getDb().size(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
   }
 
+  public void testDataSynchronizationAfterRemove() throws Exception {
+    System.out.println("[stat] Ring initialization.");
+
+    List<ServerInstance> serverInstances = new ArrayList<ServerInstance>();
+
+    final ServerInstance serverInstance = new ServerInstance(false, true, false);
+    serverInstance.init();
+
+    serverInstances.add(serverInstance);
+
+    for (int i = 0; i < 9; i++) {
+      ServerInstance si = new ServerInstance(false, true, false);
+      si.init();
+
+      serverInstances.add(si);
+    }
+
+    Thread.sleep(10000);
+    System.out.println("[stat] Ring was initialized.");
+    System.out.println("[stat] Start data filling.");
+
+    for (int i = 0; i < 100000; i++) {
+      serverInstance.create("data" + i);
+    }
+
+    System.out.println("[stat] Data were added.");
+    Thread.sleep(5000);
+
+    checkDataRedistribution(serverInstance);
+
+    final Random random = new Random();
+    while (serverInstances.size() > 1) {
+      ServerInstance si = serverInstances.remove(random.nextInt(serverInstances.size()));
+      si.shutdown();
+
+      System.out.println("Node with id " + si.getLocalNode().getNodeId() + " was removed.");
+
+      System.out.println("[stat] Local maintenance protocol check");
+      Thread.sleep(30000);
+
+      checkDataRedistribution(serverInstances.get(0));
+    }
+  }
+
+  public void testDataSynchronizationAfterRemoveAddRemove() throws Exception {
+    System.out.println("[stat] Ring initialization.");
+
+    List<ServerInstance> serverInstances = new ArrayList<ServerInstance>();
+
+    final ServerInstance serverInstance = new ServerInstance(false, true, false);
+    serverInstance.init();
+
+    serverInstances.add(serverInstance);
+
+    for (int i = 0; i < 4; i++) {
+      ServerInstance si = new ServerInstance(false, true, false);
+      si.init();
+
+      serverInstances.add(si);
+    }
+
+    Thread.sleep(10000);
+    System.out.println("[stat] Ring was initialized.");
+    System.out.println("[stat] Start data filling.");
+
+    for (int i = 0; i < 100000; i++) {
+      serverInstance.create("data" + i);
+    }
+
+    System.out.println("[stat] Data were added.");
+    Thread.sleep(5000);
+
+    checkDataRedistribution(serverInstance);
+
+    final Random random = new Random();
+    ServerInstance si = serverInstances.remove(random.nextInt(serverInstances.size()));
+    si.shutdown();
+
+    System.out.println("Node with id " + si.getLocalNode().getNodeId() + " was removed.");
+
+    System.out.println("[stat] Local maintenance protocol check");
+    Thread.sleep(30000);
+    checkDataRedistribution(serverInstances.get(0));
+
+    si = new ServerInstance(false, true, false);
+    si.init();
+
+    System.out.println("[stat] Local maintenance protocol check");
+    Thread.sleep(30000);
+    checkDataRedistribution(serverInstances.get(0));
+
+    si = serverInstances.remove(random.nextInt(serverInstances.size()));
+    si.shutdown();
+
+    System.out.println("Node with id " + si.getLocalNode().getNodeId() + " was removed.");
+
+    System.out.println("[stat] Local maintenance protocol check");
+    Thread.sleep(30000);
+    checkDataRedistribution(serverInstances.get(0));
+  }
+
   private void checkDataRedistribution(ServerInstance serverInstance) throws Exception {
     final ODHTNode startNode = serverInstance.findSuccessor(0);
 
@@ -77,14 +181,21 @@ public class AntiEntropyTest {
       final NavigableMap<Long, Record> firstSuccessorDb = localFirstSuccessor.getDb();
       final NavigableMap<Long, Record> secondSuccessorDb = localSecondSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.nextValue(dhtNode.getPredecessor()),
+      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(dhtNode.getPredecessor()),
           dhtNode.getNodeId());
 
       while (ringIterator.hasNext()) {
         final RecordMetadata recordMetadata = ringIterator.next();
 
-        Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getId()));
-        Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getId()));
+        while (!firstSuccessorDb.containsKey(recordMetadata.getId())) {
+          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + firstSuccessor.getNodeId());
+          Thread.sleep(1000);
+        }
+
+        while (!secondSuccessorDb.containsKey(recordMetadata.getId())) {
+          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + secondSuccessor.getNodeId());
+          Thread.sleep(1000);
+        }
       }
 
       dhtNode = serverInstance.findById(dhtNode.getSuccessor());
@@ -104,7 +215,7 @@ public class AntiEntropyTest {
   private int gerOwnRecordsCount(OLocalDHTNode localDHTNode) {
     final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
 
-    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.nextValue(localDHTNode.getPredecessor()),
+    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(localDHTNode.getPredecessor()),
         localDHTNode.getNodeId());
 
     int count = 0;

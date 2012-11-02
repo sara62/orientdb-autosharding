@@ -217,7 +217,7 @@ public class DHTConcurrencyTest {
         }
         return null;
       } catch (Exception e) {
-        System.out.println(e);
+        e.printStackTrace();
         throw e;
       }
     }
@@ -257,7 +257,7 @@ public class DHTConcurrencyTest {
         }
         return null;
       } catch (Exception e) {
-        System.out.println(e);
+        e.printStackTrace();
         throw e;
       }
     }
@@ -299,7 +299,7 @@ public class DHTConcurrencyTest {
         }
         return null;
       } catch (Exception e) {
-        System.out.println(e);
+        e.printStackTrace();
         throw e;
       }
 

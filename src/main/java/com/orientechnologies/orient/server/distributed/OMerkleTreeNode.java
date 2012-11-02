@@ -270,7 +270,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
           rehashLeafNode(level, offset, treeNode, childIndex);
         } else
           throw new OConcurrentModificationException(new ORecordId(1, id), record.getShortVersion(), version.getShortVersion(),
-              ORecordOperation.UPDATED);
+              ORecordOperation.DELETED);
       } else
         throw new ORecordNotFoundException("Record with id " + id + " can not be deleted from database because it is absent");
     } finally {

@@ -91,14 +91,14 @@ public final class ODHTRingInterval {
     return "ODHTRingInterval{" + "start=" + start + ", end=" + end + '}';
   }
 
-  public static long nextValue(long value) {
+  public static long increment(long value) {
     if (value < Long.MAX_VALUE)
       return value + 1;
 
     return 0;
   }
 
-  public static long prevValue(long value) {
+  public static long decrement(long value) {
     if (value == 0)
       return Long.MAX_VALUE;
 

@@ -101,6 +101,11 @@ public class Record implements Externalizable {
     return result;
   }
 
+  @Override
+  public String toString() {
+    return "Record{" + "data='" + data + '\'' + ", id=" + id + ", version=" + version + '}';
+  }
+
   public void writeExternal(ObjectOutput out) throws IOException {
     out.writeLong(id);
     out.writeObject(version);

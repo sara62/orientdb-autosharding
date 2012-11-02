@@ -39,7 +39,11 @@ public interface ODHTNode {
 
   public void updateReplica(Record replica, boolean async);
 
+  public void updateReplicas(Record[] replicas, boolean async);
+
   public Record getRecordFromNode(long id, boolean replicate);
+
+  public Record[] getRecordsFromNode(long[] ids, boolean replicate);
 
   public Record createRecordInNode(long id, String data);
 

@@ -112,12 +112,12 @@ public class DHTRingIntervalTest {
   }
 
   public void testNextValue() {
-    Assert.assertEquals(26, ODHTRingInterval.nextValue(25));
-    Assert.assertEquals(0, ODHTRingInterval.nextValue(Long.MAX_VALUE));
+    Assert.assertEquals(26, ODHTRingInterval.increment(25));
+    Assert.assertEquals(0, ODHTRingInterval.increment(Long.MAX_VALUE));
   }
 
   public void testPrevValue() {
-    Assert.assertEquals(24, ODHTRingInterval.prevValue(25));
-    Assert.assertEquals(Long.MAX_VALUE, ODHTRingInterval.prevValue(0));
+    Assert.assertEquals(24, ODHTRingInterval.decrement(25));
+    Assert.assertEquals(Long.MAX_VALUE, ODHTRingInterval.decrement(0));
   }
 }

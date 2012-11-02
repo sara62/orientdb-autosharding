@@ -8,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.hazelcast.config.XmlConfigBuilder;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.LifecycleEvent;
+import com.hazelcast.core.LifecycleListener;
 import com.hazelcast.core.Member;
 import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
@@ -22,7 +24,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 15.08.12
  */
-public class ServerInstance implements MembershipListener, ODHTNodeLookup {
+public class ServerInstance implements MembershipListener, ODHTNodeLookup, LifecycleListener {
   public static final int                         REPLICA_COUNT      = 2;
   private static final int                        SYNC_REPLICA_COUNT = 1;
 
@@ -36,24 +38,41 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
   private final boolean                           useReadRepair;
   private final boolean                           useAntiEntropy;
   private final boolean                           useGlobalMaintainence;
+  private final int                               replicaCount;
+  private final int                               syncReplicaCount;
 
   public ServerInstance() {
     useReadRepair = true;
     useAntiEntropy = true;
     useGlobalMaintainence = true;
+
+    replicaCount = REPLICA_COUNT;
+    syncReplicaCount = SYNC_REPLICA_COUNT;
+  }
+
+  public ServerInstance(int replicaCount, int syncReplicaCount) {
+    useReadRepair = true;
+    useAntiEntropy = true;
+    useGlobalMaintainence = true;
+
+    this.replicaCount = replicaCount;
+    this.syncReplicaCount = syncReplicaCount;
   }
 
   public ServerInstance(boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence) {
     this.useReadRepair = useReadRepair;
     this.useAntiEntropy = useAntiEntropy;
     this.useGlobalMaintainence = useGlobalMaintainence;
+
+    replicaCount = REPLICA_COUNT;
+    syncReplicaCount = SYNC_REPLICA_COUNT;
   }
 
   public void init() {
     XmlConfigBuilder xmlConfigBuilder = new XmlConfigBuilder(ServerInstance.class.getResourceAsStream("/hazelcast.xml"));
 
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
-    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), REPLICA_COUNT, SYNC_REPLICA_COUNT,
+    localNode = new OLocalDHTNode(getNodeId(hazelcastInstance.getCluster().getLocalMember()), replicaCount, syncReplicaCount,
         useReadRepair, useAntiEntropy, useGlobalMaintainence);
 
     localNode.setNodeLookup(this);
@@ -83,6 +102,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
         localNode.fixFingers();
       }
     }, 10000, 10000);
+
   }
 
   public Record create(long id, String data) {
@@ -107,7 +127,6 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 
     idMemberMap.put(nodeId, member);
     localNode.stabilize();
-    localNode.fixFingers();
   }
 
   public void memberRemoved(MembershipEvent membershipEvent) {
@@ -128,6 +147,10 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
       return null;
 
     return new OHazelcastDHTNodeProxy(id, member, hazelcastInstance);
+  }
+
+  public boolean isRunning() {
+    return hazelcastInstance.getLifecycleService().isRunning();
   }
 
   public int size() {
@@ -153,5 +176,18 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup {
 
   public ODHTNode findSuccessor(long id) {
     return findById(localNode.findSuccessor(id));
+  }
+
+  @Override
+  public void stateChanged(LifecycleEvent event) {
+  }
+
+  public void shutdown() throws Exception {
+    final String memberUUID = hazelcastInstance.getCluster().getLocalMember().getUuid();
+
+    timer.cancel();
+    localNode.shutdown();
+    hazelcastInstance.getLifecycleService().shutdown();
+    INSTANCES.remove(memberUUID);
   }
 }
