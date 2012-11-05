@@ -229,7 +229,7 @@ public final class OLocalDHTNode implements ODHTNode {
           final long[] successors = successorsList;
 
           // we are alone return itself.
-          if (nodeLookup.size() == 0)
+          if (successors.length == 0)
             return nodeId;
 
           for (final long nthSuccessorId : successors) {
@@ -246,8 +246,9 @@ public final class OLocalDHTNode implements ODHTNode {
 
       retryCount++;
       if (retryCount > MAX_RETRIES) {
-        throw new ONodeOfflineException("Successor can not be found, id to process " + key + ", successor " + getSuccessor()
-            + ", auxiliary successors " + Arrays.toString(successorsList) + ", finger points " + fingerPoints, null, successorId);
+        throw new ONodeOfflineException("Successor can not be found using node " + nodeId + " , id to process " + key
+            + ", successor " + getSuccessor() + ", auxiliary successors " + Arrays.toString(successorsList) + ", finger points "
+            + fingerPoints, null, successorId);
       }
 
       long precedingNodeId = findClosestPrecedingFinger(key);

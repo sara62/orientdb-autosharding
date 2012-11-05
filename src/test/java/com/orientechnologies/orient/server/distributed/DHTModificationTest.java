@@ -152,12 +152,12 @@ public class DHTModificationTest {
       checkDataManipulationThreads(readerFutures, writerFutures, removeFuture);
     }
 
-    for (int i = 0; i < 60; i++) {
+    for (int i = 0; i < 5; i++) {
       ServerInstance siToShutdown = extractOneNode(ringMap, random);
       System.out.println("Shutdown of node with id " + siToShutdown.getLocalNode().getNodeId());
       siToShutdown.shutdown();
 
-      for (int n = 0; n < 3; n++) {
+      for (int n = 0; n < 3 + i; n++) {
         Thread.sleep(60 * 1000);
 
         if (exceptionIsThrown.get()) {
@@ -171,7 +171,7 @@ public class DHTModificationTest {
 
       ringMap.put(addedSI.getLocalNode().getNodeId(), addedSI);
 
-      for (int n = 0; n < 3; n++) {
+      for (int n = 0; n < 3 + i; n++) {
         Thread.sleep(60 * 1000);
 
         if (exceptionIsThrown.get()) {
@@ -372,10 +372,8 @@ public class DHTModificationTest {
               lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
               try {
                 if (data.containsKey(entry.getKey()))
-                  while (si.get(entry.getKey()) == null) {
-                    System.out.println("Wait for key " + entry.getKey() + " in node " + si.findSuccessor(entry.getKey()));
-                    Thread.sleep(100);
-                  }
+                  Assert.assertEquals(si.get(entry.getKey()), entry.getValue());
+
                 i++;
                 if (i % 10000 == 0)
                   System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");
