@@ -5,21 +5,22 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 19.09.12
  */
 public class Record implements Externalizable {
-  private String            data;
-  private long              id;
+  private String               data;
+  private OAutoShardedRecordId id;
 
-  private ODHTRecordVersion version;
+  private ODHTRecordVersion    version;
 
   public Record() {
   }
 
-  public Record(long id, String data) {
+  public Record(OAutoShardedRecordId id, String data) {
     this.id = id;
     this.data = data;
 
@@ -27,7 +28,7 @@ public class Record implements Externalizable {
     version.init();
   }
 
-  public Record(long id, String data, int shortVersion) {
+  public Record(OAutoShardedRecordId id, String data, int shortVersion) {
     this.id = id;
     this.data = data;
 
@@ -47,7 +48,7 @@ public class Record implements Externalizable {
     this.data = data;
   }
 
-  public long getId() {
+  public OAutoShardedRecordId getId() {
     return id;
   }
 
@@ -96,18 +97,14 @@ public class Record implements Externalizable {
 
   @Override
   public int hashCode() {
-    int result = (int) (id ^ (id >>> 32));
-    result = 31 * result + version.hashCode();
+    int result = data != null ? data.hashCode() : 0;
+    result = 31 * result + (id != null ? id.hashCode() : 0);
+    result = 31 * result + (version != null ? version.hashCode() : 0);
     return result;
   }
 
-  @Override
-  public String toString() {
-    return "Record{" + "data='" + data + '\'' + ", id=" + id + ", version=" + version + '}';
-  }
-
   public void writeExternal(ObjectOutput out) throws IOException {
-    out.writeLong(id);
+    out.writeObject(id);
     out.writeObject(version);
 
     final boolean dataIsNotNull = data != null;
@@ -118,7 +115,7 @@ public class Record implements Externalizable {
   }
 
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    id = in.readLong();
+    id = (OAutoShardedRecordId) in.readObject();
     version = (ODHTRecordVersion) in.readObject();
 
     final boolean dataIsNotNull = in.readBoolean();

@@ -7,6 +7,8 @@ import java.util.TreeMap;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+
 /**
  * @author Andrey Lomakin
  * @since 02.10.12
@@ -14,25 +16,25 @@ import org.testng.annotations.Test;
 @Test
 public class MerkleTreeTest {
   public void testAdd67KeysToNext1024NodeCompareDetachedNodes() throws Exception {
-    NavigableMap<Long, Record> map = new TreeMap<Long, Record>();
+    NavigableMap<OAutoShardedRecordId, Record> map = new TreeMap<OAutoShardedRecordId, Record>();
 
-    OMerkleTree tree = new OMerkleTree(map);
+    OMerkleTree tree = new OMerkleTree(map, 1);
     for (int i = 0; i < 2; i++)
-      tree.addData(i, i + "");
+      tree.addData(convertToRecordId(i), i + "");
 
     for (int i = 1024; i < 1089; i++)
-      tree.addData(i, i + "");
+      tree.addData(convertToRecordId(i), i + "");
 
     for (long i = 0; i < 2; i++)
-      Assert.assertEquals(map.get(i).getData(), i + "");
+      Assert.assertEquals(map.get(convertToRecordId(i)).getData(), i + "");
 
     for (long i = 1024; i < 1089; i++)
-      Assert.assertEquals(map.get(i).getData(), i + "");
+      Assert.assertEquals(map.get(convertToRecordId(i)).getData(), i + "");
 
-    NavigableMap<Long, Record> mapTwo = new TreeMap<Long, Record>();
-    OMerkleTree sampleTree = new OMerkleTree(mapTwo);
+    NavigableMap<OAutoShardedRecordId, Record> mapTwo = new TreeMap<OAutoShardedRecordId, Record>();
+    OMerkleTree sampleTree = new OMerkleTree(mapTwo, 1);
 
-    for (Map.Entry<Long, Record> entry : map.entrySet())
+    for (Map.Entry<OAutoShardedRecordId, Record> entry : map.entrySet())
       sampleTree.updateReplica(entry.getKey(), entry.getValue());
 
     for (int i = 0; i < 64; i++)
@@ -74,5 +76,9 @@ public class MerkleTreeTest {
         compareNodes(treeOne, detachedMerkleTreeNodeOne, treeTwo, detachedMerkleTreeNodeTwo);
       }
     }
+  }
+
+  private OAutoShardedRecordId convertToRecordId(long i) {
+    return ONodeId.convertToRecordId(ONodeId.valueOf(i), 1);
   }
 }

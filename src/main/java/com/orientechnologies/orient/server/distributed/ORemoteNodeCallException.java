@@ -5,14 +5,14 @@ package com.orientechnologies.orient.server.distributed;
  * @since 03.09.12
  */
 public class ORemoteNodeCallException extends RuntimeException {
-	private final long nodeId;
+  private final ONodeId nodeId;
 
-	public ORemoteNodeCallException(String message, Throwable cause, long nodeId) {
-		super(message, cause);
-		this.nodeId = nodeId;
-	}
+  public ORemoteNodeCallException(String message, Throwable cause, ONodeId nodeId) {
+    super(message, cause);
+    this.nodeId = nodeId;
+  }
 
-	public long getNodeId() {
-		return nodeId;
-	}
+  public ONodeId getNodeId() {
+    return nodeId;
+  }
 }

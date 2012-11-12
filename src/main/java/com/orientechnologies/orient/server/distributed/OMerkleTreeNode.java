@@ -14,7 +14,7 @@ import com.orientechnologies.common.concur.resource.OSharedResourceAdaptive;
 import com.orientechnologies.orient.core.db.record.ORecordOperation;
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
 
 /**
@@ -22,17 +22,18 @@ import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
  * @since 04.09.12
  */
 public class OMerkleTreeNode extends OSharedResourceAdaptive {
-  public static final int                  KEY_SIZE               = 8;
-  public static final int                  LEAF_BUFFER_ENTRY_SIZE = KEY_SIZE + ODHTRecordVersion.STREAMED_SIZE;
+  public static final int                                  KEY_SIZE               = ONodeId.NODE_SIZE_BYTES;
+  public static final int                                  LEAF_BUFFER_ENTRY_SIZE = KEY_SIZE + ODHTRecordVersion.STREAMED_SIZE;
 
-  private final NavigableMap<Long, Record> db;
+  private final NavigableMap<OAutoShardedRecordId, Record> db;
 
-  private int                              count;
-  private OMerkleTreeNode[]                children;
+  private int                                              count;
+  private OMerkleTreeNode[]                                children;
 
-  private byte[]                           hash;
+  private byte[]                                           hash;
+  private final int                                        clusterId;
 
-  public OMerkleTreeNode(final NavigableMap<Long, Record> db) {
+  public OMerkleTreeNode(final NavigableMap<OAutoShardedRecordId, Record> db, final int clusterId) {
     count = 0;
     children = null;
 
@@ -40,15 +41,17 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     hash = sha.digest();
 
     this.db = db;
+    this.clusterId = clusterId;
   }
 
-  public OMerkleTreeNode(int count, byte[] hash, NavigableMap<Long, Record> db) {
+  public OMerkleTreeNode(int count, byte[] hash, NavigableMap<OAutoShardedRecordId, Record> db, final int clusterId) {
     this.db = db;
     this.count = count;
     this.hash = hash;
+    this.clusterId = clusterId;
   }
 
-  public Record addRecord(int level, long offset, long id, String data) {
+  public Record addRecord(int level, ONodeId offset, OAutoShardedRecordId id, String data) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -61,7 +64,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       offset = startNodeId(level, childIndex, offset);
 
-      childIndex = childIndex(level, id);
+      childIndex = childIndex(level, ONodeId.valueOf(id));
 
       final OMerkleTreeNode child = treeNode.getChild(childIndex);
       child.acquireExclusiveLock();
@@ -90,13 +93,13 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
         if (treeNode.getRecordsCount() <= 64)
           rehashLeafNode(level, offset, treeNode, childIndex);
         else {
-          final long startId = startNodeId(level, childIndex, offset);
+          final ONodeId startId = startNodeId(level, childIndex, offset);
 
           addInternalNodes(level, startId, treeNode);
           hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
         }
       } else
-        throw new ORecordDuplicatedException("Record with id " + id + " has already exist in DB.", new ORecordId(1, id));
+        throw new ORecordDuplicatedException("Record with id " + id + " has already exist in DB.", id);
     } finally {
       treeNode.releaseExclusiveLock();
     }
@@ -106,7 +109,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     return record;
   }
 
-  public void updateRecord(int level, long offset, long id, ODHTRecordVersion version, String data) {
+  public void updateRecord(int level, ONodeId offset, OAutoShardedRecordId id, ODHTRecordVersion version, String data) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -119,7 +122,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       offset = startNodeId(level, childIndex, offset);
 
-      childIndex = childIndex(level, id);
+      childIndex = childIndex(level, ONodeId.valueOf(id));
 
       final OMerkleTreeNode child = treeNode.getChild(childIndex);
       child.acquireExclusiveLock();
@@ -137,7 +140,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
         throw new ORecordNotFoundException("Record with id " + id + " not found.");
 
       if (record.getVersion().compareTo(version) != 0)
-        throw new OConcurrentModificationException(new ORecordId(1, id), record.getShortVersion(), version.getShortVersion(),
+        throw new OConcurrentModificationException(id, record.getShortVersion(), version.getShortVersion(),
             ORecordOperation.UPDATED);
 
       record.updateData(data, version);
@@ -150,7 +153,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     rehashParentNodes(hashPathNodes);
   }
 
-  public boolean updateReplica(int level, long offset, long id, Record replica) {
+  public boolean updateReplica(int level, ONodeId offset, OAutoShardedRecordId id, Record replica) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -163,7 +166,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       offset = startNodeId(level, childIndex, offset);
 
-      childIndex = childIndex(level, id);
+      childIndex = childIndex(level, ONodeId.valueOf(id));
 
       final OMerkleTreeNode child = treeNode.getChild(childIndex);
       child.acquireExclusiveLock();
@@ -186,7 +189,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
         if (treeNode.getRecordsCount() <= 64)
           rehashLeafNode(level, offset, treeNode, childIndex);
         else {
-          final long startId = startNodeId(level, childIndex, offset);
+          final ONodeId startId = startNodeId(level, childIndex, offset);
 
           addInternalNodes(level, startId, treeNode);
           hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
@@ -202,26 +205,30 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     return true;
   }
 
-  private void rehashLeafNode(int level, long offset, OMerkleTreeNode treeNode, int childIndex) {
+  private void rehashLeafNode(int level, ONodeId offset, OMerkleTreeNode treeNode, int childIndex) {
     final MessageDigest messageDigest = sha();
     final ByteBuffer byteBuffer = ByteBuffer.allocate(treeNode.getRecordsCount() * LEAF_BUFFER_ENTRY_SIZE);
 
-    final long startId = startNodeId(level, childIndex, offset);
-    final long endId = startNodeId(level, childIndex + 1, offset);
+    final ONodeId startId = startNodeId(level, childIndex, offset);
+    final ONodeId endId = startNodeId(level, childIndex + 1, offset);
 
-    final Iterator<Long> idIterator;
-    if (endId > startId)
-      idIterator = db.subMap(startId, true, endId, false).keySet().iterator();
+    final Iterator<OAutoShardedRecordId> idIterator;
+
+    if (endId.compareTo(startId) > 0)
+      idIterator = db
+          .subMap(ONodeId.convertToRecordId(startId, clusterId), true, ONodeId.convertToRecordId(endId, clusterId), false).keySet()
+          .iterator();
     else
-      idIterator = db.tailMap(startId, true).keySet().iterator();
+      idIterator = db.tailMap(ONodeId.convertToRecordId(startId, clusterId), true).keySet().iterator();
 
     final int recordsCount = treeNode.getRecordsCount();
     int actualRecordsCount = 0;
 
     while (idIterator.hasNext()) {
-      final long currentId = idIterator.next();
+      final OAutoShardedRecordId currentId = idIterator.next();
       final ODHTRecordVersion version = db.get(currentId).getVersion();
-      byteBuffer.putLong(currentId);
+
+      byteBuffer.put(ONodeId.toStream(currentId));
       byteBuffer.put(version.toStream());
 
       actualRecordsCount++;
@@ -237,7 +244,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     treeNode.hash = messageDigest.digest();
   }
 
-  public void deleteRecord(int level, long offset, long id, ODHTRecordVersion version) {
+  public void deleteRecord(int level, ONodeId offset, OAutoShardedRecordId id, ODHTRecordVersion version) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -250,7 +257,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       offset = startNodeId(level, childIndex, offset);
 
-      childIndex = childIndex(level, id);
+      childIndex = childIndex(level, ONodeId.valueOf(id));
 
       final OMerkleTreeNode child = treeNode.getChild(childIndex);
       child.acquireExclusiveLock();
@@ -269,7 +276,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
           rehashLeafNode(level, offset, treeNode, childIndex);
         } else
-          throw new OConcurrentModificationException(new ORecordId(1, id), record.getShortVersion(), version.getShortVersion(),
+          throw new OConcurrentModificationException(id, record.getShortVersion(), version.getShortVersion(),
               ORecordOperation.DELETED);
       } else
         throw new ORecordNotFoundException("Record with id " + id + " can not be deleted from database because it is absent");
@@ -279,7 +286,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     rehashParentNodes(hashPathNodes);
   }
 
-  public void cleanOutRecord(int level, long offset, long id, ODHTRecordVersion version) {
+  public void cleanOutRecord(int level, ONodeId offset, OAutoShardedRecordId id, ODHTRecordVersion version) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -292,7 +299,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       offset = startNodeId(level, childIndex, offset);
 
-      childIndex = childIndex(level, id);
+      childIndex = childIndex(level, ONodeId.valueOf(id));
 
       final OMerkleTreeNode child = treeNode.getChild(childIndex);
       child.acquireExclusiveLock();
@@ -313,7 +320,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
           rehashLeafNode(level, offset, treeNode, childIndex);
         } else
-          throw new OConcurrentModificationException(new ORecordId(1, id), record.getShortVersion(), version.getShortVersion(),
+          throw new OConcurrentModificationException(id, record.getShortVersion(), version.getShortVersion(),
               ORecordOperation.UPDATED);
       } else
         throw new ORecordNotFoundException("Record with id " + id + " can not be cleaned out from database because it is absent");
@@ -341,40 +348,44 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     releaseExclusiveLock();
   }
 
-  public static long startNodeId(int level, long index, long offset) {
-    return (1L << (64 - 6 * level)) * index + offset;
+  public static ONodeId startNodeId(int level, int index, ONodeId offset) {
+    return (ONodeId.ONE.shiftLeft(ONodeId.NODE_SIZE_BITS - 6 * level)).multiply(index).add(offset);
   }
 
-  public static int childIndex(int level, long key) {
-    return (int) ((key >> (64 - 6 * (level + 1))) & 63L);
+  public static int childIndex(int level, ONodeId id) {
+    return id.shiftRight(ONodeId.NODE_SIZE_BITS - 6 * (level + 1)).intValue() & 63;
   }
 
-  private void addInternalNodes(int level, long offset, OMerkleTreeNode treeNode) {
+  private void addInternalNodes(int level, ONodeId offset, OMerkleTreeNode treeNode) {
     final OMerkleTreeNode[] children = new OMerkleTreeNode[64];
     final ByteBuffer parentBuffer = ByteBuffer.allocate(64 * 20);
 
     for (int i = 0; i < 64; i++) {
       final int childLevel = level + 1;
 
-      final long startChildKey = startNodeId(childLevel, i, offset);
-      final long endChildKey = startNodeId(childLevel, i + 1, offset);
+      final ONodeId startChildKey = startNodeId(childLevel, i, offset);
+      final ONodeId endChildKey = startNodeId(childLevel, i + 1, offset);
 
-      final Iterator<Long> idIterator;
-      if (endChildKey > startChildKey)
-        idIterator = db.subMap(startChildKey, true, endChildKey, false).keySet().iterator();
+      final Iterator<OAutoShardedRecordId> idIterator;
+      if (endChildKey.compareTo(startChildKey) > 0)
+        idIterator = db
+            .subMap(ONodeId.convertToRecordId(startChildKey, clusterId), true, ONodeId.convertToRecordId(endChildKey, clusterId),
+                false).keySet().iterator();
       else
-        idIterator = db.tailMap(startChildKey, true).keySet().iterator();
+        idIterator = db.tailMap(ONodeId.convertToRecordId(startChildKey, clusterId), true).keySet().iterator();
 
       int recordsCount = 0;
 
-      final Map<Long, ODHTRecordVersion> recordsToHash = new LinkedHashMap<Long, ODHTRecordVersion>(64);
+      final Map<OAutoShardedRecordId, ODHTRecordVersion> recordsToHash = new LinkedHashMap<OAutoShardedRecordId, ODHTRecordVersion>(
+          64);
+
       while (idIterator.hasNext()) {
         if (recordsCount == 64) {
           recordsCount++;
           break;
         }
 
-        final long currentId = idIterator.next();
+        final OAutoShardedRecordId currentId = idIterator.next();
 
         final ODHTRecordVersion version = db.get(currentId).getVersion();
         recordsToHash.put(currentId, version);
@@ -386,8 +397,8 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
       if (recordsCount <= 64) {
         final ByteBuffer buffer = ByteBuffer.allocate(recordsCount * LEAF_BUFFER_ENTRY_SIZE);
 
-        for (Map.Entry<Long, ODHTRecordVersion> entry : recordsToHash.entrySet()) {
-          buffer.putLong(entry.getKey());
+        for (Map.Entry<OAutoShardedRecordId, ODHTRecordVersion> entry : recordsToHash.entrySet()) {
+          buffer.put(ONodeId.toStream(entry.getKey()));
           buffer.put(entry.getValue().toStream());
         }
 
@@ -396,9 +407,9 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
         final MessageDigest sha = sha();
         sha.update(buffer);
 
-        child = new OMerkleTreeNode(recordsCount, sha.digest(), db);
+        child = new OMerkleTreeNode(recordsCount, sha.digest(), db, clusterId);
       } else {
-        child = new OMerkleTreeNode(db);
+        child = new OMerkleTreeNode(db, clusterId);
         addInternalNodes(childLevel, startChildKey, child);
       }
 
@@ -519,9 +530,9 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
   private static final class PathItem {
     private OMerkleTreeNode node;
     private int             childIndex;
-    private long            offset;
+    private ONodeId         offset;
 
-    private PathItem(OMerkleTreeNode node, int childIndex, long offset) {
+    private PathItem(OMerkleTreeNode node, int childIndex, ONodeId offset) {
       this.node = node;
       this.childIndex = childIndex;
       this.offset = offset;

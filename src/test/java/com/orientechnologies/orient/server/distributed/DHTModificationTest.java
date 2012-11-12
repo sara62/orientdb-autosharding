@@ -20,6 +20,8 @@ import org.testng.annotations.Test;
 
 import com.orientechnologies.common.concur.lock.OLockManager;
 import com.orientechnologies.common.util.MersenneTwister;
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.server.hazelcast.OHazelcastNodeAddress;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
 /**
@@ -29,18 +31,18 @@ import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 @Test
 public class DHTModificationTest {
   public void testConstantAddRemoveWithoutDataManipulation() throws Exception {
-    TreeMap<Long, ServerInstance> ringMap = new TreeMap<Long, ServerInstance>();
+    TreeMap<ONodeAddress, ServerInstance> ringMap = new TreeMap<ONodeAddress, ServerInstance>();
 
     final ServerInstance serverInstance = new ServerInstance();
     serverInstance.init();
 
-    ringMap.put(serverInstance.getLocalNode().getNodeId(), serverInstance);
+    ringMap.put(serverInstance.getLocalNode().getNodeAddress(), serverInstance);
 
     for (int i = 0; i < 6; i++) {
       ServerInstance si = new ServerInstance();
       si.init();
 
-      ringMap.put(si.getLocalNode().getNodeId(), si);
+      ringMap.put(si.getLocalNode().getNodeAddress(), si);
     }
 
     Thread.sleep(30000);
@@ -49,11 +51,11 @@ public class DHTModificationTest {
     final MersenneTwister random = new MersenneTwister();
 
     for (int i = 0; i < 60; i++) {
-      Long nodeId = ringMap.ceilingKey(random.nextLong(Long.MAX_VALUE));
-      if (nodeId == null)
-        nodeId = ringMap.firstKey();
+      ONodeAddress nodeAddress = ringMap.ceilingKey(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), ""));
+      if (nodeAddress == null)
+        nodeAddress = ringMap.firstKey();
 
-      ServerInstance si = ringMap.remove(nodeId);
+      ServerInstance si = ringMap.remove(nodeAddress);
       si.shutdown();
 
       Thread.sleep(30000);
@@ -62,21 +64,21 @@ public class DHTModificationTest {
       si = new ServerInstance();
       si.init();
 
-      ringMap.put(si.getLocalNode().getNodeId(), si);
+      ringMap.put(si.getLocalNode().getNodeAddress(), si);
 
       Thread.sleep(30000);
       checkDHTStructure(si, ringMap);
     }
   }
 
-  private void checkDHTStructure(ServerInstance serverInstance, TreeMap<Long, ServerInstance> ringMap) {
-    ODHTNode node = serverInstance.findSuccessor(0);
-    for (Long key : ringMap.keySet()) {
-      Assert.assertEquals(node.getNodeId(), key.longValue());
+  private void checkDHTStructure(ServerInstance serverInstance, TreeMap<ONodeAddress, ServerInstance> ringMap) {
+    ODHTNode node = serverInstance.findSuccessor(ONodeId.valueOf(0));
+    for (ONodeAddress nodeAddress : ringMap.keySet()) {
+      Assert.assertEquals(node.getNodeAddress(), nodeAddress);
       node = serverInstance.findById(node.getSuccessor());
     }
 
-    Assert.assertEquals(node.getNodeId(), serverInstance.findSuccessor(0).getNodeId());
+    Assert.assertEquals(node.getNodeAddress(), serverInstance.findSuccessor(ONodeId.valueOf(0)).getNodeAddress());
   }
 
   public void testConstantAddRemoveWithDataManipulation() throws Exception {
@@ -109,22 +111,22 @@ public class DHTModificationTest {
       }
     });
 
-    final NavigableMap<Long, ServerInstance> ringMap = new ConcurrentSkipListMap<Long, ServerInstance>();
+    final NavigableMap<ONodeAddress, ServerInstance> ringMap = new ConcurrentSkipListMap<ONodeAddress, ServerInstance>();
 
     final ServerInstance serverInstance = new ServerInstance(1, 1);
     serverInstance.init();
 
-    ringMap.put(serverInstance.getLocalNode().getNodeId(), serverInstance);
+    ringMap.put(serverInstance.getLocalNode().getNodeAddress(), serverInstance);
 
     for (int i = 0; i < 3; i++) {
       ServerInstance si = new ServerInstance(1, 1);
       si.init();
 
-      ringMap.put(si.getLocalNode().getNodeId(), si);
+      ringMap.put(si.getLocalNode().getNodeAddress(), si);
     }
 
-    final NavigableMap<Long, Record> data = new ConcurrentSkipListMap<Long, Record>();
-    final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
+    final NavigableMap<OAutoShardedRecordId, Record> data = new ConcurrentSkipListMap<OAutoShardedRecordId, Record>();
+    final OLockManager<OAutoShardedRecordId, Runnable> lockManager = new OLockManager<OAutoShardedRecordId, Runnable>(true, 500);
 
     final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
 
@@ -138,8 +140,7 @@ public class DHTModificationTest {
       readerFutures.add(readerExecutor.submit(new DataReader(data, lockManager, ringMap, testIsStopped, exceptionIsThrown)));
 
     for (long i = 0; i < threadCount; i++)
-      writerFutures.add(writerExecutor.submit(new DataWriter(mersenneTwister, data, lockManager, ringMap, testIsStopped,
-          exceptionIsThrown)));
+      writerFutures.add(writerExecutor.submit(new DataWriter(data, lockManager, ringMap, testIsStopped, exceptionIsThrown)));
 
     Future<Void> removeFuture = removalExecutor
         .submit(new DataRemover(ringMap, data, lockManager, testIsStopped, exceptionIsThrown));
@@ -154,7 +155,7 @@ public class DHTModificationTest {
 
     for (int i = 0; i < 5; i++) {
       ServerInstance siToShutdown = extractOneNode(ringMap, random);
-      System.out.println("Shutdown of node with id " + siToShutdown.getLocalNode().getNodeId());
+      System.out.println("Shutdown of node with id " + siToShutdown.getLocalNode().getNodeAddress());
       siToShutdown.shutdown();
 
       for (int n = 0; n < 3 + i; n++) {
@@ -169,7 +170,7 @@ public class DHTModificationTest {
       ServerInstance addedSI = new ServerInstance(1, 1);
       addedSI.init();
 
-      ringMap.put(addedSI.getLocalNode().getNodeId(), addedSI);
+      ringMap.put(addedSI.getLocalNode().getNodeAddress(), addedSI);
 
       for (int n = 0; n < 3 + i; n++) {
         Thread.sleep(60 * 1000);
@@ -185,8 +186,8 @@ public class DHTModificationTest {
     checkDataManipulationThreads(readerFutures, writerFutures, removeFuture);
   }
 
-  private ServerInstance extractOneNode(NavigableMap<Long, ServerInstance> ringMap, MersenneTwister random) {
-    Long nodeId = ringMap.ceilingKey(random.nextLong(Long.MAX_VALUE));
+  private ServerInstance extractOneNode(NavigableMap<ONodeAddress, ServerInstance> ringMap, MersenneTwister random) {
+    ONodeAddress nodeId = ringMap.ceilingKey(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), ""));
     if (nodeId == null)
       nodeId = ringMap.firstKey();
 
@@ -208,18 +209,18 @@ public class DHTModificationTest {
   }
 
   private static class DataRemover implements Callable<Void> {
-    private final OLockManager<Long, Runnable>       lockManager;
-    private final Map<Long, Record>                  data;
+    private final OLockManager<OAutoShardedRecordId, Runnable> lockManager;
+    private final Map<OAutoShardedRecordId, Record>            data;
 
-    private final Random                             random = new Random();
+    private final Random                                       random = new Random();
 
-    private final NavigableMap<Long, ServerInstance> ringMap;
+    private final NavigableMap<ONodeAddress, ServerInstance>   ringMap;
 
-    private final AtomicBoolean                      testIsStopped;
-    private final AtomicBoolean                      exceptionIsThrown;
+    private final AtomicBoolean                                testIsStopped;
+    private final AtomicBoolean                                exceptionIsThrown;
 
-    private DataRemover(final NavigableMap<Long, ServerInstance> ringMap, Map<Long, Record> data,
-        OLockManager<Long, Runnable> lockManager, AtomicBoolean testIsStopped, final AtomicBoolean exceptionIsThrown) {
+    private DataRemover(final NavigableMap<ONodeAddress, ServerInstance> ringMap, Map<OAutoShardedRecordId, Record> data,
+        OLockManager<OAutoShardedRecordId, Runnable> lockManager, AtomicBoolean testIsStopped, final AtomicBoolean exceptionIsThrown) {
       this.data = data;
 
       this.lockManager = lockManager;
@@ -242,7 +243,7 @@ public class DHTModificationTest {
             n = 5;
 
           int i = 0;
-          for (Long key : data.keySet()) {
+          for (OAutoShardedRecordId key : data.keySet()) {
             if (testIsStopped.get())
               break;
 
@@ -280,19 +281,17 @@ public class DHTModificationTest {
   }
 
   private static class DataWriter implements Callable<Void> {
-    private final OLockManager<Long, Runnable>       lockManager;
+    private final OLockManager<OAutoShardedRecordId, Runnable> lockManager;
 
-    private final MersenneTwister                    random;
-    private final Map<Long, Record>                  data;
+    private final Map<OAutoShardedRecordId, Record>            data;
 
-    private final NavigableMap<Long, ServerInstance> ringMap;
+    private final NavigableMap<ONodeAddress, ServerInstance>   ringMap;
 
-    private final AtomicBoolean                      testIsStopped;
-    private final AtomicBoolean                      exceptionIsThrown;
+    private final AtomicBoolean                                testIsStopped;
+    private final AtomicBoolean                                exceptionIsThrown;
 
-    private DataWriter(final MersenneTwister random, Map<Long, Record> data, OLockManager<Long, Runnable> lockManager,
-        final NavigableMap<Long, ServerInstance> ringMap, AtomicBoolean testIsStopped, AtomicBoolean exceptionIsThrown) {
-      this.random = random;
+    private DataWriter(Map<OAutoShardedRecordId, Record> data, OLockManager<OAutoShardedRecordId, Runnable> lockManager,
+        final NavigableMap<ONodeAddress, ServerInstance> ringMap, AtomicBoolean testIsStopped, AtomicBoolean exceptionIsThrown) {
       this.data = data;
       this.lockManager = lockManager;
 
@@ -302,7 +301,7 @@ public class DHTModificationTest {
     }
 
     public Void call() throws Exception {
-      long id = 0;
+      OAutoShardedRecordId id;
       try {
         while (!testIsStopped.get()) {
           if (data.size() > 50000) {
@@ -311,7 +310,7 @@ public class DHTModificationTest {
           }
 
           kCycle: while (true) {
-            id = random.nextLong(Long.MAX_VALUE);
+            id = ONodeId.convertToRecordId(ONodeId.generateUniqueId(), 1);
             for (ServerInstance si : ringMap.values()) {
               lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
               try {
@@ -344,15 +343,16 @@ public class DHTModificationTest {
   }
 
   private class DataReader implements Callable<Void> {
-    private final Map<Long, Record>                  data;
-    private final OLockManager<Long, Runnable>       lockManager;
+    private final Map<OAutoShardedRecordId, Record>            data;
+    private final OLockManager<OAutoShardedRecordId, Runnable> lockManager;
 
-    private final AtomicBoolean                      testIsStopped;
-    private final AtomicBoolean                      exceptionIsThrown;
-    private final NavigableMap<Long, ServerInstance> ringMap;
+    private final AtomicBoolean                                testIsStopped;
+    private final AtomicBoolean                                exceptionIsThrown;
+    private final NavigableMap<ONodeAddress, ServerInstance>   ringMap;
 
-    public DataReader(Map<Long, Record> data, OLockManager<Long, Runnable> lockManager,
-        final NavigableMap<Long, ServerInstance> ringMap, final AtomicBoolean testIsStopped, final AtomicBoolean exceptionIsThrown) {
+    public DataReader(Map<OAutoShardedRecordId, Record> data, OLockManager<OAutoShardedRecordId, Runnable> lockManager,
+        final NavigableMap<ONodeAddress, ServerInstance> ringMap, final AtomicBoolean testIsStopped,
+        final AtomicBoolean exceptionIsThrown) {
       this.data = data;
       this.lockManager = lockManager;
 
@@ -365,7 +365,7 @@ public class DHTModificationTest {
       try {
         while (!testIsStopped.get()) {
           int i = 0;
-          for (Map.Entry<Long, Record> entry : data.entrySet()) {
+          for (Map.Entry<OAutoShardedRecordId, Record> entry : data.entrySet()) {
             if (testIsStopped.get())
               break;
             for (ServerInstance si : ringMap.values()) {

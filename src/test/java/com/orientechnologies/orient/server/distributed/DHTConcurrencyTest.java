@@ -18,6 +18,7 @@ import org.testng.annotations.Test;
 
 import com.orientechnologies.common.concur.lock.OLockManager;
 import com.orientechnologies.common.util.MersenneTwisterFast;
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
 /**
@@ -70,8 +71,8 @@ public class DHTConcurrencyTest {
 
     Thread.sleep(5000);
 
-    final NavigableMap<Long, Record> data = new ConcurrentSkipListMap<Long, Record>();
-    final OLockManager<Long, Runnable> lockManager = new OLockManager<Long, Runnable>(true, 500);
+    final NavigableMap<OAutoShardedRecordId, Record> data = new ConcurrentSkipListMap<OAutoShardedRecordId, Record>();
+    final OLockManager<OAutoShardedRecordId, Runnable> lockManager = new OLockManager<OAutoShardedRecordId, Runnable>(true, 500);
 
     final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
 
@@ -109,14 +110,14 @@ public class DHTConcurrencyTest {
     for (Future<Void> future : readerFutures)
       future.get();
 
-    ODHTNode startNode = serverInstance.findSuccessor(0);
+    ODHTNode startNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
     System.out.println("[stat] Wait till all nodes will be stable.");
 
     boolean allNodesAreStable = false;
     while (!allNodesAreStable) {
       ODHTNode node = serverInstance.findById(startNode.getSuccessor());
       allNodesAreStable = node.state().equals(ODHTNode.NodeState.PRODUCTION);
-      while (node.getNodeId() != startNode.getNodeId() && allNodesAreStable) {
+      while (!node.getNodeAddress().equals(startNode.getNodeAddress()) && allNodesAreStable) {
         allNodesAreStable = node.state().equals(ODHTNode.NodeState.PRODUCTION);
 
         node = serverInstance.findById(node.getSuccessor());
@@ -127,7 +128,7 @@ public class DHTConcurrencyTest {
     int i = 0;
 
     long start = System.currentTimeMillis();
-    for (Map.Entry<Long, Record> entry : data.entrySet()) {
+    for (Map.Entry<OAutoShardedRecordId, Record> entry : data.entrySet()) {
 
       serverInstance.get(entry.getKey());
       Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
@@ -148,13 +149,14 @@ public class DHTConcurrencyTest {
 
     int totalSize = 0;
 
-    System.out.println("[stat] Node : " + startNode.getNodeId() + " size - " + startNode.size() + " state " + startNode.state());
+    System.out.println("[stat] Node : " + startNode.getNodeAddress() + " size - " + startNode.size() + " state "
+        + startNode.state());
     totalSize += startNode.size();
 
     ODHTNode node = serverInstance.findById(startNode.getSuccessor());
 
-    while (node.getNodeId() != startNode.getNodeId()) {
-      System.out.println("[stat] Node : " + node.getNodeId() + " size - " + node.size() + " state " + node.state());
+    while (!node.getNodeAddress().equals(startNode.getNodeAddress())) {
+      System.out.println("[stat] Node : " + node.getNodeAddress() + " size - " + node.size() + " state " + node.state());
 
       totalSize += node.size();
       node = serverInstance.findById(node.getSuccessor());
@@ -164,16 +166,16 @@ public class DHTConcurrencyTest {
   }
 
   private static class DataRemover implements Callable<Void> {
-    private final OLockManager<Long, Runnable> lockManager;
-    private final Map<Long, Record>            data;
+    private final OLockManager<OAutoShardedRecordId, Runnable> lockManager;
+    private final Map<OAutoShardedRecordId, Record>            data;
 
-    private final Random                       random = new Random();
+    private final Random                                       random = new Random();
 
-    private final ServerInstance               serverInstance;
-    private final AtomicBoolean                testIsStopped;
+    private final ServerInstance                               serverInstance;
+    private final AtomicBoolean                                testIsStopped;
 
-    private DataRemover(ServerInstance serverInstance, Map<Long, Record> data, OLockManager<Long, Runnable> lockManager,
-        AtomicBoolean testIsStopped) {
+    private DataRemover(ServerInstance serverInstance, Map<OAutoShardedRecordId, Record> data,
+        OLockManager<OAutoShardedRecordId, Runnable> lockManager, AtomicBoolean testIsStopped) {
       this.data = data;
 
       this.lockManager = lockManager;
@@ -195,7 +197,7 @@ public class DHTConcurrencyTest {
             n = 5;
 
           int i = 0;
-          for (Long key : data.keySet()) {
+          for (OAutoShardedRecordId key : data.keySet()) {
             if (testIsStopped.get())
               break;
 
@@ -224,16 +226,16 @@ public class DHTConcurrencyTest {
   }
 
   private static class DataWriter implements Callable<Void> {
-    private final OLockManager<Long, Runnable> lockManager;
+    private final OLockManager<OAutoShardedRecordId, Runnable> lockManager;
 
-    private final MersenneTwisterFast          random = new MersenneTwisterFast();
-    private final Map<Long, Record>            data;
+    private final MersenneTwisterFast                          random = new MersenneTwisterFast();
+    private final Map<OAutoShardedRecordId, Record>            data;
 
-    private final ServerInstance               serverInstance;
-    private final AtomicBoolean                testIsStopped;
+    private final ServerInstance                               serverInstance;
+    private final AtomicBoolean                                testIsStopped;
 
-    private DataWriter(Map<Long, Record> data, OLockManager<Long, Runnable> lockManager, ServerInstance serverInstance,
-        AtomicBoolean testIsStopped) {
+    private DataWriter(Map<OAutoShardedRecordId, Record> data, OLockManager<OAutoShardedRecordId, Runnable> lockManager,
+        ServerInstance serverInstance, AtomicBoolean testIsStopped) {
       random.setSeed((new Random()).nextLong());
       this.data = data;
       this.lockManager = lockManager;
@@ -243,10 +245,10 @@ public class DHTConcurrencyTest {
     }
 
     public Void call() throws Exception {
-      long id = 0;
+      OAutoShardedRecordId id;
       try {
         while (!testIsStopped.get()) {
-          id = random.nextLong(Long.MAX_VALUE);
+          id = ONodeId.convertToRecordId(ONodeId.generateUniqueId(), 1);
           lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
           try {
             final Record record = serverInstance.create(id, String.valueOf(id));
@@ -264,12 +266,13 @@ public class DHTConcurrencyTest {
   }
 
   private class DataReader implements Callable<Void> {
-    private final Map<Long, Record>            data;
-    private final OLockManager<Long, Runnable> lockManager;
+    private final Map<OAutoShardedRecordId, Record>            data;
+    private final OLockManager<OAutoShardedRecordId, Runnable> lockManager;
 
-    private final ServerInstance               serverInstance;
+    private final ServerInstance                               serverInstance;
 
-    public DataReader(Map<Long, Record> data, OLockManager<Long, Runnable> lockManager, ServerInstance serverInstance) {
+    public DataReader(Map<OAutoShardedRecordId, Record> data, OLockManager<OAutoShardedRecordId, Runnable> lockManager,
+        ServerInstance serverInstance) {
       this.data = data;
       this.lockManager = lockManager;
 
@@ -280,7 +283,7 @@ public class DHTConcurrencyTest {
       try {
         while (!testIsStopped.get()) {
           int i = 0;
-          for (Map.Entry<Long, Record> entry : data.entrySet()) {
+          for (Map.Entry<OAutoShardedRecordId, Record> entry : data.entrySet()) {
             if (testIsStopped.get())
               break;
 

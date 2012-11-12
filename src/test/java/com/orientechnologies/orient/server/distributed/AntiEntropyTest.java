@@ -8,6 +8,7 @@ import java.util.Random;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastDHTNodeProxy;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -95,7 +96,7 @@ public class AntiEntropyTest {
       ServerInstance si = serverInstances.remove(random.nextInt(serverInstances.size()));
       si.shutdown();
 
-      System.out.println("Node with id " + si.getLocalNode().getNodeId() + " was removed.");
+      System.out.println("Node " + si.getLocalNode().getNodeAddress() + " was removed.");
 
       System.out.println("[stat] Local maintenance protocol check");
       Thread.sleep(30000);
@@ -138,7 +139,7 @@ public class AntiEntropyTest {
     ServerInstance si = serverInstances.remove(random.nextInt(serverInstances.size()));
     si.shutdown();
 
-    System.out.println("Node with id " + si.getLocalNode().getNodeId() + " was removed.");
+    System.out.println("Node " + si.getLocalNode().getNodeAddress() + " was removed.");
 
     System.out.println("[stat] Local maintenance protocol check");
     Thread.sleep(30000);
@@ -154,7 +155,7 @@ public class AntiEntropyTest {
     si = serverInstances.remove(random.nextInt(serverInstances.size()));
     si.shutdown();
 
-    System.out.println("Node with id " + si.getLocalNode().getNodeId() + " was removed.");
+    System.out.println("Node " + si.getLocalNode().getNodeAddress() + " was removed.");
 
     System.out.println("[stat] Local maintenance protocol check");
     Thread.sleep(30000);
@@ -162,12 +163,12 @@ public class AntiEntropyTest {
   }
 
   private void checkDataRedistribution(ServerInstance serverInstance) throws Exception {
-    final ODHTNode startNode = serverInstance.findSuccessor(0);
+    final ODHTNode startNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
 
-    ODHTNode dhtNode = serverInstance.findSuccessor(0);
+    ODHTNode dhtNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
 
     do {
-      System.out.println("[stat] Test replication of node " + dhtNode.getNodeId() + ".");
+      System.out.println("[stat] Test replication of node " + dhtNode.getNodeAddress() + ".");
 
       final OLocalDHTNode localDHTNode = getLocalNode(dhtNode);
 
@@ -177,29 +178,29 @@ public class AntiEntropyTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<Long, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<Long, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(dhtNode.getPredecessor()),
-          dhtNode.getNodeId());
+      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(dhtNode.getPredecessor().getNodeId()
+          .add(ONodeId.ONE), 1), ONodeId.convertToRecordId(dhtNode.getNodeAddress().getNodeId(), 1));
 
       while (ringIterator.hasNext()) {
         final RecordMetadata recordMetadata = ringIterator.next();
 
         while (!firstSuccessorDb.containsKey(recordMetadata.getId())) {
-          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + firstSuccessor.getNodeId());
+          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + firstSuccessor.getNodeAddress());
           Thread.sleep(1000);
         }
 
         while (!secondSuccessorDb.containsKey(recordMetadata.getId())) {
-          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + secondSuccessor.getNodeId());
+          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + secondSuccessor.getNodeAddress());
           Thread.sleep(1000);
         }
       }
 
       dhtNode = serverInstance.findById(dhtNode.getSuccessor());
-    } while (dhtNode.getNodeId() != startNode.getNodeId());
+    } while (!dhtNode.getNodeAddress().equals(startNode.getNodeAddress()));
   }
 
   private OLocalDHTNode getLocalNode(ODHTNode dhtNode) {
@@ -213,10 +214,10 @@ public class AntiEntropyTest {
   }
 
   private int gerOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
+    final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
 
-    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(localDHTNode.getPredecessor()),
-        localDHTNode.getNodeId());
+    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(localDHTNode.getPredecessor()
+        .getNodeId().add(ONodeId.ONE), 1), ONodeId.convertToRecordId(localDHTNode.getNodeAddress().getNodeId(), 1));
 
     int count = 0;
     while (ringIterator.hasNext()) {

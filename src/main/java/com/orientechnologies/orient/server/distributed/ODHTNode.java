@@ -1,5 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+
 /**
  * @author Andrey Lomakin
  * @since 17.08.12
@@ -9,55 +11,55 @@ public interface ODHTNode {
     JOIN, PRODUCTION
   }
 
-  public long getNodeId();
+  public ONodeAddress getNodeAddress();
 
-  public long getSuccessor();
+  public ONodeAddress getSuccessor();
 
-  public long[] getSuccessors();
+  public ONodeAddress[] getSuccessors();
 
-  public Long getPredecessor();
+  public ONodeAddress getPredecessor();
 
   public void requestStabilization();
 
-  public long notifyParent(long nodeId);
+  public ONodeAddress notifyParent(ONodeAddress nodeId);
 
-  public boolean joinDHT(long nodeId);
+  public boolean joinDHT(ONodeAddress nodeId);
 
-  public long findSuccessor(long id);
+  public ONodeAddress findSuccessor(ONodeId id);
 
   public NodeState state();
 
   public Record createRecord(String data);
 
-  public Record createRecord(long id, String data);
+  public Record createRecord(OAutoShardedRecordId id, String data);
 
-  public Record getRecord(long id);
+  public Record getRecord(OAutoShardedRecordId id);
 
-  public void updateRecord(long id, Record record);
+  public void updateRecord(OAutoShardedRecordId id, Record record);
 
-  public void deleteRecord(long id, ODHTRecordVersion version);
+  public void deleteRecord(OAutoShardedRecordId id, ODHTRecordVersion version);
 
   public void updateReplica(Record replica, boolean async);
 
   public void updateReplicas(Record[] replicas, boolean async);
 
-  public Record getRecordFromNode(long id, boolean replicate);
+  public Record getRecordFromNode(OAutoShardedRecordId id, boolean replicate);
 
-  public Record[] getRecordsFromNode(long[] ids, boolean replicate);
+  public Record[] getRecordsFromNode(OAutoShardedRecordId[] ids, boolean replicate);
 
-  public Record createRecordInNode(long id, String data);
+  public Record createRecordInNode(OAutoShardedRecordId id, String data);
 
-  public void updateRecordInNode(long id, Record record);
+  public void updateRecordInNode(OAutoShardedRecordId id, Record record);
 
-  public void deleteRecordFromNode(long id, ODHTRecordVersion version);
+  public void deleteRecordFromNode(OAutoShardedRecordId id, ODHTRecordVersion version);
 
-  public RecordMetadata getRecordMetadataFromNode(long id);
+  public RecordMetadata getRecordMetadataFromNode(OAutoShardedRecordId id);
 
-  public RecordMetadata[] getRecordsForIntervalFromNode(long startId, long endId);
+  public RecordMetadata[] getRecordsForIntervalFromNode(OAutoShardedRecordId startId, OAutoShardedRecordId endId);
 
   public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node);
 
   public int size();
 
-  public long[] findMissedRecords(RecordMetadata[] recordMetadatas);
+  public OAutoShardedRecordId[] findMissedRecords(RecordMetadata[] recordMetadatas);
 }

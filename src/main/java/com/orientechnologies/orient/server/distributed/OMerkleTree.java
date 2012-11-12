@@ -5,46 +5,49 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 13.09.12
  */
 public class OMerkleTree {
-  private final OMerkleTreeNode[]          roots;
-  private final NavigableMap<Long, Record> db;
+  private final int                                        clusterId;
+  private final OMerkleTreeNode[]                          roots;
+  private final NavigableMap<OAutoShardedRecordId, Record> db;
 
-  public OMerkleTree(final NavigableMap<Long, Record> db) {
+  public OMerkleTree(final NavigableMap<OAutoShardedRecordId, Record> db, final int clusterId) {
     this.db = db;
+    this.clusterId = clusterId;
 
     final OMerkleTreeNode[] newRoots = new OMerkleTreeNode[64];
 
     for (int i = 0; i < 64; i++)
-      newRoots[i] = new OMerkleTreeNode(db);
+      newRoots[i] = new OMerkleTreeNode(db, clusterId);
 
     this.roots = newRoots;
   }
 
-  public Record addData(final long id, final String data) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, id);
-    final long startKey = OMerkleTreeNode.startNodeId(1, childIndex, 0);
+  public Record addData(final OAutoShardedRecordId id, final String data) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ONodeId.valueOf(id));
+    final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
 
-    return node.addRecord(1, startKey, id, data);
+    return node.addRecord(1, offset, id, data);
   }
 
-  public void deleteData(final long id, final ODHTRecordVersion version) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, id);
-    final long startId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
+  public void deleteData(final OAutoShardedRecordId id, final ODHTRecordVersion version) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ONodeId.valueOf(id));
+    final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
-    node.deleteRecord(1, startId, id, version);
+    node.deleteRecord(1, offset, id, version);
   }
 
-  public void deleteData(final long id, final ODHTRecordVersion version, boolean softDelete) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, id);
-    final long startId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
+  public void deleteData(final OAutoShardedRecordId id, final ODHTRecordVersion version, boolean softDelete) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ONodeId.valueOf(id));
+    final ONodeId startId = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
     if (softDelete)
@@ -53,38 +56,38 @@ public class OMerkleTree {
       node.cleanOutRecord(1, startId, id, version);
   }
 
-  public void updateData(final long id, final ODHTRecordVersion version, final String data) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, id);
-    final long startId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
+  public void updateData(final OAutoShardedRecordId id, final ODHTRecordVersion version, final String data) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ONodeId.valueOf(id));
+    final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
-    node.updateRecord(1, startId, id, version, data);
+    node.updateRecord(1, offset, id, version, data);
   }
 
-  public void updateReplica(final long id, final Record replica) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, id);
-    final long startId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
+  public void updateReplica(final OAutoShardedRecordId id, final Record replica) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ONodeId.valueOf(id));
+    final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
-    node.updateReplica(1, startId, id, replica);
+    node.updateReplica(1, offset, id, replica);
   }
 
   public ODetachedMerkleTreeNode getRootNode(int index) {
-    long startId = OMerkleTreeNode.startNodeId(1, index, 0);
-    long endId = OMerkleTreeNode.startNodeId(1, index + 1, 0) - 1;
+    ONodeId startId = OMerkleTreeNode.startNodeId(1, index, ONodeId.valueOf(0));
+    ONodeId endId = OMerkleTreeNode.startNodeId(1, index + 1, ONodeId.valueOf(0)).subtract(ONodeId.valueOf(1));
 
     return convertToDetachedNode(new int[] { index }, startId, endId, roots[index]);
   }
 
-  public List<ODetachedMerkleTreeNode> getRootNodesForInterval(final long startId, final long endId) {
+  public List<ODetachedMerkleTreeNode> getRootNodesForInterval(final ONodeId startId, final ONodeId endId) {
     final int startChildIndex = OMerkleTreeNode.childIndex(0, startId);
     final int endChildIndex = OMerkleTreeNode.childIndex(0, endId);
 
     final List<ODetachedMerkleTreeNode> detachedRoots = new ArrayList<ODetachedMerkleTreeNode>();
 
     for (int childIndex = startChildIndex; childIndex <= endChildIndex; childIndex++) {
-      final long startRootId = OMerkleTreeNode.startNodeId(1, childIndex, 0);
-      final long endRootId = OMerkleTreeNode.startNodeId(1, childIndex + 1, 0) - 1;
+      final ONodeId startRootId = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
+      final ONodeId endRootId = OMerkleTreeNode.startNodeId(1, childIndex + 1, ONodeId.valueOf(0)).subtract(ONodeId.valueOf(1));
 
       detachedRoots.add(convertToDetachedNode(new int[] { childIndex }, startRootId, endRootId, roots[childIndex]));
     }
@@ -109,8 +112,9 @@ public class OMerkleTree {
     if (parentNode.isLeaf())
       return null;
 
-    long startId = OMerkleTreeNode.startNodeId(parent.getLevel() + 1, index, parent.getStartId());
-    long endId = OMerkleTreeNode.startNodeId(parent.getLevel() + +1, index + 1, parent.getStartId()) - 1;
+    ONodeId startId = OMerkleTreeNode.startNodeId(parent.getLevel() + 1, index, parent.getStartId());
+    ONodeId endId = OMerkleTreeNode.startNodeId(parent.getLevel() + +1, index + 1, parent.getStartId())
+        .subtract(ONodeId.valueOf(1));
 
     final int[] childPath = new int[parent.getLevel() + 1];
 
@@ -125,7 +129,7 @@ public class OMerkleTree {
     final int[] parentPath = detachedNode.getPath();
 
     OMerkleTreeNode node = roots[parentPath[0]];
-    long offset = OMerkleTreeNode.startNodeId(1, parentPath[0], 0);
+    ONodeId offset = OMerkleTreeNode.startNodeId(1, parentPath[0], ONodeId.valueOf(0));
 
     node.acquireReadLock();
     try {
@@ -157,18 +161,15 @@ public class OMerkleTree {
     return null;
   }
 
-  private ODetachedMerkleTreeNode convertToDetachedNode(int path[], long startId, long endId, OMerkleTreeNode node) {
+  private ODetachedMerkleTreeNode convertToDetachedNode(int path[], ONodeId startId, ONodeId endId, OMerkleTreeNode node) {
     ODetachedMerkleTreeNode result;
     node.acquireReadLock();
     try {
       if (node.isLeaf()) {
         List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>();
-        final Iterator<Record> recordIterator;
-
-        if (endId > startId)
-          recordIterator = db.subMap(startId, true, endId, false).values().iterator();
-        else
-          recordIterator = db.tailMap(startId, true).values().iterator();
+        final Iterator<Record> recordIterator = db
+            .subMap(ONodeId.convertToRecordId(startId, clusterId), true, ONodeId.convertToRecordId(endId, clusterId), false)
+            .values().iterator();
 
         while (recordIterator.hasNext()) {
           final Record record = recordIterator.next();

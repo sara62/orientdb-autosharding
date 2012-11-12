@@ -5,6 +5,7 @@ import java.util.NavigableMap;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastDHTNodeProxy;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -59,12 +60,12 @@ public class GlobalMaintenanceTest {
   }
 
   private void checkDataRedistribution(ServerInstance serverInstance) throws Exception {
-    final ODHTNode startNode = serverInstance.findSuccessor(0);
+    final ODHTNode startNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
 
-    ODHTNode dhtNode = serverInstance.findSuccessor(0);
+    ODHTNode dhtNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
 
     do {
-      System.out.println("[stat] Test replication of node " + dhtNode.getNodeId() + ".");
+      System.out.println("[stat] Test replication of node " + dhtNode.getNodeAddress() + ".");
 
       final OLocalDHTNode localDHTNode = getLocalNode(dhtNode);
 
@@ -74,12 +75,12 @@ public class GlobalMaintenanceTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<Long, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<Long, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(dhtNode.getPredecessor()),
-          dhtNode.getNodeId());
+      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(dhtNode.getPredecessor().getNodeId()
+          .add(ONodeId.ONE), 1), ONodeId.convertToRecordId(dhtNode.getNodeAddress().getNodeId(), 1));
 
       while (ringIterator.hasNext()) {
         final RecordMetadata recordMetadata = ringIterator.next();
@@ -89,16 +90,16 @@ public class GlobalMaintenanceTest {
       }
 
       dhtNode = serverInstance.findById(dhtNode.getSuccessor());
-    } while (dhtNode.getNodeId() != startNode.getNodeId());
+    } while (!dhtNode.getNodeAddress().equals(startNode.getNodeAddress()));
   }
 
   private void checkDataRedistributionWhenNewNodeWasAdded(ServerInstance serverInstance) throws Exception {
-    final ODHTNode startNode = serverInstance.findSuccessor(0);
+    final ODHTNode startNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
 
-    ODHTNode dhtNode = serverInstance.findSuccessor(0);
+    ODHTNode dhtNode = serverInstance.findSuccessor(ONodeId.valueOf(0));
 
     do {
-      System.out.println("[stat] Test replication of node " + dhtNode.getNodeId() + ".");
+      System.out.println("[stat] Test replication of node " + dhtNode.getNodeAddress() + ".");
 
       final OLocalDHTNode localDHTNode = getLocalNode(dhtNode);
 
@@ -111,13 +112,13 @@ public class GlobalMaintenanceTest {
       final ODHTNode thirdSuccessor = serverInstance.findById(secondSuccessor.getSuccessor());
       final OLocalDHTNode localThirdSuccessor = getLocalNode(thirdSuccessor);
 
-      final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<Long, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<Long, Record> secondSuccessorDb = localSecondSuccessor.getDb();
-      final NavigableMap<Long, Record> thirdSuccessorDb = localThirdSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<OAutoShardedRecordId, Record> thirdSuccessorDb = localThirdSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(dhtNode.getPredecessor()),
-          dhtNode.getNodeId());
+      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(dhtNode.getPredecessor().getNodeId()
+          .add(ONodeId.ONE), 1), ONodeId.convertToRecordId(dhtNode.getNodeAddress().getNodeId(), 1));
 
       while (ringIterator.hasNext()) {
         final RecordMetadata recordMetadata = ringIterator.next();
@@ -129,7 +130,7 @@ public class GlobalMaintenanceTest {
       }
 
       dhtNode = serverInstance.findById(dhtNode.getSuccessor());
-    } while (dhtNode.getNodeId() != startNode.getNodeId());
+    } while (!dhtNode.getNodeAddress().equals(startNode.getNodeAddress()));
   }
 
   private OLocalDHTNode getLocalNode(ODHTNode dhtNode) {
@@ -143,10 +144,10 @@ public class GlobalMaintenanceTest {
   }
 
   private int getOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<Long, Record> nodeDb = localDHTNode.getDb();
+    final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
 
-    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ODHTRingInterval.increment(localDHTNode.getPredecessor()),
-        localDHTNode.getNodeId());
+    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(localDHTNode.getPredecessor()
+        .getNodeId().add(ONodeId.ONE), 1), ONodeId.convertToRecordId(localDHTNode.getNodeAddress().getNodeId(), 1));
 
     int count = 0;
     while (ringIterator.hasNext()) {

@@ -5,24 +5,25 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 01.10.12
  */
 public class RecordMetadata implements Externalizable {
-  private long              id;
-  private ODHTRecordVersion version;
+  private OAutoShardedRecordId id;
+  private ODHTRecordVersion    version;
 
   public RecordMetadata() {
   }
 
-  public RecordMetadata(long id, ODHTRecordVersion version) {
+  public RecordMetadata(OAutoShardedRecordId id, ODHTRecordVersion version) {
     this.id = id;
     this.version = version;
   }
 
-  public long getId() {
+  public OAutoShardedRecordId getId() {
     return id;
   }
 
@@ -37,11 +38,11 @@ public class RecordMetadata implements Externalizable {
     if (o == null || getClass() != o.getClass())
       return false;
 
-    RecordMetadata metadata = (RecordMetadata) o;
+    RecordMetadata that = (RecordMetadata) o;
 
-    if (id != metadata.id)
+    if (id != null ? !id.equals(that.id) : that.id != null)
       return false;
-    if (!version.equals(metadata.version))
+    if (version != null ? !version.equals(that.version) : that.version != null)
       return false;
 
     return true;
@@ -49,8 +50,8 @@ public class RecordMetadata implements Externalizable {
 
   @Override
   public int hashCode() {
-    int result = (int) (id ^ (id >>> 32));
-    result = 31 * result + version.hashCode();
+    int result = id != null ? id.hashCode() : 0;
+    result = 31 * result + (version != null ? version.hashCode() : 0);
     return result;
   }
 
@@ -61,13 +62,13 @@ public class RecordMetadata implements Externalizable {
 
   @Override
   public void writeExternal(ObjectOutput out) throws IOException {
-    out.writeLong(id);
+    out.writeObject(id);
     out.writeObject(version);
   }
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    id = in.readLong();
+    id = (OAutoShardedRecordId) in.readObject();
     version = (ODHTRecordVersion) in.readObject();
   }
 }

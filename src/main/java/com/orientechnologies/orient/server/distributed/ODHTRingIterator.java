@@ -3,32 +3,33 @@ package com.orientechnologies.orient.server.distributed;
 import java.util.Iterator;
 import java.util.NavigableMap;
 
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 12.10.12
  */
 public class ODHTRingIterator implements Iterator<RecordMetadata> {
-  private final NavigableMap<Long, Record> db;
-  private final long                       start;
-  private final long                       end;
+  private final NavigableMap<OAutoShardedRecordId, Record> db;
+  private final OAutoShardedRecordId                       start;
+  private final OAutoShardedRecordId                       end;
 
-  private Iterator<Record>                 currentIterator;
+  private Iterator<Record>                                 currentIterator;
 
-  private long                             currentIntervalStart;
-  private long                             currentIntervalEnd;
+  private OAutoShardedRecordId                             currentIntervalStart;
+  private OAutoShardedRecordId                             currentIntervalEnd;
 
-  public ODHTRingIterator(NavigableMap<Long, Record> db, long start, long end) {
+  public ODHTRingIterator(NavigableMap<OAutoShardedRecordId, Record> db, OAutoShardedRecordId start, OAutoShardedRecordId end) {
     this.db = db;
     this.start = start;
     this.end = end;
 
-    if (end > start) {
+    if (end.compareTo(start) > 0) {
       currentIntervalStart = start;
       currentIntervalEnd = end;
     } else {
       currentIntervalStart = start;
-      currentIntervalEnd = Long.MAX_VALUE;
+      currentIntervalEnd = ONodeId.convertToRecordId(ONodeId.MAX_VALUE, start.clusterId);
     }
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
@@ -42,7 +43,7 @@ public class ODHTRingIterator implements Iterator<RecordMetadata> {
     if (currentIterator.hasNext())
       return true;
 
-    currentIntervalStart = 0;
+    currentIntervalStart = ONodeId.convertToRecordId(ONodeId.MIN_VALUE, start.clusterId);
     currentIntervalEnd = end;
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();

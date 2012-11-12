@@ -2,11 +2,11 @@ package com.orientechnologies.orient.server.distributed;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
@@ -18,15 +18,15 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicLongArray;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.orientechnologies.common.concur.lock.OLockManager;
-import com.orientechnologies.common.util.MersenneTwister;
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
+import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
 
 /**
@@ -34,67 +34,62 @@ import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
  * @since 17.08.12
  */
 public final class OLocalDHTNode implements ODHTNode {
-  private static final int                   MAX_RETRIES           = 10;
-  private static final int                   MAX_RECORDS_TO_RETURN = 64;
+  private static final int                                   MAX_RETRIES           = 10;
+  private static final int                                   MAX_RECORDS_TO_RETURN = 64;
 
-  private final MersenneTwister              random                = new MersenneTwister();
+  private final ONodeAddress                                 nodeAddress;
 
-  private final long                         nodeId;
+  private final AtomicReferenceArray<ONodeAddress>           fingerPoints          = new AtomicReferenceArray<ONodeAddress>(
+                                                                                       ONodeId.NODE_SIZE_BITS - 1);
+  private AtomicReference<ONodeAddress>                      predecessor           = new AtomicReference<ONodeAddress>();
 
-  private final AtomicLongArray              fingerPoints          = new AtomicLongArray(63);
-  private AtomicLong                         predecessor           = new AtomicLong(-1);
+  private final NavigableMap<OAutoShardedRecordId, Record>   db                    = new ConcurrentSkipListMap<OAutoShardedRecordId, Record>();
 
-  private final NavigableMap<Long, Record>   db                    = new ConcurrentSkipListMap<Long, Record>();
+  private volatile ODHTNodeLookup                            nodeLookup;
 
-  private volatile ODHTNodeLookup            nodeLookup;
+  private int                                                nextIndex             = 0;
+  private final Object                                       fingersLock           = new Object();
 
-  private int                                nextIndex             = 0;
-  private final Object                       fingersLock           = new Object();
+  private final OLockManager<OAutoShardedRecordId, Runnable> lockManager           = new OLockManager<OAutoShardedRecordId, Runnable>(
+                                                                                       true, 500);
 
-  private final OLockManager<Long, Runnable> lockManager           = new OLockManager<Long, Runnable>(true, 500);
-  private volatile long[]                    successorsList        = new long[0];
+  private volatile ONodeAddress[]                            successorsList        = new ONodeAddress[0];
 
-  private final ScheduledExecutorService     gmExecutorService;
-  private final ScheduledExecutorService     lmExecutorService;
-  private final ExecutorService              readRepairService;
+  private final ScheduledExecutorService                     gmExecutorService;
+  private final ScheduledExecutorService                     lmExecutorService;
+  private final ExecutorService                              readRepairService;
 
-  private volatile NodeState                 state;
+  private volatile NodeState                                 state;
 
-  private final OMerkleTree                  merkleTree            = new OMerkleTree(db);
+  private final OMerkleTree                                  merkleTree            = new OMerkleTree(db, 1);
 
-  private final int                          replicaCount;
-  private final int                          syncReplicaCount;
+  private final int                                          replicaCount;
+  private final int                                          syncReplicaCount;
 
-  private final boolean                      useReadRepair;
-  private final boolean                      useAntiEntropy;
-  private final boolean                      useGlobalMaintainence;
+  private final boolean                                      useReadRepair;
+  private final boolean                                      useAntiEntropy;
+  private final boolean                                      useGlobalMaintainence;
 
-  public OLocalDHTNode(long nodeId, int replicaCount, int syncReplicaCount, boolean useReadRepair, boolean useAntiEntropy,
-      boolean useGlobalMaintainence) {
+  public OLocalDHTNode(ONodeAddress nodeAddress, int replicaCount, int syncReplicaCount, boolean useReadRepair,
+      boolean useAntiEntropy, boolean useGlobalMaintainence) {
     this.useReadRepair = useReadRepair;
     this.useAntiEntropy = useAntiEntropy;
     this.useGlobalMaintainence = useGlobalMaintainence;
 
-    this.nodeId = nodeId;
-    for (int i = 0; i < fingerPoints.length(); i++)
-      fingerPoints.set(i, -1);
+    this.nodeAddress = nodeAddress;
 
     this.replicaCount = replicaCount;
     this.syncReplicaCount = syncReplicaCount;
 
-    gmExecutorService = Executors.newSingleThreadScheduledExecutor(new GlobalMaintenanceProtocolThreadFactory(nodeId));
-    lmExecutorService = Executors.newSingleThreadScheduledExecutor(new LocalMaintenanceProtocolThreadFactory(nodeId));
+    gmExecutorService = Executors.newSingleThreadScheduledExecutor(new GlobalMaintenanceProtocolThreadFactory(nodeAddress));
+    lmExecutorService = Executors.newSingleThreadScheduledExecutor(new LocalMaintenanceProtocolThreadFactory(nodeAddress));
 
     readRepairService = new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() / 2, 60L, TimeUnit.SECONDS,
-        new ArrayBlockingQueue<Runnable>(256), new ReadRepairThreadFactory(nodeId), new ThreadPoolExecutor.CallerRunsPolicy());
+        new ArrayBlockingQueue<Runnable>(256), new ReadRepairThreadFactory(nodeAddress), new ThreadPoolExecutor.CallerRunsPolicy());
   }
 
-  public NavigableMap<Long, Record> getDb() {
+  public NavigableMap<OAutoShardedRecordId, Record> getDb() {
     return db;
-  }
-
-  public ODHTNodeLookup getNodeLookup() {
-    return nodeLookup;
   }
 
   public void setNodeLookup(ODHTNodeLookup nodeLookup) {
@@ -105,8 +100,7 @@ public final class OLocalDHTNode implements ODHTNode {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
     logger.info("New ring creation was started");
 
-    predecessor.set(-1);
-    fingerPoints.set(0, nodeId);
+    fingerPoints.set(0, nodeAddress);
     state = NodeState.PRODUCTION;
 
     if (useGlobalMaintainence)
@@ -115,24 +109,22 @@ public final class OLocalDHTNode implements ODHTNode {
     if (useAntiEntropy)
       lmExecutorService.scheduleWithFixedDelay(new LocalMaintenanceProtocol(), 1, 1, TimeUnit.SECONDS);
 
-    random.setSeed((new Random()).nextLong());
-
     logger.info("New ring was created");
   }
 
-  public long getNodeId() {
-    return nodeId;
+  public ONodeAddress getNodeAddress() {
+    return nodeAddress;
   }
 
-  public boolean joinDHT(long nodeId) {
+  public boolean joinDHT(ONodeAddress nodeAddress) {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
     try {
-      logger.info("Join is started using node with id {}", nodeId);
+      logger.info("Join is started using node with address {}", nodeAddress);
 
-      final ODHTNode node = nodeLookup.findById(nodeId);
+      final ODHTNode node = nodeLookup.findById(nodeAddress);
       if (node == null) {
-        logger.error("Node with id {} is absent.", nodeId);
+        logger.error("Node with id {} is absent.", nodeAddress);
         return false;
       }
 
@@ -143,39 +135,35 @@ public final class OLocalDHTNode implements ODHTNode {
           lmExecutorService.scheduleWithFixedDelay(new LocalMaintenanceProtocol(), 1, 1, TimeUnit.SECONDS);
       }
 
-      random.setSeed((new Random()).nextLong());
-
       state = NodeState.JOIN;
 
-      predecessor.set(-1);
       int retryCount = 0;
-
       while (true) {
         try {
-          logger.info("Wait till node {} will be ready to process requests.", nodeId);
+          logger.info("Wait till node {} will be ready to process requests.", nodeAddress);
           while (node.state() == null)
             Thread.sleep(100);
-          logger.info("Node {} is ready to process requests", nodeId);
+          logger.info("Node {} is ready to process requests", nodeAddress);
 
-          final long successorId = node.findSuccessor(this.nodeId);
-          fingerPoints.set(0, successorId);
+          final ONodeAddress successorAddress = node.findSuccessor(this.nodeAddress.getNodeId());
+          fingerPoints.set(0, successorAddress);
 
-          ODHTNode successor = nodeLookup.findById(successorId);
+          ODHTNode successor = nodeLookup.findById(successorAddress);
           if (successor == null) {
             if (retryCount < MAX_RETRIES) {
-              logger.debug("Node {} is offline, retry {}-d time.", successorId, retryCount);
+              logger.debug("Node {} is offline, retry {}-d time.", successorAddress, retryCount);
               retryCount++;
               Thread.sleep(100);
             } else {
-              logger.error("Node " + successorId + " is offline, max retries is reached");
+              logger.error("Node " + successorAddress + " is offline, max retries is reached");
               return false;
             }
 
             continue;
           }
 
-          final long prevPredecessor = successor.notifyParent(this.nodeId);
-          if (prevPredecessor > -1) {
+          final ONodeAddress prevPredecessor = successor.notifyParent(this.nodeAddress);
+          if (prevPredecessor != null) {
             final ODHTNode prevPredecessorNode = nodeLookup.findById(prevPredecessor);
             if (prevPredecessorNode != null)
               try {
@@ -189,8 +177,8 @@ public final class OLocalDHTNode implements ODHTNode {
 
           return true;
         } catch (ONodeOfflineException ooe) {
-          if (ooe.getNodeId() == nodeId) {
-            logger.error("Node with id " + nodeId + " is absent.");
+          if (ooe.getNodeId().equals(nodeAddress.getNodeId())) {
+            logger.error("Node with address " + nodeAddress + " is absent.");
             return false;
           }
 
@@ -211,32 +199,33 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public long findSuccessor(long key) {
+  public ONodeAddress findSuccessor(ONodeId key) {
     Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".findSuccessor");
 
     int retryCount = 0;
     while (true) {
       logger.debug("Successor request for key {}", key);
-      final long successorId = fingerPoints.get(0);
+      final ONodeAddress successorAddress = fingerPoints.get(0);
 
-      ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.increment(nodeId), successorId);
+      ODHTRingInterval ringInterval = new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), successorAddress.getNodeId());
 
       if (ringInterval.insideInterval(key)) {
-        if (!isNodeOffline(successorId)) {
-          logger.debug("Key {} inside interval {} - {} ", new Object[] { key, nodeId, successorId });
-          return successorId;
+        if (!isNodeOffline(successorAddress)) {
+          logger.debug("Key {} inside interval {} - {} ",
+              new Object[] { key, nodeAddress.getNodeId(), successorAddress.getNodeId() });
+          return successorAddress;
         } else {
-          final long[] successors = successorsList;
+          final ONodeAddress[] successors = successorsList;
 
           // we are alone return itself.
           if (successors.length == 0)
-            return nodeId;
+            return nodeAddress;
 
-          for (final long nthSuccessorId : successors) {
-            ringInterval = new ODHTRingInterval(ODHTRingInterval.increment(nodeId), nthSuccessorId);
+          for (final ONodeAddress nthSuccessorId : successors) {
+            ringInterval = new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), nthSuccessorId.getNodeId());
             if (ringInterval.insideInterval(key)) {
               if (!isNodeOffline(nthSuccessorId)) {
-                logger.debug("Key {} inside interval {} - {} ", new Object[] { key, nodeId, nthSuccessorId });
+                logger.debug("Key {} inside interval {} - {} ", new Object[] { key, nodeAddress, nthSuccessorId });
                 return nthSuccessorId;
               }
             }
@@ -246,23 +235,23 @@ public final class OLocalDHTNode implements ODHTNode {
 
       retryCount++;
       if (retryCount > MAX_RETRIES) {
-        throw new ONodeOfflineException("Successor can not be found using node " + nodeId + " , id to process " + key
+        throw new ONodeOfflineException("Successor can not be found using node " + nodeAddress + " , id to process " + key
             + ", successor " + getSuccessor() + ", auxiliary successors " + Arrays.toString(successorsList) + ", finger points "
-            + fingerPoints, null, successorId);
+            + fingerPoints, null, successorAddress.getNodeId());
       }
 
-      long precedingNodeId = findClosestPrecedingFinger(key);
+      ONodeAddress precedingNodeId = findClosestPrecedingFinger(key);
 
       logger.debug("Closest preceding node for key {} is {}", key, precedingNodeId);
 
-      if (precedingNodeId == nodeId) {
+      if (precedingNodeId.equals(nodeAddress)) {
         logger.error("Successor was changed, retry");
         continue;
       }
 
       ODHTNode precedingNode = nodeLookup.findById(precedingNodeId);
       if (precedingNode == null) {
-        if (precedingNodeId != getSuccessor())
+        if (!precedingNodeId.equals(getSuccessor()))
           clearFingerPoint(precedingNodeId);
         else
           requestStabilization();
@@ -271,11 +260,11 @@ public final class OLocalDHTNode implements ODHTNode {
       }
 
       try {
-        final long successorResult = precedingNode.findSuccessor(key);
+        final ONodeAddress successorResult = precedingNode.findSuccessor(key);
         logger.debug("Successor for key {} is {}", key, successorResult);
         return successorResult;
       } catch (ONodeOfflineException e) {
-        if (precedingNodeId != getSuccessor())
+        if (!precedingNodeId.equals(getSuccessor()))
           clearFingerPoint(precedingNodeId);
         else
           requestStabilization();
@@ -283,17 +272,17 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private boolean isNodeOffline(long nodeId) {
-    return nodeLookup.findById(nodeId) == null;
+  private boolean isNodeOffline(ONodeAddress nodeAddress) {
+    return nodeLookup.findById(nodeAddress) == null;
   }
 
-  private void clearFingerPoint(long nodeId) {
+  private void clearFingerPoint(ONodeAddress nodeId) {
     synchronized (fingersLock) {
       fingerPointCycle: while (true) {
         for (int i = 1; i < fingerPoints.length(); i++) {
-          final long finger = fingerPoints.get(i);
-          if (finger > -1 && nodeId == finger)
-            if (!fingerPoints.compareAndSet(i, finger, -1))
+          final ONodeAddress finger = fingerPoints.get(i);
+          if (finger != null && nodeId.equals(finger))
+            if (!fingerPoints.compareAndSet(i, finger, null))
               continue fingerPointCycle;
         }
         return;
@@ -301,13 +290,13 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public long[] getSuccessors() {
-    final long successorId = getSuccessor();
-    if (successorId == nodeId)
-      return new long[0];
+  public ONodeAddress[] getSuccessors() {
+    final ONodeAddress successorId = getSuccessor();
+    if (successorId.equals(nodeAddress))
+      return new ONodeAddress[0];
 
-    final long[] localSuccessors = successorsList;
-    long[] result = new long[localSuccessors.length + 1];
+    final ONodeAddress[] localSuccessors = successorsList;
+    ONodeAddress[] result = new ONodeAddress[localSuccessors.length + 1];
     result[0] = successorId;
 
     if (localSuccessors.length > 0)
@@ -316,23 +305,23 @@ public final class OLocalDHTNode implements ODHTNode {
     return result;
   }
 
-  private long findClosestPrecedingFinger(long key) {
-    final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.increment(nodeId), ODHTRingInterval.decrement(key));
+  private ONodeAddress findClosestPrecedingFinger(ONodeId key) {
+    final ODHTRingInterval ringInterval = new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), key.subtract(ONodeId.ONE));
     for (int i = fingerPoints.length() - 1; i >= 0; i--) {
-      final long fingerPoint = fingerPoints.get(i);
-      if (fingerPoint > -1 && ringInterval.insideInterval(fingerPoint)) {
+      final ONodeAddress fingerPoint = fingerPoints.get(i);
+      if (fingerPoint != null && ringInterval.insideInterval(fingerPoint.getNodeId())) {
         return fingerPoint;
       }
     }
 
-    return this.nodeId;
+    return this.nodeAddress;
   }
 
-  public long getSuccessor() {
+  public ONodeAddress getSuccessor() {
     return fingerPoints.get(0);
   }
 
-  public Long getPredecessor() {
+  public ONodeAddress getPredecessor() {
     return predecessor.get();
   }
 
@@ -343,10 +332,10 @@ public final class OLocalDHTNode implements ODHTNode {
 
     while (true) {
       try {
-        final long id = random.nextLong(Long.MAX_VALUE);
+        final ONodeId id = ONodeId.generateUniqueId();
         retryCount++;
 
-        return createRecord(id, data);
+        return createRecord(ONodeId.convertToRecordId(id, 1), data);
       } catch (ORecordDuplicatedException e) {
         // ignore
         if (retryCount >= MAX_RETRIES)
@@ -355,7 +344,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public Record createRecord(long recordId, String data) {
+  public Record createRecord(OAutoShardedRecordId recordId, String data) {
     Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".createRecord");
 
     waitTillJoin();
@@ -367,17 +356,17 @@ public final class OLocalDHTNode implements ODHTNode {
       if (retryCount > 5)
         System.out.println("Test");
 
-      final long successorId = findSuccessor(recordId);
+      final ONodeAddress successorAddress = findSuccessor(ONodeId.valueOf(recordId));
 
-      logger.debug("Successor for record {} is {}", recordId, successorId);
+      logger.debug("Successor for record {} is {}", recordId, successorAddress);
       retryCount++;
 
-      if (successorId == nodeId) {
+      if (successorAddress.equals(nodeAddress)) {
         return createRecordInNode(recordId, data);
       } else {
-        final RemoteNodeCallResult<Record> result = remoteNodeCreate(recordId, data, retryCount, successorId);
+        final RemoteNodeCallResult<Record> result = remoteNodeCreate(recordId, data, retryCount, successorAddress);
         if (result.repeat) {
-          logger.error("Successor {} for record {} is offline, retry.", successorId, recordId);
+          logger.error("Successor {} for record {} is offline, retry.", successorAddress, recordId);
           requestStabilization();
           continue;
         }
@@ -387,7 +376,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public Record getRecord(long recordId) {
+  public Record getRecord(OAutoShardedRecordId recordId) {
     Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".getRecord");
 
     waitTillJoin();
@@ -397,14 +386,14 @@ public final class OLocalDHTNode implements ODHTNode {
       retryCount++;
 
       logger.debug("Looking for successor for node with id {}", recordId);
-      final long successorId = findSuccessor(recordId);
-      logger.debug("Successor for record {} is {}", recordId, successorId);
+      final ONodeAddress successorAddress = findSuccessor(ONodeId.valueOf(recordId));
+      logger.debug("Successor for record {} is {}", recordId, successorAddress);
 
-      if (successorId != nodeId) {
-        final RemoteNodeCallResult<Record> remoteNodeGetResult = remoteNodeGet(recordId, successorId, retryCount);
+      if (successorAddress != nodeAddress) {
+        final RemoteNodeCallResult<Record> remoteNodeGetResult = remoteNodeGet(recordId, successorAddress, retryCount);
 
         if (remoteNodeGetResult.repeat) {
-          logger.error("Successor {} for record {} is offline, retry.", successorId, recordId);
+          logger.error("Successor {} for record {} is offline, retry.", successorAddress, recordId);
 
           requestStabilization();
           continue;
@@ -418,7 +407,7 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   @Override
-  public Record createRecordInNode(long recordId, String data) {
+  public Record createRecordInNode(OAutoShardedRecordId recordId, String data) {
     waitTillJoin();
 
     final Record result = addData(recordId, data);
@@ -428,7 +417,7 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   @Override
-  public void updateRecordInNode(long recordId, Record record) {
+  public void updateRecordInNode(OAutoShardedRecordId recordId, Record record) {
     synchronizeReplicas(recordId, syncReplicaCount);
 
     updateData(recordId, record);
@@ -438,7 +427,7 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   @Override
-  public void deleteRecordFromNode(long recordId, ODHTRecordVersion version) {
+  public void deleteRecordFromNode(OAutoShardedRecordId recordId, ODHTRecordVersion version) {
     synchronizeReplicas(recordId, syncReplicaCount);
 
     removeData(recordId, version);
@@ -447,7 +436,7 @@ public final class OLocalDHTNode implements ODHTNode {
     startReadRepair(recordId);
   }
 
-  private void synchronizeReplicas(long recordId, int syncReplicaCount) {
+  private void synchronizeReplicas(OAutoShardedRecordId recordId, int syncReplicaCount) {
     if (syncReplicaCount < 1)
       return;
 
@@ -467,21 +456,21 @@ public final class OLocalDHTNode implements ODHTNode {
     while (true) {
       ODHTNode primaryHolder = this;
 
-      logger.debug("Find replica holders for node {} replica count is {}", nodeId, replicaCount);
+      logger.debug("Find replica holders for node {} replica count is {}", nodeAddress, replicaCount);
 
-      final long[] replicaHolders = getSuccessors();
-      logger.debug("Replica holders for node {} are {}", nodeId, replicaHolders);
+      final ONodeAddress[] replicaHolders = getSuccessors();
+      logger.debug("Replica holders for node {} are {}", nodeAddress, replicaHolders);
 
       if (replicaHolders == null || replicaHolders.length == 0)
         return;
 
-      final Set<Long> holdersToReplicate = chooseReplicas(replicaHolders, syncReplicaCount);
+      final Set<ONodeAddress> holdersToReplicate = chooseReplicas(replicaHolders, syncReplicaCount);
 
-      final Set<Long> replicaHoldersToUpdate = new HashSet<Long>();
+      final Set<ONodeAddress> replicaHoldersToUpdate = new HashSet<ONodeAddress>();
 
-      logger.debug("Replica holders for node {} are {}", nodeId, replicaHoldersToUpdate);
+      logger.debug("Replica holders for node {} are {}", nodeAddress, replicaHoldersToUpdate);
 
-      for (long holderId : holdersToReplicate) {
+      for (ONodeAddress holderId : holdersToReplicate) {
         final ODHTNode holderNode = nodeLookup.findById(holderId);
         if (holderNode == null)
           continue;
@@ -498,7 +487,7 @@ public final class OLocalDHTNode implements ODHTNode {
                   "Primary metadata is null but node metadata is not so we replace it. record id" + " {} node metadata {}",
                   recordId, nodeMetadata);
 
-              replicaHoldersToUpdate.add(primaryHolder.getNodeId());
+              replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());
 
               primaryMetadata = nodeMetadata;
               primaryHolder = holderNode;
@@ -508,7 +497,7 @@ public final class OLocalDHTNode implements ODHTNode {
               final int cp = primaryMetadata.getVersion().compareTo(nodeMetadata.getVersion());
 
               if (cp < 0) {
-                replicaHoldersToUpdate.add(primaryHolder.getNodeId());
+                replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());
 
                 primaryMetadata = nodeMetadata;
                 primaryHolder = holderNode;
@@ -519,12 +508,12 @@ public final class OLocalDHTNode implements ODHTNode {
               } else if (cp > 0) {
                 logger.debug("Primary metadata is not null but node metadata out of date so we replace it. record id {}"
                     + " node metadata {} primary metadata {}", new Object[] { recordId, nodeMetadata, primaryMetadata });
-                replicaHoldersToUpdate.add(holderNode.getNodeId());
+                replicaHoldersToUpdate.add(holderNode.getNodeAddress());
               }
             } else {
               logger.debug("Node metadata is null but primary metadata is not so we replace it. record id {}"
                   + " node metadata {} primary metadata {}", new Object[] { recordId, nodeMetadata, primaryMetadata });
-              replicaHoldersToUpdate.add(holderNode.getNodeId());
+              replicaHoldersToUpdate.add(holderNode.getNodeAddress());
             }
           }
 
@@ -537,10 +526,10 @@ public final class OLocalDHTNode implements ODHTNode {
       logger.debug("Replica holders to update for record {}", recordId);
 
       if (!replicaHoldersToUpdate.isEmpty()) {
-        logger.debug("Getting record from {} with id {}", primaryHolder.getNodeId(), recordId);
+        logger.debug("Getting record from {} with id {}", primaryHolder.getNodeAddress(), recordId);
 
         Record result;
-        if (nodeId == primaryHolder.getNodeId())
+        if (nodeAddress.equals(primaryHolder.getNodeAddress()))
           result = readData(recordId);
         else
           try {
@@ -550,22 +539,23 @@ public final class OLocalDHTNode implements ODHTNode {
           }
 
         logger.debug("Record with id {} was returned from {}" + " with content {}" + result,
-            new Object[] { recordId, primaryHolder.getNodeId(), result });
+            new Object[] { recordId, primaryHolder.getNodeAddress(), result });
 
-        for (long replicaHolderId : replicaHoldersToUpdate) {
-          ODHTNode replicaHolder = nodeLookup.findById(replicaHolderId);
+        for (ONodeAddress replicaHolderAddress : replicaHoldersToUpdate) {
+          ODHTNode replicaHolder = nodeLookup.findById(replicaHolderAddress);
           if (replicaHolder == null)
             continue;
 
-          logger.debug("Holder with id {}" + " is absent during synchronization of record with id {}", replicaHolderId, recordId);
+          logger.debug("Holder with id {}" + " is absent during synchronization of record with id {}", replicaHolderAddress,
+              recordId);
 
           try {
-            logger.debug("Update of replica with {} for node {}", recordId, replicaHolder.getNodeId());
+            logger.debug("Update of replica with {} for node {}", recordId, replicaHolder.getNodeAddress());
             replicaHolder.updateReplica(result, false);
-            logger.debug("Replica with {} for node {} was updated.", recordId, replicaHolder.getNodeId());
+            logger.debug("Replica with {} for node {} was updated.", recordId, replicaHolder.getNodeAddress());
           } catch (Exception e) {
-            logger
-                .error("Exception during replication of record with id " + recordId + " for node " + replicaHolder.getNodeId(), e);
+            logger.error(
+                "Exception during replication of record with id " + recordId + " for node " + replicaHolder.getNodeAddress(), e);
           }
         }
       }
@@ -575,11 +565,11 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void startReadRepair(long recordId) {
+  private void startReadRepair(OAutoShardedRecordId recordId) {
     readRepairService.submit(new ReadRepairTask(recordId));
   }
 
-  public Record getRecordFromNode(long recordId, boolean replicate) {
+  public Record getRecordFromNode(OAutoShardedRecordId recordId, boolean replicate) {
     if (replicate) {
       synchronizeReplicas(recordId, syncReplicaCount);
       startReadRepair(recordId);
@@ -589,9 +579,9 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   @Override
-  public Record[] getRecordsFromNode(long[] ids, boolean replicate) {
+  public Record[] getRecordsFromNode(OAutoShardedRecordId[] ids, boolean replicate) {
     final ArrayList<Record> records = new ArrayList<Record>();
-    for (long id : ids) {
+    for (OAutoShardedRecordId id : ids) {
       final Record record = getRecordFromNode(id, replicate);
       if (record != null)
         records.add(record);
@@ -604,7 +594,7 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   @Override
-  public RecordMetadata getRecordMetadataFromNode(long id) {
+  public RecordMetadata getRecordMetadataFromNode(OAutoShardedRecordId id) {
     final Record record = readData(id);
     if (record == null)
       return null;
@@ -612,7 +602,7 @@ public final class OLocalDHTNode implements ODHTNode {
     return new RecordMetadata(record.getId(), record.getVersion());
   }
 
-  public void updateRecord(long recordId, Record data) {
+  public void updateRecord(OAutoShardedRecordId recordId, Record data) {
     waitTillJoin();
     int retryCount = 0;
 
@@ -620,11 +610,11 @@ public final class OLocalDHTNode implements ODHTNode {
     while (true) {
       retryCount++;
 
-      final long successorId = findSuccessor(recordId);
+      final ONodeAddress successorAddress = findSuccessor(ONodeId.valueOf(recordId));
 
-      if (successorId != recordId) {
-        if (!remoteNodeUpdate(recordId, data, retryCount, successorId)) {
-          logger.error("Successor {} for record {} is offline, retry.", successorId, recordId);
+      if (!successorAddress.equals(nodeAddress)) {
+        if (!remoteNodeUpdate(recordId, data, retryCount, successorAddress)) {
+          logger.error("Successor {} for record {} is offline, retry.", successorAddress, recordId);
           requestStabilization();
           continue;
         }
@@ -638,7 +628,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public void deleteRecord(long recordId, ODHTRecordVersion version) {
+  public void deleteRecord(OAutoShardedRecordId recordId, ODHTRecordVersion version) {
     waitTillJoin();
     int retryCount = 0;
 
@@ -646,11 +636,11 @@ public final class OLocalDHTNode implements ODHTNode {
     while (true) {
       retryCount++;
 
-      final long successorId = findSuccessor(recordId);
+      final ONodeAddress successorAddress = findSuccessor(ONodeId.valueOf(recordId));
 
-      if (successorId != nodeId) {
-        if (!remoteNodeDelete(recordId, version, retryCount, successorId)) {
-          logger.error("Successor {} for record {} is offline, retry.", successorId, recordId);
+      if (!successorAddress.equals(nodeAddress)) {
+        if (!remoteNodeDelete(recordId, version, retryCount, successorAddress)) {
+          logger.error("Successor {} for record {} is offline, retry.", successorAddress, recordId);
           requestStabilization();
           continue;
         }
@@ -663,8 +653,8 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public long[] findMissedRecords(RecordMetadata[] recordMetadatas) {
-    ArrayList<Long> result = new ArrayList<Long>();
+  public OAutoShardedRecordId[] findMissedRecords(RecordMetadata[] recordMetadatas) {
+    ArrayList<OAutoShardedRecordId> result = new ArrayList<OAutoShardedRecordId>();
 
     for (RecordMetadata recordMetadata : recordMetadatas) {
       final Record record = db.get(recordMetadata.getId());
@@ -676,7 +666,7 @@ public final class OLocalDHTNode implements ODHTNode {
         result.add(recordMetadata.getId());
     }
 
-    long[] missedRecords = new long[result.size()];
+    OAutoShardedRecordId[] missedRecords = new OAutoShardedRecordId[result.size()];
     for (int i = 0; i < missedRecords.length; i++)
       missedRecords[i] = result.get(i);
 
@@ -694,7 +684,7 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   @Override
-  public RecordMetadata[] getRecordsForIntervalFromNode(long startId, long endId) {
+  public RecordMetadata[] getRecordsForIntervalFromNode(OAutoShardedRecordId startId, OAutoShardedRecordId endId) {
     final List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>();
 
     int processedRecords = 0;
@@ -732,26 +722,28 @@ public final class OLocalDHTNode implements ODHTNode {
       throw new IllegalStateException("RR service was not terminated.");
   }
 
-  private RemoteNodeCallResult<Record> remoteNodeCreate(long id, String data, int retryCount, long remoteNodeId) {
+  private RemoteNodeCallResult<Record> remoteNodeCreate(OAutoShardedRecordId id, String data, int retryCount,
+      ONodeAddress remoteNodeAddress) {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
-    final ODHTNode node = nodeLookup.findById(remoteNodeId);
+    final ODHTNode node = nodeLookup.findById(remoteNodeAddress);
 
     if (node == null) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return new RemoteNodeCallResult<Record>(true, null);
       } else {
-        logger.error("Node {} is offline, retry limit is reached.", remoteNodeId);
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node {} is offline, retry limit is reached.", remoteNodeAddress);
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
 
@@ -759,43 +751,45 @@ public final class OLocalDHTNode implements ODHTNode {
       return new RemoteNodeCallResult<Record>(false, node.createRecordInNode(id, data));
     } catch (ONodeOfflineException ooe) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return new RemoteNodeCallResult<Record>(true, null);
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
   }
 
-  private boolean remoteNodeUpdate(long id, Record data, int retryCount, long remoteNodeId) {
+  private boolean remoteNodeUpdate(OAutoShardedRecordId id, Record data, int retryCount, ONodeAddress remoteNodeAddress) {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
-    final ODHTNode node = nodeLookup.findById(remoteNodeId);
+    final ODHTNode node = nodeLookup.findById(remoteNodeAddress);
 
     if (node == null) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return false;
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
 
@@ -803,45 +797,48 @@ public final class OLocalDHTNode implements ODHTNode {
       node.updateRecordInNode(id, data);
     } catch (ONodeOfflineException ooe) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return false;
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
 
     return true;
   }
 
-  private boolean remoteNodeDelete(long id, ODHTRecordVersion version, int retryCount, long remoteNodeId) {
+  private boolean remoteNodeDelete(OAutoShardedRecordId id, ODHTRecordVersion version, int retryCount,
+      ONodeAddress remoteNodeAddress) {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
-    final ODHTNode node = nodeLookup.findById(remoteNodeId);
+    final ODHTNode node = nodeLookup.findById(remoteNodeAddress);
 
     if (node == null) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return false;
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
 
@@ -849,26 +846,27 @@ public final class OLocalDHTNode implements ODHTNode {
       node.deleteRecordFromNode(id, version);
     } catch (ONodeOfflineException ooe) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return false;
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
 
     return true;
   }
 
-  private Record addData(long id, String data) {
+  private Record addData(OAutoShardedRecordId id, String data) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       return this.merkleTree.addData(id, data);
@@ -877,7 +875,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void updateData(long id, Record record) {
+  private void updateData(OAutoShardedRecordId id, Record record) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       this.merkleTree.updateData(id, record.getVersion(), record.getData());
@@ -886,25 +884,26 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private RemoteNodeCallResult<Record> remoteNodeGet(long key, long remoteNodeId, int retryCount) {
+  private RemoteNodeCallResult<Record> remoteNodeGet(OAutoShardedRecordId key, ONodeAddress remoteNodeAddress, int retryCount) {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
-    ODHTNode node = nodeLookup.findById(remoteNodeId);
+    ODHTNode node = nodeLookup.findById(remoteNodeAddress);
     if (node == null) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException e) {
           logger.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
         }
 
         return new RemoteNodeCallResult<Record>(true, null);
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
-        throw new ONodeOfflineException("Node " + remoteNodeId + " is offline, retry limit is reached.", null, remoteNodeId);
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
+        throw new ONodeOfflineException("Node " + remoteNodeAddress + " is offline, retry limit is reached.", null,
+            remoteNodeAddress.getNodeId());
       }
     }
 
@@ -912,18 +911,18 @@ public final class OLocalDHTNode implements ODHTNode {
       return new RemoteNodeCallResult<Record>(false, node.getRecordFromNode(key, true));
     } catch (ONodeOfflineException e) {
       if (retryCount < MAX_RETRIES) {
-        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeId, retryCount);
+        logger.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
 
         try {
           Thread.sleep(50);
         } catch (InterruptedException ie) {
           logger.error("Thread execution was interrupted.", ie);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", ie, remoteNodeId);
+          throw new ORemoteNodeCallException("Thread execution was interrupted.", ie, remoteNodeAddress.getNodeId());
         }
 
         return new RemoteNodeCallResult<Record>(true, null);
       } else {
-        logger.error("Node " + remoteNodeId + " is offline, retry limit is reached.");
+        logger.error("Node " + remoteNodeAddress + " is offline, retry limit is reached.");
         throw e;
       }
     }
@@ -933,7 +932,7 @@ public final class OLocalDHTNode implements ODHTNode {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
     while (!NodeState.PRODUCTION.equals(state)) {
-      logger.info("Wait till node {} will be joined.", nodeId);
+      logger.info("Wait till node {} will be joined.", nodeAddress);
 
       try {
         Thread.sleep(100);
@@ -944,7 +943,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private Record readData(long dataId) {
+  private Record readData(OAutoShardedRecordId dataId) {
     Record data;
     lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
     try {
@@ -955,7 +954,7 @@ public final class OLocalDHTNode implements ODHTNode {
     return data;
   }
 
-  private void putReplica(long id, Record replica) {
+  private void putReplica(OAutoShardedRecordId id, Record replica) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.SHARED);
     try {
       this.merkleTree.updateReplica(id, replica);
@@ -964,7 +963,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void removeData(long id, ODHTRecordVersion version) {
+  private void removeData(OAutoShardedRecordId id, ODHTRecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version);
@@ -973,7 +972,7 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void cleanOutData(long id, ODHTRecordVersion version) {
+  private void cleanOutData(OAutoShardedRecordId id, ODHTRecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version, false);
@@ -1005,7 +1004,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
       int retryCount = 0;
       while (!result) {
-        final long successorId = fingerPoints.get(0);
+        final ONodeAddress successorId = fingerPoints.get(0);
 
         ODHTNode successor = nodeLookup.findById(successorId);
         if (successor == null) {
@@ -1016,7 +1015,7 @@ public final class OLocalDHTNode implements ODHTNode {
           continue;
         }
 
-        final Long predecessor;
+        final ONodeAddress predecessor;
 
         try {
           predecessor = successor.getPredecessor();
@@ -1028,10 +1027,10 @@ public final class OLocalDHTNode implements ODHTNode {
           continue;
         }
 
-        final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.increment(this.nodeId),
-            ODHTRingInterval.decrement(successorId));
+        final ODHTRingInterval ringInterval = new ODHTRingInterval(this.nodeAddress.getNodeId().add(ONodeId.ONE), successorId
+            .getNodeId().subtract(ONodeId.ONE));
 
-        if (predecessor > -1 && ringInterval.insideInterval(predecessor)) {
+        if (predecessor != null && ringInterval.insideInterval(predecessor.getNodeId())) {
           logger.debug("Successor {} is going to be changed to {}", successorId, predecessor);
 
           result = fingerPoints.compareAndSet(0, successorId, predecessor);
@@ -1056,19 +1055,19 @@ public final class OLocalDHTNode implements ODHTNode {
         } else
           result = true;
 
-        long prevPredecessor = -1;
+        ONodeAddress prevPredecessor = null;
         try {
-          if (successor.getNodeId() != nodeId)
-            prevPredecessor = successor.notifyParent(nodeId);
+          if (!successor.equals(nodeAddress))
+            prevPredecessor = successor.notifyParent(nodeAddress);
         } catch (ONodeOfflineException ooe) {
-          handleSuccessorOfflineCase(retryCount, successor.getNodeId());
+          handleSuccessorOfflineCase(retryCount, successor.getNodeAddress());
 
           retryCount++;
           result = false;
           continue;
         }
 
-        if (prevPredecessor > -1) {
+        if (prevPredecessor != null) {
           ODHTNode prevPredecessorNode = nodeLookup.findById(prevPredecessor);
           if (prevPredecessorNode != null)
             try {
@@ -1081,7 +1080,7 @@ public final class OLocalDHTNode implements ODHTNode {
         try {
           updateSuccessors(successor);
         } catch (ONodeOfflineException e) {
-          handleSuccessorOfflineCase(retryCount, successor.getNodeId());
+          handleSuccessorOfflineCase(retryCount, successor.getNodeAddress());
 
           retryCount++;
           result = false;
@@ -1093,17 +1092,18 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   private void updateSuccessors(ODHTNode successor) {
-    final long successorId = successor.getNodeId();
+    final ONodeAddress successorAddress = successor.getNodeAddress();
+
     sListCycle: while (true) {
       final int successorsSize = Math.max(((int) Math.ceil(Math.log(nodeLookup.size()) / Math.log(2))), replicaCount);
 
-      final List<Long> processedSuccessors = new ArrayList<Long>();
+      final List<ONodeAddress> processedSuccessors = new ArrayList<ONodeAddress>();
       ODHTNode dhtNode = successor;
 
       while (processedSuccessors.size() < successorsSize)
         try {
-          final long nodeSuccessor = dhtNode.findSuccessor(ODHTRingInterval.increment(dhtNode.getNodeId()));
-          if (nodeSuccessor == nodeId)
+          final ONodeAddress nodeSuccessor = dhtNode.findSuccessor(dhtNode.getNodeAddress().getNodeId().add(ONodeId.ONE));
+          if (nodeSuccessor == nodeAddress)
             break;
 
           dhtNode = nodeLookup.findById(nodeSuccessor);
@@ -1113,11 +1113,11 @@ public final class OLocalDHTNode implements ODHTNode {
 
           processedSuccessors.add(nodeSuccessor);
         } catch (ONodeOfflineException e) {
-          if (dhtNode.getNodeId() != successorId)
+          if (!dhtNode.getNodeAddress().equals(successorAddress))
             continue sListCycle;
         }
 
-      long[] newSuccessors = new long[processedSuccessors.size()];
+      ONodeAddress[] newSuccessors = new ONodeAddress[processedSuccessors.size()];
 
       for (int i = 0; i < newSuccessors.length; i++)
         newSuccessors[i] = processedSuccessors.get(i);
@@ -1134,38 +1134,38 @@ public final class OLocalDHTNode implements ODHTNode {
     Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".replicateRecord");
     logger.debug("Replication of record {} replica count is {}", record.getId(), replicaCount);
 
-    long[] replicaHolders = getSuccessors();
+    ONodeAddress[] replicaHolders = getSuccessors();
 
     logger.debug("Replica holders for record {} are {}", record.getId(), replicaHolders);
 
     if (replicaHolders == null || replicaHolders.length == 0)
       return;
 
-    final Set<Long> asyncReplicas = chooseReplicas(replicaHolders, replicaCount - syncReplicaCount);
+    final Set<ONodeAddress> asyncReplicas = chooseReplicas(replicaHolders, replicaCount - syncReplicaCount);
 
     logger.debug("Async replica holders for record {} are {}", record.getId(), asyncReplicas);
 
     int processedReplicaHolders = 0;
-    for (long replicaHolderId : replicaHolders) {
-      final ODHTNode replicaHolderNode = nodeLookup.findById(replicaHolderId);
+    for (ONodeAddress replicaHolderAddress : replicaHolders) {
+      final ODHTNode replicaHolderNode = nodeLookup.findById(replicaHolderAddress);
       if (replicaHolderNode == null) {
-        logger.error("Replica holder with id " + replicaHolderId + " is absent.");
+        logger.error("Replica holder with id " + replicaHolderAddress + " is absent.");
         continue;
       }
 
       try {
-        boolean async = asyncReplicas.contains(replicaHolderId);
+        boolean async = asyncReplicas.contains(replicaHolderAddress);
 
         logger.debug("Replication of record {} with async flag is set to {} to holder {}", new Object[] { record.getId(), async,
-            replicaHolderId });
+            replicaHolderAddress });
 
         replicaHolderNode.updateReplica(record, async);
 
         logger.debug("Replication of record {} with async flag is set to {} to holder {}  was finished.",
-            new Object[] { record.getId(), async, replicaHolderId });
+            new Object[] { record.getId(), async, replicaHolderAddress });
 
       } catch (Exception e) {
-        logger.error("Exception during replication of record " + record.getId() + " to node " + replicaHolderId, e);
+        logger.error("Exception during replication of record " + record.getId() + " to node " + replicaHolderAddress, e);
         // ignore
       }
       processedReplicaHolders++;
@@ -1176,10 +1176,10 @@ public final class OLocalDHTNode implements ODHTNode {
     logger.debug("Replication of record {} was finished.", record.getId());
   }
 
-  private Set<Long> chooseReplicas(long[] replicaHolders, int replicaCount) {
+  private Set<ONodeAddress> chooseReplicas(ONodeAddress[] replicaHolders, int replicaCount) {
     replicaCount = Math.min(replicaCount, replicaHolders.length);
 
-    final Set<Long> replicas = new HashSet<Long>();
+    final Set<ONodeAddress> replicas = new HashSet<ONodeAddress>();
 
     int holderIndex = 0;
     while (replicas.size() < replicaCount) {
@@ -1190,33 +1190,34 @@ public final class OLocalDHTNode implements ODHTNode {
     return replicas;
   }
 
-  private void replicateRecord(long id) {
+  private void replicateRecord(OAutoShardedRecordId id) {
     final Record replica = readData(id);
     replicateRecord(replica);
   }
 
-  private void handleSuccessorOfflineCase(int retryCount, long successorId) throws InterruptedException {
+  private void handleSuccessorOfflineCase(int retryCount, ONodeAddress successorAddress) throws InterruptedException {
     Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
 
     if (retryCount < MAX_RETRIES) {
-      logger.debug("Successor {} is offline will try to find new one and retry. {}-d retry.", successorId, retryCount);
+      logger.debug("Successor {} is offline will try to find new one and retry. {}-d retry.", successorAddress, retryCount);
 
       Thread.sleep(50);
 
-      final long newSuccessorId = findSuccessor(ODHTRingInterval.increment(nodeId));
-      if (fingerPoints.compareAndSet(0, successorId, newSuccessorId)) {
-        final ODHTNode newSuccessorNode = nodeLookup.findById(newSuccessorId);
+      final ONodeAddress newSuccessorAddress = findSuccessor(nodeAddress.getNodeId().add(ONodeId.ONE));
+
+      if (fingerPoints.compareAndSet(0, successorAddress, newSuccessorAddress)) {
+        final ODHTNode newSuccessorNode = nodeLookup.findById(newSuccessorAddress);
         if (newSuccessorNode != null)
           try {
-            newSuccessorNode.notifyParent(nodeId);
+            newSuccessorNode.notifyParent(nodeAddress);
           } catch (ONodeOfflineException noe) {
-            fingerPoints.compareAndSet(0, newSuccessorId, successorId);
+            fingerPoints.compareAndSet(0, newSuccessorAddress, successorAddress);
           }
       }
     } else {
-      logger.error("Successor " + successorId + " for node " + nodeId + " is offline. Max retry count is reached.");
-      throw new ONodeOfflineException("Successor " + successorId + " is offline for node " + nodeId
-          + "  will try to find new one and retry." + " Max retry count is reached.", null, successorId);
+      logger.error("Successor " + successorAddress + " for node " + nodeAddress + " is offline. Max retry count is reached.");
+      throw new ONodeOfflineException("Successor " + successorAddress + " is offline for node " + nodeAddress
+          + "  will try to find new one and retry." + " Max retry count is reached.", null, successorAddress.getNodeId());
     }
   }
 
@@ -1225,19 +1226,19 @@ public final class OLocalDHTNode implements ODHTNode {
       final Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".fixPredecessor");
       try {
         int prevIndex = nextIndex - 1;
-        long prevFinger = -1;
+        ONodeAddress prevFinger = null;
 
-        while (prevFinger == -1 && prevIndex >= 0) {
+        while (prevFinger == null && prevIndex >= 0) {
           prevFinger = fingerPoints.get(prevIndex);
           prevIndex--;
         }
 
-        final long fingerPointCandidate = findSuccessor((nodeId + 1 << nextIndex) & Long.MAX_VALUE);
+        final ONodeAddress fingerPointCandidate = findSuccessor(nodeAddress.getNodeId().add(ONodeId.ONE).shiftLeft(nextIndex));
 
-        if (prevFinger > -1) {
-          final ODHTRingInterval allowedInterval = new ODHTRingInterval(ODHTRingInterval.increment(prevFinger),
-              ODHTRingInterval.decrement(nodeId));
-          if (!allowedInterval.insideInterval(fingerPointCandidate)) {
+        if (prevFinger != null) {
+          final ODHTRingInterval allowedInterval = new ODHTRingInterval(prevFinger.getNodeId().add(ONodeId.ONE), nodeAddress
+              .getNodeId().subtract(ONodeId.ONE));
+          if (!allowedInterval.insideInterval(fingerPointCandidate.getNodeId())) {
             nextIndex = 1;
             return;
           }
@@ -1248,7 +1249,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
         nextIndex++;
 
-        if (nextIndex > 62)
+        if (nextIndex > fingerPoints.length())
           nextIndex = 1;
       } catch (Exception e) {
         logger.error("Error during fingers fix", e);
@@ -1262,10 +1263,10 @@ public final class OLocalDHTNode implements ODHTNode {
       boolean result = false;
 
       while (!result) {
-        long predecessorId = predecessor.get();
+        ONodeAddress predecessorId = predecessor.get();
 
-        if (predecessorId > -1 && nodeLookup.findById(predecessorId) == null) {
-          result = predecessor.compareAndSet(predecessorId, -1);
+        if (predecessorId != null && nodeLookup.findById(predecessorId) == null) {
+          result = predecessor.compareAndSet(predecessorId, null);
         } else
           result = true;
       }
@@ -1274,30 +1275,34 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  public long notifyParent(long predecessorCandidateId) {
+  public ONodeAddress notifyParent(ONodeAddress predecessorCandidateId) {
     boolean result = false;
-    long prevPredecessor = -1;
+    ONodeAddress prevPredecessor = null;
 
     Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".notifyParent");
 
     while (!result) {
-      long predecessorId = predecessor.longValue();
+      ONodeAddress predecessorAddress = predecessor.get();
 
-      final ODHTRingInterval ringInterval = new ODHTRingInterval(ODHTRingInterval.increment(predecessorId),
-          ODHTRingInterval.decrement(this.nodeId));
+      final ODHTRingInterval ringInterval;
+      if (predecessorAddress != null)
+        ringInterval = new ODHTRingInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), this.nodeAddress.getNodeId().subtract(
+            ONodeId.ONE));
+      else
+        ringInterval = null;
 
-      if (predecessorId < 0 || ringInterval.insideInterval(predecessorCandidateId)) {
-        prevPredecessor = predecessorId;
+      if (predecessorAddress == null || ringInterval.insideInterval(predecessorCandidateId.getNodeId())) {
+        prevPredecessor = predecessorAddress;
 
-        result = predecessor.compareAndSet(predecessorId, predecessorCandidateId);
+        result = predecessor.compareAndSet(predecessorAddress, predecessorCandidateId);
         if (result)
           logger.info("New predecessor is {}", predecessorCandidateId);
         else {
           logger.info("Predecessor setup was failed.");
-          prevPredecessor = -1;
+          prevPredecessor = null;
         }
 
-        if (result && predecessorId < 0 && state == NodeState.JOIN) {
+        if (result && predecessorAddress == null && state == NodeState.JOIN) {
           state = NodeState.PRODUCTION;
           logger.info("Status was changed to {}", state);
         }
@@ -1323,16 +1328,16 @@ public final class OLocalDHTNode implements ODHTNode {
 
       builder.append("Ring : ");
 
-      builder.append(nodeId);
+      builder.append(nodeAddress);
       ODHTNode node = this;
 
-      Set<Long> processedIds = new HashSet<Long>();
-      processedIds.add(nodeId);
+      Set<ONodeAddress> processedAddresses = new HashSet<ONodeAddress>();
+      processedAddresses.add(nodeAddress);
 
-      long successor = node.getSuccessor();
-      while (!processedIds.contains(successor)) {
+      ONodeAddress successor = node.getSuccessor();
+      while (!processedAddresses.contains(successor)) {
         builder.append("-").append(successor);
-        processedIds.add(successor);
+        processedAddresses.add(successor);
 
         node = nodeLookup.findById(successor);
         if (node == null)
@@ -1361,10 +1366,10 @@ public final class OLocalDHTNode implements ODHTNode {
   private final class GlobalMaintenanceProtocol implements Runnable {
     private final Logger logger = LoggerFactory.getLogger(GlobalMaintenanceProtocol.class);
 
-    private long         idToTest;
+    private ONodeId      idToTest;
 
     private GlobalMaintenanceProtocol() {
-      idToTest = nodeId;
+      idToTest = nodeAddress.getNodeId();
     }
 
     public void run() {
@@ -1376,21 +1381,21 @@ public final class OLocalDHTNode implements ODHTNode {
         }
 
         logger.debug("Finding record with id next to {}", idToTest);
-
-        Long nextId = nextInDB(idToTest);
-        if (nextId == null) {
+        final OAutoShardedRecordId nextRecordId = nextInDB(ONodeId.convertToRecordId(idToTest, 1));
+        if (nextRecordId == null) {
           logger.debug("There are no records with id next to {}", idToTest);
           return;
         }
 
+        ONodeId nextId = ONodeId.valueOf(nextRecordId);
         logger.debug("Record with id {} is closest successor for id {}", nextId, idToTest);
 
         logger.debug("Finding successor for record {}", nextId);
-        long successor = findSuccessor(nextId);
+        ONodeAddress successor = findSuccessor(nextId);
 
         logger.debug("Successor for record is {}", successor);
-        if (nodeId == successor) {
-          idToTest = nodeId;
+        if (nodeAddress.equals(successor)) {
+          idToTest = nodeAddress.getNodeId();
 
           logger.debug("We are owner of {} record. So we start from the beginning", nextId);
           return;
@@ -1398,7 +1403,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
         final ODHTNode successorNode = nodeLookup.findById(successor);
         if (successorNode == null) {
-          idToTest = nodeId;
+          idToTest = nodeAddress.getNodeId();
 
           logger.debug("Successor with id {} is absent, starting from beginning", successor);
           return;
@@ -1406,19 +1411,19 @@ public final class OLocalDHTNode implements ODHTNode {
 
         logger.debug("Find the successors for node {}", successor);
 
-        long[] successors = successorNode.getSuccessors();
+        ONodeAddress[] successors = successorNode.getSuccessors();
         if (successors.length > replicaCount) {
-          final long[] oldSuccessors = successors;
-          successors = new long[replicaCount];
+          final ONodeAddress[] oldSuccessors = successors;
+          successors = new ONodeAddress[replicaCount];
 
           System.arraycopy(oldSuccessors, 0, successors, 0, successors.length);
         }
 
         logger.debug("Successors list for node {} is {}", successor, successors);
 
-        for (long s : successors) {
-          if (s == nodeId) {
-            idToTest = nodeId;
+        for (ONodeAddress s : successors) {
+          if (s.equals(nodeAddress)) {
+            idToTest = nodeAddress.getNodeId();
 
             logger.debug("We are owner of {} record. So we start from the beginning", nextId);
 
@@ -1426,15 +1431,15 @@ public final class OLocalDHTNode implements ODHTNode {
           }
         }
 
-        List<Long> nodesToReplicate = new ArrayList<Long>();
+        List<ONodeAddress> nodesToReplicate = new ArrayList<ONodeAddress>();
         nodesToReplicate.add(successor);
-        for (long s : successors)
-          nodesToReplicate.add(s);
+        Collections.addAll(nodesToReplicate, successors);
 
         logger.debug("List of nodes to replicate records starting from {} to {} is {}", new Object[] { nextId, successor,
             nodesToReplicate });
 
-        final Iterator<RecordMetadata> iterator = new ODHTRingIterator(db, idToTest, successor);
+        final Iterator<RecordMetadata> iterator = new ODHTRingIterator(db, ONodeId.convertToRecordId(idToTest, 1),
+            ONodeId.convertToRecordId(successor.getNodeId(), 1));
 
         final List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>(64);
 
@@ -1450,41 +1455,41 @@ public final class OLocalDHTNode implements ODHTNode {
         if (!recordMetadatas.isEmpty())
           cleanOutForeignRecords(recordMetadatas, nodesToReplicate);
 
-        idToTest = successor;
+        idToTest = successor.getNodeId();
       } catch (Exception e) {
         logger.error(e.toString(), e);
 
-        idToTest = nodeId;
+        idToTest = nodeAddress.getNodeId();
       }
     }
 
-    private void cleanOutForeignRecords(List<RecordMetadata> recordMetadatas, List<Long> nodesToReplicate) {
+    private void cleanOutForeignRecords(List<RecordMetadata> recordMetadatas, List<ONodeAddress> nodesToReplicate) {
       RecordMetadata[] metadatas = new RecordMetadata[recordMetadatas.size()];
       metadatas = recordMetadatas.toArray(metadatas);
 
-      for (long replicaHolderId : nodesToReplicate) {
-        final ODHTNode node = nodeLookup.findById(replicaHolderId);
+      for (ONodeAddress replicaHolderAddress : nodesToReplicate) {
+        final ODHTNode node = nodeLookup.findById(replicaHolderAddress);
 
         if (node == null) {
-          logger.debug("Node with id {} is absent. Continue replication with other node.", replicaHolderId);
+          logger.debug("Node with id {} is absent. Continue replication with other node.", replicaHolderAddress);
           continue;
         }
 
         try {
           logger.debug("Finding missing ids for records with metadata {}", recordMetadatas);
 
-          final long[] missingIds = node.findMissedRecords(metadatas);
+          final OAutoShardedRecordId[] missingIds = node.findMissedRecords(metadatas);
 
           logger.debug("Missing ids are {}", missingIds);
 
-          for (long missingId : missingIds) {
+          for (OAutoShardedRecordId missingId : missingIds) {
             final Record replica = db.get(missingId);
             if (replica != null)
               node.updateReplica(replica, false);
           }
 
         } catch (ONodeOfflineException noe) {
-          logger.debug("Node with id {} is absent. Continue replication with other node.", replicaHolderId);
+          logger.debug("Node with id {} is absent. Continue replication with other node.", replicaHolderAddress);
         }
       }
 
@@ -1506,14 +1511,14 @@ public final class OLocalDHTNode implements ODHTNode {
       logger.debug("Clean out was completed.");
     }
 
-    private Long nextInDB(long id) {
-      Long result = db.higherKey(id);
+    private OAutoShardedRecordId nextInDB(OAutoShardedRecordId id) {
+      OAutoShardedRecordId result = db.higherKey(id);
 
       if (result != null)
         return result;
 
-      if (id > 0)
-        result = db.ceilingKey(0L);
+      if (id.compareTo(new OAutoShardedRecordId(1, 0, 0, 0)) > 0)
+        result = db.ceilingKey(new OAutoShardedRecordId(1, 0, 0, 0));
 
       if (result != null && result != id)
         return result;
@@ -1525,16 +1530,16 @@ public final class OLocalDHTNode implements ODHTNode {
   private static final class GlobalMaintenanceProtocolThreadFactory implements ThreadFactory {
     private static final AtomicInteger counter = new AtomicInteger();
 
-    private final long                 nodeId;
+    private final ONodeAddress         nodeAddress;
 
-    private GlobalMaintenanceProtocolThreadFactory(long nodeId) {
-      this.nodeId = nodeId;
+    private GlobalMaintenanceProtocolThreadFactory(ONodeAddress nodeAddress) {
+      this.nodeAddress = nodeAddress;
     }
 
     public Thread newThread(Runnable r) {
       final Thread thread = new Thread(r);
 
-      thread.setName("Global Maintenance Protocol for node '" + nodeId + "' [" + counter.incrementAndGet() + "]");
+      thread.setName("Global Maintenance Protocol for node '" + nodeAddress + "' [" + counter.incrementAndGet() + "]");
       thread.setDaemon(true);
 
       return thread;
@@ -1544,16 +1549,16 @@ public final class OLocalDHTNode implements ODHTNode {
   private static final class LocalMaintenanceProtocolThreadFactory implements ThreadFactory {
     private static final AtomicInteger counter = new AtomicInteger();
 
-    private final long                 nodeId;
+    private final ONodeAddress         nodeAddress;
 
-    private LocalMaintenanceProtocolThreadFactory(long nodeId) {
-      this.nodeId = nodeId;
+    private LocalMaintenanceProtocolThreadFactory(ONodeAddress nodeAddress) {
+      this.nodeAddress = nodeAddress;
     }
 
     public Thread newThread(Runnable r) {
       final Thread thread = new Thread(r);
 
-      thread.setName("Local Maintenance Protocol for node '" + nodeId + "' [" + counter.incrementAndGet() + "]");
+      thread.setName("Local Maintenance Protocol for node '" + nodeAddress + "' [" + counter.incrementAndGet() + "]");
       thread.setDaemon(true);
 
       return thread;
@@ -1571,36 +1576,36 @@ public final class OLocalDHTNode implements ODHTNode {
           return;
         }
 
-        final long localPredecessor = predecessor.get();
+        final ONodeAddress localPredecessor = predecessor.get();
         logger.debug("Predecessor of node is {}", localPredecessor);
 
-        if (localPredecessor == -1) {
-          logger.debug("Predecessor for node {} is absent. Start from the beginning.", nodeId);
+        if (localPredecessor == null) {
+          logger.debug("Predecessor for node {} is absent. Start from the beginning.", nodeAddress);
           return;
         }
 
-        logger.debug("Retrieving successors for node {}", nodeId);
-        long[] replicaHolderIDs = getSuccessors();
+        logger.debug("Retrieving successors for node {}", nodeAddress);
+        ONodeAddress[] replicaHolderAddresses = getSuccessors();
 
-        if (replicaHolderIDs.length > replicaCount) {
-          final long[] oldReplicaHolderIDs = replicaHolderIDs;
-          replicaHolderIDs = new long[replicaCount];
+        if (replicaHolderAddresses.length > replicaCount) {
+          final ONodeAddress[] oldReplicaHolderIDs = replicaHolderAddresses;
+          replicaHolderAddresses = new ONodeAddress[replicaCount];
 
-          System.arraycopy(oldReplicaHolderIDs, 0, replicaHolderIDs, 0, replicaHolderIDs.length);
+          System.arraycopy(oldReplicaHolderIDs, 0, replicaHolderAddresses, 0, replicaHolderAddresses.length);
         }
 
-        logger.debug("Replica holders for node {} are {}", nodeId, replicaHolderIDs);
+        logger.debug("Replica holders for node {} are {}", nodeAddress, replicaHolderAddresses);
 
-        for (long replicaHolderID : replicaHolderIDs) {
+        for (ONodeAddress replicaHolderAddress : replicaHolderAddresses) {
           try {
-            final long startId = ODHTRingInterval.increment(localPredecessor);
-            final long endId = nodeId;
+            final ONodeId startId = localPredecessor.getNodeId().add(ONodeId.ONE);
+            final ONodeId endId = nodeAddress.getNodeId();
 
             final List<ODetachedMerkleTreeNode> roots = getRootsForInterval(merkleTree, startId, endId);
             for (final ODetachedMerkleTreeNode rootNode : roots)
-              synchronizeNode(rootNode, replicaHolderID);
+              synchronizeNode(rootNode, replicaHolderAddress);
           } catch (Exception e) {
-            logger.error("Error during replication of content to node " + replicaHolderID, e);
+            logger.error("Error during replication of content to node " + replicaHolderAddress, e);
           }
         }
       } catch (Exception e) {
@@ -1608,14 +1613,14 @@ public final class OLocalDHTNode implements ODHTNode {
       }
     }
 
-    private List<ODetachedMerkleTreeNode> getRootsForInterval(final OMerkleTree tree, final long startId, final long endId) {
-      if (startId <= endId)
+    private List<ODetachedMerkleTreeNode> getRootsForInterval(final OMerkleTree tree, final ONodeId startId, final ONodeId endId) {
+      if (startId.compareTo(endId) <= 0)
         return tree.getRootNodesForInterval(startId, endId);
 
       final List<ODetachedMerkleTreeNode> result = new ArrayList<ODetachedMerkleTreeNode>();
 
-      final List<ODetachedMerkleTreeNode> firstInterval = tree.getRootNodesForInterval(startId, Long.MAX_VALUE);
-      final List<ODetachedMerkleTreeNode> secondInterval = tree.getRootNodesForInterval(0, endId);
+      final List<ODetachedMerkleTreeNode> firstInterval = tree.getRootNodesForInterval(startId, ONodeId.MAX_VALUE);
+      final List<ODetachedMerkleTreeNode> secondInterval = tree.getRootNodesForInterval(ONodeId.MIN_VALUE, endId);
 
       result.addAll(firstInterval);
 
@@ -1630,103 +1635,109 @@ public final class OLocalDHTNode implements ODHTNode {
       return result;
     }
 
-    private void synchronizeNode(final ODetachedMerkleTreeNode localTreeNode, final long remoteNodeId) {
+    private void synchronizeNode(final ODetachedMerkleTreeNode localTreeNode, final ONodeAddress remoteNodeAddress) {
       if (localTreeNode == null)
         throw new NodeSynchronizationFailedException("Passed Local Merkle Tree node is null.");
 
-      final ODHTNode remoteNode = nodeLookup.findById(remoteNodeId);
+      final ODHTNode remoteNode = nodeLookup.findById(remoteNodeAddress);
 
       if (remoteNode == null)
-        throw new NodeSynchronizationFailedException("Node with id " + remoteNodeId + " is absent.");
+        throw new NodeSynchronizationFailedException("Node with id " + remoteNodeAddress + " is absent.");
 
       final ODetachedMerkleTreeNode remoteTreeNode = remoteNode.findMerkleTreeNode(localTreeNode);
 
       if (remoteTreeNode == null)
         throw new NodeSynchronizationFailedException("Related remote Merkle tree node is null.");
 
-      compareNodes(localTreeNode, remoteTreeNode, remoteNodeId);
+      compareNodes(localTreeNode, remoteTreeNode, remoteNodeAddress);
 
-      final long localPredecessor = predecessor.get();
-      if (localPredecessor < 0)
+      final ONodeAddress localPredecessor = predecessor.get();
+      if (localPredecessor == null)
         throw new NodeSynchronizationFailedException("Predecessor " + localPredecessor + " is absent.");
 
-      final ODHTRingInterval nodeInterval = new ODHTRingInterval(ODHTRingInterval.increment(localPredecessor), nodeId);
+      final ODHTRingInterval nodeInterval = new ODHTRingInterval(localPredecessor.getNodeId().add(ONodeId.ONE),
+          nodeAddress.getNodeId());
 
       if (!localTreeNode.isLeaf() && !remoteTreeNode.isLeaf()) {
         for (int i = 0; i < 64; i++) {
 
           ODetachedMerkleTreeNode childNode = merkleTree.getChildNode(localTreeNode, i);
-          final long startNodeId = childNode.getStartId();
-          final long endNodeId = childNode.getEndId();
+          final ONodeId startNodeId = childNode.getStartId();
+          final ONodeId endNodeId = childNode.getEndId();
 
           final ODHTRingInterval treeNodeInterval = new ODHTRingInterval(startNodeId, endNodeId);
 
           if (nodeInterval.intersection(treeNodeInterval) != null) {
             if (!Arrays.equals(childNode.getHash(), remoteTreeNode.getChildHash(i)))
-              synchronizeNode(childNode, remoteNodeId);
+              synchronizeNode(childNode, remoteNodeAddress);
           }
         }
       }
     }
 
-    private void compareNodes(ODetachedMerkleTreeNode localNode, ODetachedMerkleTreeNode remoteNode, long remoteNodeId) {
+    private void compareNodes(ODetachedMerkleTreeNode localNode, ODetachedMerkleTreeNode remoteNode, ONodeAddress remoteNodeAddress) {
       if (Arrays.equals(remoteNode.getHash(), localNode.getHash()))
         return;
 
-      compareWithLocal(localNode, remoteNode, remoteNodeId);
-      compareWithRemote(localNode, remoteNode, remoteNodeId);
+      compareWithLocal(localNode, remoteNode, remoteNodeAddress);
+      compareWithRemote(localNode, remoteNode, remoteNodeAddress);
     }
 
-    private void compareWithRemote(ODetachedMerkleTreeNode localNode, ODetachedMerkleTreeNode remoteNode, long remoteNodeId) {
-      final long localPredecessor = predecessor.get();
+    private void compareWithRemote(ODetachedMerkleTreeNode localNode, ODetachedMerkleTreeNode remoteNode,
+        ONodeAddress remoteNodeAddress) {
+      final ONodeAddress localPredecessor = predecessor.get();
 
-      if (localPredecessor < 0)
+      if (localPredecessor == null)
         throw new NodeSynchronizationFailedException("Node predecessor is absent.");
 
-      final ODHTNode remoteDHTNode = nodeLookup.findById(remoteNodeId);
+      final ODHTNode remoteDHTNode = nodeLookup.findById(remoteNodeAddress);
       if (remoteDHTNode == null)
-        throw new NodeSynchronizationFailedException("Remote node with id " + remoteNodeId + " is offline.");
+        throw new NodeSynchronizationFailedException("Remote node with id " + remoteNodeAddress + " is offline.");
 
-      final ODHTRingInterval dhtNodeInterval = new ODHTRingInterval(ODHTRingInterval.increment(localPredecessor), nodeId);
+      final ODHTRingInterval dhtNodeInterval = new ODHTRingInterval(localPredecessor.getNodeId().add(ONodeId.ONE),
+          nodeAddress.getNodeId());
       final ODHTRingInterval treeNodeInterval = new ODHTRingInterval(localNode.getStartId(), localNode.getEndId());
 
       final ODHTRingInterval recordsInterval = dhtNodeInterval.intersection(treeNodeInterval);
       if (recordsInterval == null)
         return;
 
-      long startId = recordsInterval.getStart();
-      long endId = recordsInterval.getEnd();
+      ONodeId startId = recordsInterval.getStart();
+      ONodeId endId = recordsInterval.getEnd();
 
       final ArrayList<Record> recordsToReplicate = new ArrayList<Record>();
       if (localNode.isLeaf()) {
-        RecordMetadata[] nodeMetadatas = getRecordsForIntervalFromNode(startId, endId);
+        RecordMetadata[] nodeMetadatas = getRecordsForIntervalFromNode(ONodeId.convertToRecordId(startId, 1),
+            ONodeId.convertToRecordId(endId, 1));
 
         while (nodeMetadatas.length > 0) {
-          final long[] missedIds = remoteDHTNode.findMissedRecords(nodeMetadatas);
-          for (long missedId : missedIds) {
+          final OAutoShardedRecordId[] missedIds = remoteDHTNode.findMissedRecords(nodeMetadatas);
+          for (OAutoShardedRecordId missedId : missedIds) {
             final Record record = db.get(missedId);
             if (record != null)
               recordsToReplicate.add(record);
 
             if (recordsToReplicate.size() >= 64) {
-              sendRecords(recordsToReplicate, remoteNodeId);
+              sendRecords(recordsToReplicate, remoteNodeAddress);
               recordsToReplicate.clear();
             }
 
           }
 
-          startId = ODHTRingInterval.increment(nodeMetadatas[nodeMetadatas.length - 1].getId());
+          startId = ONodeId.valueOf(nodeMetadatas[nodeMetadatas.length - 1].getId()).add(ONodeId.ONE);
 
           if (recordsInterval.insideInterval(startId))
-            nodeMetadatas = getRecordsForIntervalFromNode(startId, endId);
+            nodeMetadatas = getRecordsForIntervalFromNode(ONodeId.convertToRecordId(startId, 1),
+                ONodeId.convertToRecordId(endId, 1));
         }
 
         if (!recordsToReplicate.isEmpty())
-          sendRecords(recordsToReplicate, remoteNodeId);
+          sendRecords(recordsToReplicate, remoteNodeAddress);
       } else if (remoteNode.isLeaf()) {
         final Set<RecordMetadata> merkleTreeMetadataSet = new HashSet<RecordMetadata>();
 
-        RecordMetadata[] recordMetadatas = getRecordsForIntervalFromNode(startId, endId);
+        RecordMetadata[] recordMetadatas = getRecordsForIntervalFromNode(ONodeId.convertToRecordId(startId, 1),
+            ONodeId.convertToRecordId(endId, 1));
 
         for (int i = 0; i < remoteNode.getRecordsCount(); i++)
           merkleTreeMetadataSet.add(remoteNode.getRecordMetadata(i));
@@ -1740,49 +1751,52 @@ public final class OLocalDHTNode implements ODHTNode {
             }
 
             if (recordsToReplicate.size() >= 64) {
-              sendRecords(recordsToReplicate, remoteNodeId);
+              sendRecords(recordsToReplicate, remoteNodeAddress);
               recordsToReplicate.clear();
             }
           }
-          startId = ODHTRingInterval.increment(recordMetadatas[recordMetadatas.length - 1].getId());
+          startId = ONodeId.valueOf(recordMetadatas[recordMetadatas.length - 1].getId()).add(ONodeId.ONE);
 
           if (recordsInterval.insideInterval(startId))
-            recordMetadatas = getRecordsForIntervalFromNode(startId, endId);
+            recordMetadatas = getRecordsForIntervalFromNode(ONodeId.convertToRecordId(startId, 1),
+                ONodeId.convertToRecordId(endId, 1));
         }
 
         if (!recordsToReplicate.isEmpty())
-          sendRecords(recordsToReplicate, remoteNodeId);
+          sendRecords(recordsToReplicate, remoteNodeAddress);
 
       }
     }
 
-    private void compareWithLocal(ODetachedMerkleTreeNode localNode, ODetachedMerkleTreeNode remoteNode, long remoteNodeId) {
-      final long localPredecessor = predecessor.get();
+    private void compareWithLocal(ODetachedMerkleTreeNode localNode, ODetachedMerkleTreeNode remoteNode,
+        ONodeAddress remoteNodeAddress) {
+      final ONodeAddress localPredecessor = predecessor.get();
 
-      if (localPredecessor < 0)
+      if (localPredecessor == null)
         throw new NodeSynchronizationFailedException("Node predecessor is absent.");
 
-      final ODHTRingInterval dhtNodeInterval = new ODHTRingInterval(ODHTRingInterval.increment(localPredecessor), nodeId);
+      final ODHTRingInterval dhtNodeInterval = new ODHTRingInterval(localPredecessor.getNodeId().add(ONodeId.ONE),
+          nodeAddress.getNodeId());
 
-      final ArrayList<Long> recordsToFetch = new ArrayList<Long>();
+      final ArrayList<OAutoShardedRecordId> recordsToFetch = new ArrayList<OAutoShardedRecordId>();
 
       if (remoteNode.isLeaf()) {
         for (int i = 0; i < remoteNode.getRecordsCount(); i++) {
           final RecordMetadata recordMetadata = remoteNode.getRecordMetadata(i);
-          if (dhtNodeInterval.insideInterval(recordMetadata.getId())) {
+          if (dhtNodeInterval.insideInterval(ONodeId.valueOf(recordMetadata.getId()))) {
             final Record dbRecord = db.get(recordMetadata.getId());
             if (dbRecord == null || dbRecord.getVersion().compareTo(recordMetadata.getVersion()) < 0)
               recordsToFetch.add(recordMetadata.getId());
           }
 
           if (recordsToFetch.size() >= 64) {
-            fetchRecords(recordsToFetch, remoteNodeId);
+            fetchRecords(recordsToFetch, remoteNodeAddress);
             recordsToFetch.clear();
           }
         }
 
         if (!recordsToFetch.isEmpty())
-          fetchRecords(recordsToFetch, remoteNodeId);
+          fetchRecords(recordsToFetch, remoteNodeAddress);
 
       } else if (localNode.isLeaf()) {
         final ODHTRingInterval treeNodeInterval = new ODHTRingInterval(localNode.getStartId(), localNode.getEndId());
@@ -1791,14 +1805,15 @@ public final class OLocalDHTNode implements ODHTNode {
         if (recordsInterval == null)
           return;
 
-        long startId = recordsInterval.getStart();
-        long endId = recordsInterval.getEnd();
+        ONodeId startId = recordsInterval.getStart();
+        ONodeId endId = recordsInterval.getEnd();
 
-        final ODHTNode remoteDHTNode = nodeLookup.findById(remoteNodeId);
+        final ODHTNode remoteDHTNode = nodeLookup.findById(remoteNodeAddress);
         if (remoteDHTNode == null)
-          throw new NodeSynchronizationFailedException("Remote node with id " + remoteNodeId + " is offline.");
+          throw new NodeSynchronizationFailedException("Remote node with id " + remoteNodeAddress + " is offline.");
 
-        RecordMetadata[] nodeMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(startId, endId);
+        RecordMetadata[] nodeMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(ONodeId.convertToRecordId(startId, 1),
+            ONodeId.convertToRecordId(endId, 1));
 
         while (nodeMetadatas.length > 0) {
           for (RecordMetadata nodeMetadata : nodeMetadatas) {
@@ -1808,52 +1823,53 @@ public final class OLocalDHTNode implements ODHTNode {
               recordsToFetch.add(nodeMetadata.getId());
 
             if (recordsToFetch.size() >= 64) {
-              fetchRecords(recordsToFetch, remoteNodeId);
+              fetchRecords(recordsToFetch, remoteNodeAddress);
               recordsToFetch.clear();
             }
           }
 
-          startId = ODHTRingInterval.increment(nodeMetadatas[nodeMetadatas.length - 1].getId());
+          startId = ONodeId.valueOf(nodeMetadatas[nodeMetadatas.length - 1].getId()).add(ONodeId.ONE);
 
           if (recordsInterval.insideInterval(startId))
-            nodeMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(startId, endId);
+            nodeMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(ONodeId.convertToRecordId(startId, 1),
+                ONodeId.convertToRecordId(endId, 1));
         }
 
         if (!recordsToFetch.isEmpty())
-          fetchRecords(recordsToFetch, remoteNodeId);
+          fetchRecords(recordsToFetch, remoteNodeAddress);
       }
     }
 
-    private void fetchRecords(List<Long> missedRecords, long remoteNodeId) {
+    private void fetchRecords(List<OAutoShardedRecordId> missedRecords, ONodeAddress remoteNodeId) {
       final ODHTNode remoteNode = nodeLookup.findById(remoteNodeId);
       if (remoteNode == null)
         throw new NodeSynchronizationFailedException("Node with id " + remoteNodeId + " is absent in ring.");
 
       final Logger logger = LoggerFactory.getLogger(LocalMaintenanceProtocol.class);
       logger.debug("Records with ids {} are missed in current node {} will get it from node {}", new Object[] { missedRecords,
-          nodeId, remoteNodeId });
+          nodeAddress, remoteNodeId });
 
-      final long[] missedRecordsArray = new long[missedRecords.size()];
+      final OAutoShardedRecordId[] missedRecordsArray = new OAutoShardedRecordId[missedRecords.size()];
       for (int i = 0; i < missedRecordsArray.length; i++)
         missedRecordsArray[i] = missedRecords.get(i);
 
       final Record[] replicas = remoteNode.getRecordsFromNode(missedRecordsArray, false);
-      logger.debug("Replicas  {} were found for node {}", new Object[] { replicas, nodeId });
+      logger.debug("Replicas  {} were found for node {}", new Object[] { replicas, nodeAddress });
 
       for (Record replica : replicas) {
         putReplica(replica.getId(), replica);
-        logger.debug("Replica with id {} was updated for node {}", new Object[] { replica.getId(), nodeId });
+        logger.debug("Replica with id {} was updated for node {}", new Object[] { replica.getId(), nodeAddress });
       }
     }
 
-    private void sendRecords(List<Record> missedRecords, long remoteNodeId) {
+    private void sendRecords(List<Record> missedRecords, ONodeAddress remoteNodeId) {
       final ODHTNode remoteNode = nodeLookup.findById(remoteNodeId);
       if (remoteNode == null)
         throw new NodeSynchronizationFailedException("Node with id " + remoteNodeId + " is absent in ring.");
 
       final Logger logger = LoggerFactory.getLogger(LocalMaintenanceProtocol.class);
       logger.debug("Records  {} are missed in node {} will get it from current node {}", new Object[] { missedRecords,
-          remoteNodeId, nodeId });
+          remoteNodeId, nodeAddress });
 
       Record[] missedRecordsArray = new Record[missedRecords.size()];
       missedRecordsArray = missedRecords.toArray(missedRecordsArray);
@@ -1867,16 +1883,16 @@ public final class OLocalDHTNode implements ODHTNode {
   private static final class ReadRepairThreadFactory implements ThreadFactory {
     private static final AtomicInteger counter = new AtomicInteger();
 
-    private final long                 nodeId;
+    private final ONodeAddress         nodeAddress;
 
-    private ReadRepairThreadFactory(long nodeId) {
-      this.nodeId = nodeId;
+    private ReadRepairThreadFactory(ONodeAddress nodeAddress) {
+      this.nodeAddress = nodeAddress;
     }
 
     public Thread newThread(Runnable r) {
       final Thread thread = new Thread(r);
 
-      thread.setName("Read Repair Protocol for node '" + nodeId + "' [" + counter.incrementAndGet() + "]");
+      thread.setName("Read Repair Protocol for node '" + nodeAddress + "' [" + counter.incrementAndGet() + "]");
       thread.setDaemon(true);
 
       return thread;
@@ -1884,10 +1900,10 @@ public final class OLocalDHTNode implements ODHTNode {
   }
 
   private final class ReadRepairTask implements Callable<Void> {
-    private final Logger logger = LoggerFactory.getLogger(ReadRepairTask.class);
-    private final long   recordId;
+    private final Logger               logger = LoggerFactory.getLogger(ReadRepairTask.class);
+    private final OAutoShardedRecordId recordId;
 
-    private ReadRepairTask(long recordId) {
+    private ReadRepairTask(OAutoShardedRecordId recordId) {
       this.recordId = recordId;
     }
 
@@ -1912,10 +1928,6 @@ public final class OLocalDHTNode implements ODHTNode {
   private static final class NodeSynchronizationFailedException extends RuntimeException {
     private NodeSynchronizationFailedException(String message) {
       super(message);
-    }
-
-    private NodeSynchronizationFailedException(String message, Throwable cause) {
-      super(message, cause);
     }
   }
 

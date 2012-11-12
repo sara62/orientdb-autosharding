@@ -13,8 +13,8 @@ import java.util.Arrays;
  */
 public class ODetachedMerkleTreeNode implements Externalizable {
   private byte[]           hash;
-  private long             startId;
-  private long             endId;
+  private ONodeId          startId;
+  private ONodeId          endId;
 
   private RecordMetadata[] recordMetadata;
   private byte[][]         childrenHash;
@@ -24,8 +24,8 @@ public class ODetachedMerkleTreeNode implements Externalizable {
   public ODetachedMerkleTreeNode() {
   }
 
-  public ODetachedMerkleTreeNode(byte[] hash, long startId, long endId, RecordMetadata[] recordMetadata, byte[][] childrenHash,
-      int[] path) {
+  public ODetachedMerkleTreeNode(byte[] hash, ONodeId startId, ONodeId endId, RecordMetadata[] recordMetadata,
+      byte[][] childrenHash, int[] path) {
     this.hash = hash;
 
     this.startId = startId;
@@ -53,11 +53,11 @@ public class ODetachedMerkleTreeNode implements Externalizable {
     return hash;
   }
 
-  public long getStartId() {
+  public ONodeId getStartId() {
     return startId;
   }
 
-  public long getEndId() {
+  public ONodeId getEndId() {
     return endId;
   }
 
@@ -89,8 +89,8 @@ public class ODetachedMerkleTreeNode implements Externalizable {
     out.writeInt(hash.length);
     out.write(hash);
 
-    out.writeLong(startId);
-    out.writeLong(endId);
+    out.writeObject(startId);
+    out.writeObject(endId);
 
     out.writeInt(path.length);
     for (int pathItem : path)
@@ -129,8 +129,8 @@ public class ODetachedMerkleTreeNode implements Externalizable {
       bytesWereRead += batchSize;
     }
 
-    startId = in.readLong();
-    endId = in.readLong();
+    startId = (ONodeId) in.readObject();
+    endId = (ONodeId) in.readObject();
 
     final int pathLength = in.readInt();
     path = new int[pathLength];

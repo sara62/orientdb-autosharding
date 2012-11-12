@@ -5,55 +5,55 @@ package com.orientechnologies.orient.server.distributed;
  * @since 22.10.12
  */
 public final class ODHTRingInterval {
-  private final long start;
-  private final long end;
+  private final ONodeId start;
+  private final ONodeId end;
 
-  public ODHTRingInterval(long start, long end) {
+  public ODHTRingInterval(ONodeId start, ONodeId end) {
     this.start = start;
     this.end = end;
   }
 
-  public long getStart() {
+  public ONodeId getStart() {
     return start;
   }
 
-  public long getEnd() {
+  public ONodeId getEnd() {
     return end;
   }
 
-  public boolean insideInterval(long value) {
-    if (end >= start)
-      return start <= value && end >= value;
+  public boolean insideInterval(ONodeId value) {
+    if (end.compareTo(start) >= 0)
+      return start.compareTo(value) <= 0 && end.compareTo(value) >= 0;
     else
-      return value <= end || value >= start;
+      return value.compareTo(end) <= 0 || value.compareTo(start) >= 0;
   }
 
   public ODHTRingInterval intersection(ODHTRingInterval other) {
-    if (end >= start && other.end >= other.start) {
-      if (other.end < start)
+    if (end.compareTo(start) >= 0 && other.end.compareTo(other.start) >= 0) {
+      if (other.end.compareTo(start) < 0)
         return null;
 
-      if (end < other.start)
+      if (end.compareTo(other.start) < 0)
         return null;
 
-      if (other.end >= start && other.start < start)
+      if (other.end.compareTo(start) >= 0 && other.start.compareTo(start) < 0)
         return new ODHTRingInterval(start, other.end);
 
-      if (end >= other.start && end < other.end)
+      if (end.compareTo(other.start) >= 0 && end.compareTo(other.end) < 0)
         return new ODHTRingInterval(other.start, end);
 
       return new ODHTRingInterval(other.start, other.end);
-    } else if (end < start && other.end >= other.start) {
-      if (other.start > end && other.end < start)
+    } else if (end.compareTo(start) < 0 && other.end.compareTo(other.start) >= 0) {
+      if (other.start.compareTo(end) > 0 && other.end.compareTo(start) < 0)
         return null;
 
-      if (end >= other.start && end >= other.end)
+      if (end.compareTo(other.start) >= 0 && end.compareTo(other.end) >= 0)
         return new ODHTRingInterval(other.start, other.end);
 
-      if (end >= other.start && end < other.end)
+      if (end.compareTo(other.start) >= 0 && end.compareTo(other.end) < 0)
         return new ODHTRingInterval(other.start, end);
 
-      if (other.start < start && other.end >= start)
+      if (other.start.compareTo(start) < 0 && other.end.compareTo(start) >= 0)
         return new ODHTRingInterval(start, other.end);
 
       return new ODHTRingInterval(other.start, other.end);
@@ -71,9 +71,9 @@ public final class ODHTRingInterval {
 
     ODHTRingInterval that = (ODHTRingInterval) o;
 
-    if (start != that.start)
+    if (end != null ? !end.equals(that.end) : that.end != null)
       return false;
-    if (end != that.end)
+    if (start != null ? !start.equals(that.start) : that.start != null)
       return false;
 
     return true;
@@ -81,27 +81,13 @@ public final class ODHTRingInterval {
 
   @Override
   public int hashCode() {
-    int result = (int) (start ^ (start >>> 32));
-    result = 31 * result + (int) (end ^ (end >>> 32));
+    int result = start != null ? start.hashCode() : 0;
+    result = 31 * result + (end != null ? end.hashCode() : 0);
     return result;
   }
 
   @Override
   public String toString() {
     return "ODHTRingInterval{" + "start=" + start + ", end=" + end + '}';
-  }
-
-  public static long increment(long value) {
-    if (value < Long.MAX_VALUE)
-      return value + 1;
-
-    return 0;
-  }
-
-  public static long decrement(long value) {
-    if (value == 0)
-      return Long.MAX_VALUE;
-
-    return value - 1;
   }
 }
