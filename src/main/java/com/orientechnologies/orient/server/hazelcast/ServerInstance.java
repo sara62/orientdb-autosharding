@@ -41,6 +41,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
   public static final Map<String, ServerInstance>         INSTANCES          = new ConcurrentHashMap<String, ServerInstance>();
 
   private final Map<ONodeAddress, OHazelcastDHTNodeProxy> addressProxyMap    = new ConcurrentHashMap<ONodeAddress, OHazelcastDHTNodeProxy>();
+  private final Map<String, Member>                       uuidMemberMap      = new ConcurrentHashMap<String, Member>();
 
   private volatile OLocalDHTNode                          localNode;
   private volatile HazelcastInstance                      hazelcastInstance;
@@ -91,6 +92,8 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
     hazelcastInstance.getCluster().addMembershipListener(this);
+    for (Member member : hazelcastInstance.getCluster().getMembers())
+      uuidMemberMap.put(member.getUuid(), member);
 
     // TODO Fix concurrency issue here
     if (hazelcastInstance.getCluster().getMembers().size() == 1)
@@ -105,6 +108,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     timer.schedule(new TimerTask() {
       @Override
       public void run() {
+        localNode.fixPredecessor();
         localNode.stabilize();
         localNode.fixFingers();
       }
@@ -129,15 +133,27 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
   }
 
   public void memberAdded(MembershipEvent membershipEvent) {
+    final Member member = membershipEvent.getMember();
+
+    uuidMemberMap.put(member.getUuid(), member);
     localNode.stabilize();
   }
 
   public void memberRemoved(MembershipEvent membershipEvent) {
+    final Member member = membershipEvent.getMember();
+
+    uuidMemberMap.remove(member.getUuid());
+
     localNode.fixPredecessor();
     localNode.stabilize();
   }
 
   public ODHTNode findById(ONodeAddress address) {
+    if (!uuidMemberMap.containsKey(((OHazelcastNodeAddress) address).getMemberUUID())) {
+      addressProxyMap.remove(address);
+      return null;
+    }
+
     if (localNode.getNodeAddress().equals(address))
       return localNode;
 

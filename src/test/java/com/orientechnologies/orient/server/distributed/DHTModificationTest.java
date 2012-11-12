@@ -48,8 +48,6 @@ public class DHTModificationTest {
     Thread.sleep(30000);
     checkDHTStructure(serverInstance, ringMap);
 
-    final MersenneTwister random = new MersenneTwister();
-
     for (int i = 0; i < 60; i++) {
       ONodeAddress nodeAddress = ringMap.ceilingKey(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), ""));
       if (nodeAddress == null)

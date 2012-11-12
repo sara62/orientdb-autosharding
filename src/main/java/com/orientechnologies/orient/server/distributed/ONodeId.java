@@ -1,9 +1,5 @@
 package com.orientechnologies.orient.server.distributed;
 
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
@@ -21,7 +17,7 @@ import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
  * @author Andrey Lomakin
  * @since 05.11.12
  */
-public class ONodeId implements Comparable<ONodeId>, Externalizable {
+public class ONodeId  extends Number implements Comparable<ONodeId> {
   private static final int             CHUNKS_SIZE            = 6;
 
   public static final int              NODE_SIZE_BYTES        = CHUNKS_SIZE * OIntegerSerializer.INT_SIZE;
@@ -45,10 +41,10 @@ public class ONodeId implements Comparable<ONodeId>, Externalizable {
   private static final AtomicLong      version                = new AtomicLong();
 
   static {
-    random.setSeed(new SecureRandom().nextLong());
+    random.setSeed(OLongSerializer.INSTANCE.deserialize(new SecureRandom().generateSeed(OLongSerializer.LONG_SIZE), 0));
   }
 
-  private int[]                        chunks;
+  private final int[]                  chunks;
 
   public ONodeId() {
     this(new int[CHUNKS_SIZE]);
@@ -167,18 +163,20 @@ public class ONodeId implements Comparable<ONodeId>, Externalizable {
     return chunks[CHUNKS_SIZE - 1];
   }
 
-  @Override
-  public void writeExternal(ObjectOutput out) throws IOException {
-    for (int chunk : chunks)
-      out.writeInt(chunk);
-  }
+	@Override
+	public long longValue() {
+		return (chunks[CHUNKS_SIZE - 2] & LONG_INT_MASK) << 32 + chunks[CHUNKS_SIZE - 1] & LONG_INT_MASK;
+	}
 
-  @Override
-  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    chunks = new int[CHUNKS_SIZE];
-    for (int i = 0; i < CHUNKS_SIZE; i++)
-      chunks[i] = in.readInt();
-  }
+	@Override
+	public float floatValue() {
+		return longValue();
+	}
+
+	@Override
+	public double doubleValue() {
+		return longValue();
+	}
 
   public byte[] toStream() {
     final byte[] bytes = new byte[NODE_SIZE_BYTES];
@@ -214,7 +212,7 @@ public class ONodeId implements Comparable<ONodeId>, Externalizable {
 
   @Override
   public String toString() {
-    return "ONodeId{" + "id=0x" + toHexString() + '}';
+    return "0x" + toHexString();
   }
 
   public String toHexString() {

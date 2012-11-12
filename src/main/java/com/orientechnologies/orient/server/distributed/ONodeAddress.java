@@ -61,6 +61,6 @@ public abstract class ONodeAddress implements Externalizable, Comparable<ONodeAd
 
   @Override
   public String toString() {
-    return "ONodeAddress{" + "nodeAddress=" + nodeId + '}';
+    return nodeId.toString();
   }
 }

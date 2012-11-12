@@ -64,6 +64,6 @@ public class OHazelcastNodeAddress extends ONodeAddress {
 
   @Override
   public String toString() {
-    return "OHazelcastNodeAddress{" + "memberUUID='" + memberUUID + '\'' + "} " + super.toString();
+    return "nodeAddress: 'memberUUID:" + memberUUID + ": nodeId:" + getNodeId() + "'";
   }
 }

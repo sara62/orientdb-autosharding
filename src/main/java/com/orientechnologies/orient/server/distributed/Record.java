@@ -78,32 +78,29 @@ public class Record implements Externalizable {
     this.version.convertToTombstone();
   }
 
-  @Override
-  public boolean equals(Object o) {
-    if (this == o)
-      return true;
-    if (o == null || getClass() != o.getClass())
-      return false;
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
 
-    Record record = (Record) o;
+		Record record = (Record) o;
 
-    if (id != record.id)
-      return false;
-    if (!version.equals(record.version))
-      return false;
+		if (data != null ? !data.equals(record.data) : record.data != null) return false;
+		if (!id.equals(record.id)) return false;
+		if (!version.equals(record.version)) return false;
 
-    return true;
-  }
+		return true;
+	}
 
-  @Override
-  public int hashCode() {
-    int result = data != null ? data.hashCode() : 0;
-    result = 31 * result + (id != null ? id.hashCode() : 0);
-    result = 31 * result + (version != null ? version.hashCode() : 0);
-    return result;
-  }
+	@Override
+	public int hashCode() {
+		int result = data != null ? data.hashCode() : 0;
+		result = 31 * result + id.hashCode();
+		result = 31 * result + version.hashCode();
+		return result;
+	}
 
-  public void writeExternal(ObjectOutput out) throws IOException {
+	public void writeExternal(ObjectOutput out) throws IOException {
     out.writeObject(id);
     out.writeObject(version);
 

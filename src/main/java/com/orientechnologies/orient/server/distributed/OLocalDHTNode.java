@@ -124,7 +124,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
       final ODHTNode node = nodeLookup.findById(nodeAddress);
       if (node == null) {
-        logger.error("Node with id {} is absent.", nodeAddress);
+        logger.error("Node {} is absent.", nodeAddress);
         return false;
       }
 
@@ -194,25 +194,25 @@ public final class OLocalDHTNode implements ODHTNode {
       }
 
     } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
       return false;
     }
   }
 
-  public ONodeAddress findSuccessor(ONodeId key) {
+  public ONodeAddress findSuccessor(ONodeId id) {
     Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".findSuccessor");
 
     int retryCount = 0;
     while (true) {
-      logger.debug("Successor request for key {}", key);
+      logger.debug("Successor request for id {}", id);
       final ONodeAddress successorAddress = fingerPoints.get(0);
 
-      ODHTRingInterval ringInterval = new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), successorAddress.getNodeId());
+      ODHTRingInterval ringInterval =
+							new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), successorAddress.getNodeId());
 
-      if (ringInterval.insideInterval(key)) {
+      if (ringInterval.insideInterval(id)) {
         if (!isNodeOffline(successorAddress)) {
-          logger.debug("Key {} inside interval {} - {} ",
-              new Object[] { key, nodeAddress.getNodeId(), successorAddress.getNodeId() });
+          logger.debug("Id {} inside interval {} - {} ",
+              new Object[] { id, nodeAddress.getNodeId(), successorAddress.getNodeId() });
           return successorAddress;
         } else {
           final ONodeAddress[] successors = successorsList;
@@ -221,12 +221,13 @@ public final class OLocalDHTNode implements ODHTNode {
           if (successors.length == 0)
             return nodeAddress;
 
-          for (final ONodeAddress nthSuccessorId : successors) {
-            ringInterval = new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), nthSuccessorId.getNodeId());
-            if (ringInterval.insideInterval(key)) {
-              if (!isNodeOffline(nthSuccessorId)) {
-                logger.debug("Key {} inside interval {} - {} ", new Object[] { key, nodeAddress, nthSuccessorId });
-                return nthSuccessorId;
+          for (final ONodeAddress nthSuccessorAddress : successors) {
+            ringInterval = new ODHTRingInterval(nodeAddress.getNodeId().add(ONodeId.ONE), nthSuccessorAddress.getNodeId());
+            if (ringInterval.insideInterval(id)) {
+              if (!isNodeOffline(nthSuccessorAddress)) {
+                logger.debug("Id {} inside interval {} - {} ", new Object[] { id, nodeAddress.getNodeId(),
+												nthSuccessorAddress.getNodeId() });
+                return nthSuccessorAddress;
               }
             }
           }
@@ -235,24 +236,24 @@ public final class OLocalDHTNode implements ODHTNode {
 
       retryCount++;
       if (retryCount > MAX_RETRIES) {
-        throw new ONodeOfflineException("Successor can not be found using node " + nodeAddress + " , id to process " + key
+        throw new ONodeOfflineException("Successor can not be found using node " + nodeAddress + " , id to process " + id
             + ", successor " + getSuccessor() + ", auxiliary successors " + Arrays.toString(successorsList) + ", finger points "
             + fingerPoints, null, successorAddress.getNodeId());
       }
 
-      ONodeAddress precedingNodeId = findClosestPrecedingFinger(key);
+      ONodeAddress precedingNodeAddress = findClosestPrecedingFinger(id);
 
-      logger.debug("Closest preceding node for key {} is {}", key, precedingNodeId);
+      logger.debug("Closest preceding node for id {} is {}", id, precedingNodeAddress);
 
-      if (precedingNodeId.equals(nodeAddress)) {
+      if (precedingNodeAddress.equals(nodeAddress)) {
         logger.error("Successor was changed, retry");
         continue;
       }
 
-      ODHTNode precedingNode = nodeLookup.findById(precedingNodeId);
+      ODHTNode precedingNode = nodeLookup.findById(precedingNodeAddress);
       if (precedingNode == null) {
-        if (!precedingNodeId.equals(getSuccessor()))
-          clearFingerPoint(precedingNodeId);
+        if (!precedingNodeAddress.equals(getSuccessor()))
+          clearFingerPoint(precedingNodeAddress);
         else
           requestStabilization();
 
@@ -260,12 +261,12 @@ public final class OLocalDHTNode implements ODHTNode {
       }
 
       try {
-        final ONodeAddress successorResult = precedingNode.findSuccessor(key);
-        logger.debug("Successor for key {} is {}", key, successorResult);
+        final ONodeAddress successorResult = precedingNode.findSuccessor(id);
+        logger.debug("Successor for id {} is {}", id, successorResult);
         return successorResult;
       } catch (ONodeOfflineException e) {
-        if (!precedingNodeId.equals(getSuccessor()))
-          clearFingerPoint(precedingNodeId);
+        if (!precedingNodeAddress.equals(getSuccessor()))
+          clearFingerPoint(precedingNodeAddress);
         else
           requestStabilization();
       }
