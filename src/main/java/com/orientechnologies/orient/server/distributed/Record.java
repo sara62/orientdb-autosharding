@@ -5,22 +5,22 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 19.09.12
  */
 public class Record implements Externalizable {
-  private String               data;
-  private OAutoShardedRecordId id;
+  private String            data;
+  private ORecordId         id;
 
-  private ODHTRecordVersion    version;
+  private ODHTRecordVersion version;
 
   public Record() {
   }
 
-  public Record(OAutoShardedRecordId id, String data) {
+  public Record(ORecordId id, String data) {
     this.id = id;
     this.data = data;
 
@@ -28,7 +28,7 @@ public class Record implements Externalizable {
     version.init();
   }
 
-  public Record(OAutoShardedRecordId id, String data, int shortVersion) {
+  public Record(ORecordId id, String data, int shortVersion) {
     this.id = id;
     this.data = data;
 
@@ -48,7 +48,7 @@ public class Record implements Externalizable {
     this.data = data;
   }
 
-  public OAutoShardedRecordId getId() {
+  public ORecordId getId() {
     return id;
   }
 
@@ -78,29 +78,34 @@ public class Record implements Externalizable {
     this.version.convertToTombstone();
   }
 
-	@Override
-	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
+  @Override
+  public boolean equals(Object o) {
+    if (this == o)
+      return true;
+    if (o == null || getClass() != o.getClass())
+      return false;
 
-		Record record = (Record) o;
+    Record record = (Record) o;
 
-		if (data != null ? !data.equals(record.data) : record.data != null) return false;
-		if (!id.equals(record.id)) return false;
-		if (!version.equals(record.version)) return false;
+    if (data != null ? !data.equals(record.data) : record.data != null)
+      return false;
+    if (!id.equals(record.id))
+      return false;
+    if (!version.equals(record.version))
+      return false;
 
-		return true;
-	}
+    return true;
+  }
 
-	@Override
-	public int hashCode() {
-		int result = data != null ? data.hashCode() : 0;
-		result = 31 * result + id.hashCode();
-		result = 31 * result + version.hashCode();
-		return result;
-	}
+  @Override
+  public int hashCode() {
+    int result = data != null ? data.hashCode() : 0;
+    result = 31 * result + id.hashCode();
+    result = 31 * result + version.hashCode();
+    return result;
+  }
 
-	public void writeExternal(ObjectOutput out) throws IOException {
+  public void writeExternal(ObjectOutput out) throws IOException {
     out.writeObject(id);
     out.writeObject(version);
 
@@ -112,7 +117,7 @@ public class Record implements Externalizable {
   }
 
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    id = (OAutoShardedRecordId) in.readObject();
+    id = (ORecordId) in.readObject();
     version = (ODHTRecordVersion) in.readObject();
 
     final boolean dataIsNotNull = in.readBoolean();

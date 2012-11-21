@@ -3,23 +3,25 @@ package com.orientechnologies.orient.server.distributed;
 import java.util.Iterator;
 import java.util.NavigableMap;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
+import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 12.10.12
  */
 public class ODHTRingIterator implements Iterator<RecordMetadata> {
-  private final NavigableMap<OAutoShardedRecordId, Record> db;
-  private final OAutoShardedRecordId                       start;
-  private final OAutoShardedRecordId                       end;
+  private final NavigableMap<ORecordId, Record> db;
+  private final ORecordId                       start;
+  private final ORecordId                       end;
 
-  private Iterator<Record>                                 currentIterator;
+  private Iterator<Record>                      currentIterator;
 
-  private OAutoShardedRecordId                             currentIntervalStart;
-  private OAutoShardedRecordId                             currentIntervalEnd;
+  private ORecordId                             currentIntervalStart;
+  private ORecordId                             currentIntervalEnd;
 
-  public ODHTRingIterator(NavigableMap<OAutoShardedRecordId, Record> db, OAutoShardedRecordId start, OAutoShardedRecordId end) {
+  public ODHTRingIterator(NavigableMap<ORecordId, Record> db, ORecordId start, ORecordId end) {
     this.db = db;
     this.start = start;
     this.end = end;
@@ -29,7 +31,7 @@ public class ODHTRingIterator implements Iterator<RecordMetadata> {
       currentIntervalEnd = end;
     } else {
       currentIntervalStart = start;
-      currentIntervalEnd = ONodeId.convertToRecordId(ONodeId.MAX_VALUE, start.clusterId);
+      currentIntervalEnd = new ORecordId(start.clusterId, new OClusterPositionNodeId(ONodeId.MAX_VALUE));
     }
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
@@ -43,7 +45,7 @@ public class ODHTRingIterator implements Iterator<RecordMetadata> {
     if (currentIterator.hasNext())
       return true;
 
-    currentIntervalStart = ONodeId.convertToRecordId(ONodeId.MIN_VALUE, start.clusterId);
+    currentIntervalStart = new ORecordId(start.clusterId, new OClusterPositionNodeId(ONodeId.MIN_VALUE));
     currentIntervalEnd = end;
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();

@@ -5,25 +5,25 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 01.10.12
  */
 public class RecordMetadata implements Externalizable {
-  private OAutoShardedRecordId id;
-  private ODHTRecordVersion    version;
+  private ORecordId         id;
+  private ODHTRecordVersion version;
 
   public RecordMetadata() {
   }
 
-  public RecordMetadata(OAutoShardedRecordId id, ODHTRecordVersion version) {
+  public RecordMetadata(ORecordId id, ODHTRecordVersion version) {
     this.id = id;
     this.version = version;
   }
 
-  public OAutoShardedRecordId getId() {
+  public ORecordId getId() {
     return id;
   }
 
@@ -68,7 +68,7 @@ public class RecordMetadata implements Externalizable {
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    id = (OAutoShardedRecordId) in.readObject();
+    id = (ORecordId) in.readObject();
     version = (ODHTRecordVersion) in.readObject();
   }
 }

@@ -5,7 +5,9 @@ import java.util.TreeMap;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
+import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
@@ -14,10 +16,10 @@ import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 @Test
 public class DHTRingIteratorTest {
   public void continiousIntervalTest() {
-    final TreeMap<OAutoShardedRecordId, Record> map = new TreeMap<OAutoShardedRecordId, Record>();
+    final TreeMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
 
     for (long i = 0; i < 100; i++) {
-      final OAutoShardedRecordId recordId = convertToRecordId(i);
+      final ORecordId recordId = convertToRecordId(i);
       map.put(recordId, new Record(recordId, i + ""));
     }
 
@@ -26,7 +28,7 @@ public class DHTRingIteratorTest {
     for (long i = 20; i <= 30; i++) {
       Assert.assertTrue(ringIterator.hasNext());
 
-      final OAutoShardedRecordId recordId = convertToRecordId(i);
+      final ORecordId recordId = convertToRecordId(i);
 
       final Record record = map.get(recordId);
 
@@ -37,10 +39,10 @@ public class DHTRingIteratorTest {
   }
 
   public void overlappingTest() {
-    final TreeMap<OAutoShardedRecordId, Record> map = new TreeMap<OAutoShardedRecordId, Record>();
+    final TreeMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
 
     for (long i = 0; i < 100; i++) {
-      final OAutoShardedRecordId recordId = convertToRecordId(i);
+      final ORecordId recordId = convertToRecordId(i);
       map.put(recordId, new Record(recordId, i + ""));
     }
 
@@ -65,8 +67,8 @@ public class DHTRingIteratorTest {
     Assert.assertTrue(!ringIterator.hasNext());
   }
 
-  private OAutoShardedRecordId convertToRecordId(long i) {
-    return ONodeId.convertToRecordId(ONodeId.valueOf(i), 1);
+  private ORecordId convertToRecordId(long i) {
+    return new ORecordId(1, new OClusterPositionNodeId(ONodeId.valueOf(i)));
   }
 
 }

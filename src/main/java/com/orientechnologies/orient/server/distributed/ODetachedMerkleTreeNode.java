@@ -6,6 +6,7 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.util.Arrays;
 
+import com.orientechnologies.orient.core.id.ONodeId;
 
 /**
  * @author Andrey Lomakin

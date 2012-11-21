@@ -1,6 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
@@ -31,35 +32,35 @@ public interface ODHTNode {
 
   public Record createRecord(String data);
 
-  public Record createRecord(OAutoShardedRecordId id, String data);
+  public Record createRecord(ORecordId id, String data);
 
-  public Record getRecord(OAutoShardedRecordId id);
+  public Record getRecord(ORecordId id);
 
-  public void updateRecord(OAutoShardedRecordId id, Record record);
+  public void updateRecord(ORecordId id, Record record);
 
-  public void deleteRecord(OAutoShardedRecordId id, ODHTRecordVersion version);
+  public void deleteRecord(ORecordId id, ODHTRecordVersion version);
 
   public void updateReplica(Record replica, boolean async);
 
   public void updateReplicas(Record[] replicas, boolean async);
 
-  public Record getRecordFromNode(OAutoShardedRecordId id, boolean replicate);
+  public Record getRecordFromNode(ORecordId id, boolean replicate);
 
-  public Record[] getRecordsFromNode(OAutoShardedRecordId[] ids, boolean replicate);
+  public Record[] getRecordsFromNode(ORecordId[] ids, boolean replicate);
 
-  public Record createRecordInNode(OAutoShardedRecordId id, String data);
+  public Record createRecordInNode(ORecordId id, String data);
 
-  public void updateRecordInNode(OAutoShardedRecordId id, Record record);
+  public void updateRecordInNode(ORecordId id, Record record);
 
-  public void deleteRecordFromNode(OAutoShardedRecordId id, ODHTRecordVersion version);
+  public void deleteRecordFromNode(ORecordId id, ODHTRecordVersion version);
 
-  public RecordMetadata getRecordMetadataFromNode(OAutoShardedRecordId id);
+  public RecordMetadata getRecordMetadataFromNode(ORecordId id);
 
-  public RecordMetadata[] getRecordsForIntervalFromNode(OAutoShardedRecordId startId, OAutoShardedRecordId endId);
+  public RecordMetadata[] getRecordsForIntervalFromNode(ORecordId startId, ORecordId endId);
 
   public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node);
 
   public int size();
 
-  public OAutoShardedRecordId[] findMissedRecords(RecordMetadata[] recordMetadatas);
+  public ORecordId[] findMissedRecords(RecordMetadata[] recordMetadatas);
 }

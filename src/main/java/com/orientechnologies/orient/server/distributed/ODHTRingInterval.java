@@ -1,5 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
+import com.orientechnologies.orient.core.id.ONodeId;
+
 /**
  * @author Andrey Lomakin
  * @since 22.10.12

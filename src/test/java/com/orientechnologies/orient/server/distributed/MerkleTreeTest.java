@@ -7,7 +7,9 @@ import java.util.TreeMap;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
+import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
@@ -16,7 +18,7 @@ import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
 @Test
 public class MerkleTreeTest {
   public void testAdd67KeysToNext1024NodeCompareDetachedNodes() throws Exception {
-    NavigableMap<OAutoShardedRecordId, Record> map = new TreeMap<OAutoShardedRecordId, Record>();
+    NavigableMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
 
     OMerkleTree tree = new OMerkleTree(map, 1);
     for (int i = 0; i < 2; i++)
@@ -31,10 +33,10 @@ public class MerkleTreeTest {
     for (long i = 1024; i < 1089; i++)
       Assert.assertEquals(map.get(convertToRecordId(i)).getData(), i + "");
 
-    NavigableMap<OAutoShardedRecordId, Record> mapTwo = new TreeMap<OAutoShardedRecordId, Record>();
+    NavigableMap<ORecordId, Record> mapTwo = new TreeMap<ORecordId, Record>();
     OMerkleTree sampleTree = new OMerkleTree(mapTwo, 1);
 
-    for (Map.Entry<OAutoShardedRecordId, Record> entry : map.entrySet())
+    for (Map.Entry<ORecordId, Record> entry : map.entrySet())
       sampleTree.updateReplica(entry.getKey(), entry.getValue());
 
     for (int i = 0; i < 64; i++)
@@ -78,7 +80,7 @@ public class MerkleTreeTest {
     }
   }
 
-  private OAutoShardedRecordId convertToRecordId(long i) {
-    return ONodeId.convertToRecordId(ONodeId.valueOf(i), 1);
+  private ORecordId convertToRecordId(long i) {
+    return new ORecordId(1, new OClusterPositionNodeId(ONodeId.valueOf(i)));
   }
 }

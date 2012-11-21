@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
+import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
-import com.orientechnologies.orient.server.distributed.ONodeId;
 
 /**
  * @author Andrey Lomakin

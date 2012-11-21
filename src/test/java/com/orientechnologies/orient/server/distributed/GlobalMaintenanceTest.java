@@ -5,7 +5,9 @@ import java.util.NavigableMap;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import com.orientechnologies.orient.core.id.OAutoShardedRecordId;
+import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
+import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastDHTNodeProxy;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -75,12 +77,13 @@ public class GlobalMaintenanceTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<OAutoShardedRecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<OAutoShardedRecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<ORecordId, Record> nodeDb = localDHTNode.getDb();
+      final NavigableMap<ORecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
+      final NavigableMap<ORecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(dhtNode.getPredecessor().getNodeId()
-          .add(ONodeId.ONE), 1), ONodeId.convertToRecordId(dhtNode.getNodeAddress().getNodeId(), 1));
+      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
+          .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
+          .getNodeId())));
 
       while (ringIterator.hasNext()) {
         final RecordMetadata recordMetadata = ringIterator.next();
@@ -112,13 +115,14 @@ public class GlobalMaintenanceTest {
       final ODHTNode thirdSuccessor = serverInstance.findById(secondSuccessor.getSuccessor());
       final OLocalDHTNode localThirdSuccessor = getLocalNode(thirdSuccessor);
 
-      final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<OAutoShardedRecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<OAutoShardedRecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
-      final NavigableMap<OAutoShardedRecordId, Record> thirdSuccessorDb = localThirdSuccessor.getDb();
+      final NavigableMap<ORecordId, Record> nodeDb = localDHTNode.getDb();
+      final NavigableMap<ORecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
+      final NavigableMap<ORecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<ORecordId, Record> thirdSuccessorDb = localThirdSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(dhtNode.getPredecessor().getNodeId()
-          .add(ONodeId.ONE), 1), ONodeId.convertToRecordId(dhtNode.getNodeAddress().getNodeId(), 1));
+      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
+          .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
+          .getNodeId())));
 
       while (ringIterator.hasNext()) {
         final RecordMetadata recordMetadata = ringIterator.next();
@@ -144,10 +148,11 @@ public class GlobalMaintenanceTest {
   }
 
   private int getOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<OAutoShardedRecordId, Record> nodeDb = localDHTNode.getDb();
+    final NavigableMap<ORecordId, Record> nodeDb = localDHTNode.getDb();
 
-    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, ONodeId.convertToRecordId(localDHTNode.getPredecessor()
-        .getNodeId().add(ONodeId.ONE), 1), ONodeId.convertToRecordId(localDHTNode.getNodeAddress().getNodeId(), 1));
+    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
+        .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()
+        .getNodeId())));
 
     int count = 0;
     while (ringIterator.hasNext()) {

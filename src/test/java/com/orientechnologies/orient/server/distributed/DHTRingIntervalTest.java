@@ -4,6 +4,8 @@ import junit.framework.Assert;
 
 import org.testng.annotations.Test;
 
+import com.orientechnologies.orient.core.id.ONodeId;
+
 /**
  * @author Andrey Lomakin
  * @since 22.10.12
