@@ -26,10 +26,11 @@ import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
-import com.orientechnologies.orient.server.distributed.ODefaultDistributedCoordinatorFactory;
+import com.orientechnologies.orient.server.distributed.operations.ODefaultDistributedCoordinatorFactory;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.Record;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ODefaultRingProtocolsFactory;
 
 /**
  * @author Andrey Lomakin
@@ -87,7 +88,10 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
 
     localNode = new OLocalDHTNode(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance.getCluster()
-        .getLocalMember().getUuid()), this, new ODefaultDistributedCoordinatorFactory(), replicaCount, syncReplicaCount,
+        .getLocalMember().getUuid()),
+						this,
+						new ODefaultDistributedCoordinatorFactory(), new ODefaultRingProtocolsFactory(),
+						replicaCount, syncReplicaCount,
         useReadRepair, useAntiEntropy, useGlobalMaintainence);
 
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);

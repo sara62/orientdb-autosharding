@@ -1,6 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
 
 /**
  * @author Andrey Lomakin

@@ -4,6 +4,8 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
+import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
+import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.merkletree;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -18,6 +18,8 @@ import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
+import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
+import com.orientechnologies.orient.server.distributed.Record;
 
 /**
  * @author Andrey Lomakin

@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.ringprotocols;
 
 import com.orientechnologies.orient.core.id.ONodeId;
 

@@ -1,7 +1,8 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.operations;
 
 import com.orientechnologies.orient.core.id.OClusterPosition;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.server.distributed.ODHTNode;
 
 /**
  * @author Andrey Lomakin

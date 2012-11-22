@@ -17,10 +17,10 @@ import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
-import com.orientechnologies.orient.server.distributed.ODetachedMerkleTreeNode;
+import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
-import com.orientechnologies.orient.server.distributed.ORemoteNodeCallException;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
 import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.RecordMetadata;
 

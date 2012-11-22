@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.merkletree;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -8,6 +8,9 @@ import java.util.NavigableMap;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
+import com.orientechnologies.orient.server.distributed.Record;
+import com.orientechnologies.orient.server.distributed.RecordMetadata;
 
 /**
  * @author Andrey Lomakin

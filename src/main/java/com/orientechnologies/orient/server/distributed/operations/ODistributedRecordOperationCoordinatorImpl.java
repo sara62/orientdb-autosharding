@@ -1,5 +1,10 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.operations;
 
+import com.orientechnologies.orient.server.distributed.ODHTNode;
+import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
+import com.orientechnologies.orient.server.distributed.ONodeAddress;
+import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +19,7 @@ import com.orientechnologies.orient.core.id.ORecordId;
 public final class ODistributedRecordOperationCoordinatorImpl implements ODistributedRecordOperationCoordinator {
   private static final int     MAX_RETRIES = 10;
 
-  private static final Logger  LOGGER      = LoggerFactory.getLogger(OLocalDHTNode.class);
+  private static final Logger  LOGGER      = LoggerFactory.getLogger(ODistributedRecordOperationCoordinatorImpl.class);
 
   private final ODHTNodeLookup nodeLookup;
 

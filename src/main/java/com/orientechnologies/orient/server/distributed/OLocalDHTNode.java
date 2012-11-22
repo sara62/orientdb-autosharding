@@ -21,6 +21,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
+import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
+import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedCoordinatorFactory;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordCreation;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordDelete;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordOperationCoordinator;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordRead;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordUpdate;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordReplicator;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordSynchronizer;
+import com.orientechnologies.orient.server.distributed.ringprotocols.OReplicaDistributionStrategy;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORingProtocolsFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +73,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
   private volatile NodeState                           state;
 
-  private final OMerkleTree                            merkleTree            = new OMerkleTree(db, 1);
+  private final OMerkleTree merkleTree            = new OMerkleTree(db, 1);
 
   private final int                                    replicaCount;
   private final int                                    syncReplicaCount;
@@ -70,12 +82,15 @@ public final class OLocalDHTNode implements ODHTNode {
   private final boolean                                useAntiEntropy;
   private final boolean                                useGlobalMaintainence;
 
-  private final ODistributedCoordinatorFactory         distributedCoordinatorFactory;
   private final ODistributedRecordOperationCoordinator operationCoordinator;
+	private final ORecordReplicator recordReplicator;
+	private final ORecordSynchronizer recordSynchronizer;
 
   public OLocalDHTNode(ONodeAddress nodeAddress, ODHTNodeLookup nodeLookup,
-      ODistributedCoordinatorFactory distributedCoordinatorFactory, int replicaCount, int syncReplicaCount, boolean useReadRepair,
-      boolean useAntiEntropy, boolean useGlobalMaintainence) {
+      ODistributedCoordinatorFactory distributedCoordinatorFactory,
+			ORingProtocolsFactory ringProtocolsFactory,
+			int replicaCount, int syncReplicaCount,
+			boolean useReadRepair,	boolean useAntiEntropy, boolean useGlobalMaintainence) {
 
     this.useReadRepair = useReadRepair;
     this.useAntiEntropy = useAntiEntropy;
@@ -83,12 +98,16 @@ public final class OLocalDHTNode implements ODHTNode {
 
     this.nodeAddress = nodeAddress;
 
-    this.distributedCoordinatorFactory = distributedCoordinatorFactory;
     this.replicaCount = replicaCount;
     this.syncReplicaCount = syncReplicaCount;
     this.nodeLookup = nodeLookup;
 
     this.operationCoordinator = distributedCoordinatorFactory.createOperationCoordinator(nodeLookup);
+
+		final OReplicaDistributionStrategy replicaDistributionStrategy = ringProtocolsFactory.createReplicaDistributionStrategy();
+
+		this.recordReplicator     = ringProtocolsFactory.createRecordReplicator(nodeLookup, replicaDistributionStrategy);
+		this.recordSynchronizer   = ringProtocolsFactory.createRecordSynchronizer(nodeLookup, replicaDistributionStrategy);
 
     gmExecutorService = Executors.newSingleThreadScheduledExecutor(new GlobalMaintenanceProtocolThreadFactory(nodeAddress));
     lmExecutorService = Executors.newSingleThreadScheduledExecutor(new LocalMaintenanceProtocolThreadFactory(nodeAddress));
@@ -355,158 +374,27 @@ public final class OLocalDHTNode implements ODHTNode {
     waitTillJoin();
 
     final Record result = addData(recordId, data);
-    replicateRecord(result);
+		recordReplicator.replicateRecord(this, result.getId(), replicaCount, syncReplicaCount);
 
     return result;
   }
 
   @Override
   public void updateRecordInNode(ORecordId recordId, Record record) {
-    synchronizeReplicas(recordId, syncReplicaCount);
-
     updateData(recordId, record);
 
-    replicateRecord(recordId);
+    recordReplicator.replicateRecord(this, recordId, replicaCount, syncReplicaCount);
+
     startReadRepair(recordId);
   }
 
   @Override
   public void deleteRecordFromNode(ORecordId recordId, ODHTRecordVersion version) {
-    synchronizeReplicas(recordId, syncReplicaCount);
-
+		recordSynchronizer.synchronizeSyncReplicas(this, recordId, replicaCount, syncReplicaCount);
     removeData(recordId, version);
 
-    replicateRecord(recordId);
+		recordReplicator.replicateRecord(this, recordId, replicaCount, syncReplicaCount);
     startReadRepair(recordId);
-  }
-
-  private void synchronizeReplicas(ORecordId recordId, int syncReplicaCount) {
-    if (syncReplicaCount < 1)
-      return;
-
-    Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".synchronizeReplicas");
-    final Record ownerRecord = readData(recordId);
-
-    RecordMetadata primaryMetadata;
-
-    if (ownerRecord == null)
-      primaryMetadata = null;
-    else
-      primaryMetadata = new RecordMetadata(ownerRecord.getId(), ownerRecord.getVersion());
-
-    logger.debug("Start synchronization for record {} replica count is {} primary metadata is {}", new Object[] { recordId,
-        syncReplicaCount, primaryMetadata });
-
-    while (true) {
-      ODHTNode primaryHolder = this;
-
-      logger.debug("Find replica holders for node {} replica count is {}", nodeAddress, replicaCount);
-
-      final ONodeAddress[] replicaHolders = getSuccessors();
-      logger.debug("Replica holders for node {} are {}", nodeAddress, replicaHolders);
-
-      if (replicaHolders == null || replicaHolders.length == 0)
-        return;
-
-      final Set<ONodeAddress> holdersToReplicate = chooseReplicas(replicaHolders, syncReplicaCount);
-
-      final Set<ONodeAddress> replicaHoldersToUpdate = new HashSet<ONodeAddress>();
-
-      logger.debug("Replica holders for node {} are {}", nodeAddress, replicaHoldersToUpdate);
-
-      for (ONodeAddress holderId : holdersToReplicate) {
-        final ODHTNode holderNode = nodeLookup.findById(holderId);
-        if (holderNode == null)
-          continue;
-
-        logger.debug("Holder with id {} is absent.", holderId);
-
-        try {
-          final RecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(recordId);
-          logger.debug("Metadata for record id {} from node {} is {}", new Object[] { recordId, holderId, nodeMetadata });
-
-          if (primaryMetadata == null) {
-            if (nodeMetadata != null) {
-              logger.debug(
-                  "Primary metadata is null but node metadata is not so we replace it. record id" + " {} node metadata {}",
-                  recordId, nodeMetadata);
-
-              replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());
-
-              primaryMetadata = nodeMetadata;
-              primaryHolder = holderNode;
-            }
-          } else {
-            if (nodeMetadata != null) {
-              final int cp = primaryMetadata.getVersion().compareTo(nodeMetadata.getVersion());
-
-              if (cp < 0) {
-                replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());
-
-                primaryMetadata = nodeMetadata;
-                primaryHolder = holderNode;
-
-                logger.debug("Primary metadata is not null but node metadata is more up to date  so we replace it."
-                    + " record id {} node metadata {} primary metadata {}",
-                    new Object[] { recordId, nodeMetadata, primaryMetadata });
-              } else if (cp > 0) {
-                logger.debug("Primary metadata is not null but node metadata out of date so we replace it. record id {}"
-                    + " node metadata {} primary metadata {}", new Object[] { recordId, nodeMetadata, primaryMetadata });
-                replicaHoldersToUpdate.add(holderNode.getNodeAddress());
-              }
-            } else {
-              logger.debug("Node metadata is null but primary metadata is not so we replace it. record id {}"
-                  + " node metadata {} primary metadata {}", new Object[] { recordId, nodeMetadata, primaryMetadata });
-              replicaHoldersToUpdate.add(holderNode.getNodeAddress());
-            }
-          }
-
-        } catch (Exception e) {
-          // ignore
-          logger.error("Exception during synchronization of record " + recordId + " for node " + holderId, e);
-        }
-      }
-
-      logger.debug("Replica holders to update for record {}", recordId);
-
-      if (!replicaHoldersToUpdate.isEmpty()) {
-        logger.debug("Getting record from {} with id {}", primaryHolder.getNodeAddress(), recordId);
-
-        Record result;
-        if (nodeAddress.equals(primaryHolder.getNodeAddress()))
-          result = readData(recordId);
-        else
-          try {
-            result = primaryHolder.getRecordFromNode(recordId, false);
-          } catch (Exception e) {
-            continue;
-          }
-
-        logger.debug("Record with id {} was returned from {}" + " with content {}" + result,
-            new Object[] { recordId, primaryHolder.getNodeAddress(), result });
-
-        for (ONodeAddress replicaHolderAddress : replicaHoldersToUpdate) {
-          ODHTNode replicaHolder = nodeLookup.findById(replicaHolderAddress);
-          if (replicaHolder == null)
-            continue;
-
-          logger.debug("Holder with id {}" + " is absent during synchronization of record with id {}", replicaHolderAddress,
-              recordId);
-
-          try {
-            logger.debug("Update of replica with {} for node {}", recordId, replicaHolder.getNodeAddress());
-            replicaHolder.updateReplica(result, false);
-            logger.debug("Replica with {} for node {} was updated.", recordId, replicaHolder.getNodeAddress());
-          } catch (Exception e) {
-            logger.error(
-                "Exception during replication of record with id " + recordId + " for node " + replicaHolder.getNodeAddress(), e);
-          }
-        }
-      }
-
-      logger.debug("Synchronization of record with id {} was completed", recordId);
-      return;
-    }
   }
 
   private void startReadRepair(ORecordId recordId) {
@@ -515,7 +403,7 @@ public final class OLocalDHTNode implements ODHTNode {
 
   public Record getRecordFromNode(ORecordId recordId, boolean replicate) {
     if (replicate) {
-      synchronizeReplicas(recordId, syncReplicaCount);
+			recordSynchronizer.synchronizeSyncReplicas(this, recordId, replicaCount, syncReplicaCount);
       startReadRepair(recordId);
     }
 
@@ -830,74 +718,6 @@ public final class OLocalDHTNode implements ODHTNode {
       successorsList = newSuccessors;
       break;
     }
-  }
-
-  private void replicateRecord(Record record) {
-    if (replicaCount < 1)
-      return;
-
-    Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".replicateRecord");
-    logger.debug("Replication of record {} replica count is {}", record.getId(), replicaCount);
-
-    ONodeAddress[] replicaHolders = getSuccessors();
-
-    logger.debug("Replica holders for record {} are {}", record.getId(), replicaHolders);
-
-    if (replicaHolders == null || replicaHolders.length == 0)
-      return;
-
-    final Set<ONodeAddress> asyncReplicas = chooseReplicas(replicaHolders, replicaCount - syncReplicaCount);
-
-    logger.debug("Async replica holders for record {} are {}", record.getId(), asyncReplicas);
-
-    int processedReplicaHolders = 0;
-    for (ONodeAddress replicaHolderAddress : replicaHolders) {
-      final ODHTNode replicaHolderNode = nodeLookup.findById(replicaHolderAddress);
-      if (replicaHolderNode == null) {
-        logger.error("Replica holder with id " + replicaHolderAddress + " is absent.");
-        continue;
-      }
-
-      try {
-        boolean async = asyncReplicas.contains(replicaHolderAddress);
-
-        logger.debug("Replication of record {} with async flag is set to {} to holder {}", new Object[] { record.getId(), async,
-            replicaHolderAddress });
-
-        replicaHolderNode.updateReplica(record, async);
-
-        logger.debug("Replication of record {} with async flag is set to {} to holder {}  was finished.",
-            new Object[] { record.getId(), async, replicaHolderAddress });
-
-      } catch (Exception e) {
-        logger.error("Exception during replication of record " + record.getId() + " to node " + replicaHolderAddress, e);
-        // ignore
-      }
-      processedReplicaHolders++;
-      if (processedReplicaHolders >= replicaCount)
-        break;
-    }
-
-    logger.debug("Replication of record {} was finished.", record.getId());
-  }
-
-  private Set<ONodeAddress> chooseReplicas(ONodeAddress[] replicaHolders, int replicaCount) {
-    replicaCount = Math.min(replicaCount, replicaHolders.length);
-
-    final Set<ONodeAddress> replicas = new HashSet<ONodeAddress>();
-
-    int holderIndex = 0;
-    while (replicas.size() < replicaCount) {
-      replicas.add(replicaHolders[holderIndex]);
-      holderIndex++;
-    }
-
-    return replicas;
-  }
-
-  private void replicateRecord(ORecordId id) {
-    final Record replica = readData(id);
-    replicateRecord(replica);
   }
 
   private void handleSuccessorOfflineCase(int retryCount, ONodeAddress successorAddress) throws InterruptedException {
@@ -1624,7 +1444,7 @@ public final class OLocalDHTNode implements ODHTNode {
         if (!NodeState.PRODUCTION.equals(state))
           return null;
 
-        synchronizeReplicas(recordId, replicaCount);
+				recordSynchronizer.synchronizeReplicas(OLocalDHTNode.this, recordId, replicaCount, syncReplicaCount);
       } catch (Exception e) {
         logger.error("Exception during read repair for record " + recordId, e);
       }

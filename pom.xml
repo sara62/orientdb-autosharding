@@ -8,6 +8,16 @@
     <artifactId>orientdb-autosharding</artifactId>
     <version>1.0</version>
 
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.6</source>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
     <dependencies>
         <dependency>
             <groupId>com.orientechnologies</groupId>

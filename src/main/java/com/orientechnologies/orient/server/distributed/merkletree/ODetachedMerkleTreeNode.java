@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.merkletree;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -7,6 +7,7 @@ import java.io.ObjectOutput;
 import java.util.Arrays;
 
 import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.server.distributed.RecordMetadata;
 
 /**
  * @author Andrey Lomakin
