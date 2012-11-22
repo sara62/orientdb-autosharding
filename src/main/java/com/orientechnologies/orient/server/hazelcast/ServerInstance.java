@@ -26,6 +26,7 @@ import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
+import com.orientechnologies.orient.server.distributed.ODefaultDistributedCoordinatorFactory;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.Record;
@@ -86,9 +87,9 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
 
     localNode = new OLocalDHTNode(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance.getCluster()
-        .getLocalMember().getUuid()), replicaCount, syncReplicaCount, useReadRepair, useAntiEntropy, useGlobalMaintainence);
+        .getLocalMember().getUuid()), this, new ODefaultDistributedCoordinatorFactory(), replicaCount, syncReplicaCount,
+        useReadRepair, useAntiEntropy, useGlobalMaintainence);
 
-    localNode.setNodeLookup(this);
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
     hazelcastInstance.getCluster().addMembershipListener(this);
