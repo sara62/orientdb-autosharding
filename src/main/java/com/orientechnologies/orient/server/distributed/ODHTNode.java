@@ -35,7 +35,7 @@ public interface ODHTNode {
 
   public Record createRecord(ORecordId id, String data);
 
-  public Record getRecord(ORecordId id);
+  public Record readRecord(ORecordId id);
 
   public void updateRecord(ORecordId id, Record record);
 
@@ -45,15 +45,17 @@ public interface ODHTNode {
 
   public void updateReplicas(Record[] replicas, boolean async);
 
-  public Record getRecordFromNode(ORecordId id, boolean replicate);
+  public Record getRecordFromNode(ORecordId id);
 
-  public Record[] getRecordsFromNode(ORecordId[] ids, boolean replicate);
+  public Record[] getRecordsFromNode(ORecordId[] ids);
 
   public Record createRecordInNode(ORecordId id, String data);
 
   public void updateRecordInNode(ORecordId id, Record record);
 
   public void deleteRecordFromNode(ORecordId id, ODHTRecordVersion version);
+
+  public Record readRecordFromNode(ORecordId id);
 
   public RecordMetadata getRecordMetadataFromNode(ORecordId id);
 

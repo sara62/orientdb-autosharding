@@ -17,12 +17,12 @@ import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
-import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
-import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
 import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.RecordMetadata;
+import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
 
 /**
  * @author Andrey Lomakin
@@ -97,7 +97,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public Record getRecord(ORecordId id) {
+  public Record readRecord(ORecordId id) {
     return callOnRemoteMember(new GetNodeCall(nodeAddress, id), false);
   }
 
@@ -122,13 +122,13 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public Record getRecordFromNode(ORecordId id, boolean replicate) {
-    return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeAddress, id, replicate), false);
+  public Record getRecordFromNode(ORecordId id) {
+    return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeAddress, id), false);
   }
 
   @Override
-  public Record[] getRecordsFromNode(ORecordId[] ids, boolean replicate) {
-    return callOnRemoteMember(new GetRecordsFromNodeNodeCall(nodeAddress, ids, replicate), false);
+  public Record[] getRecordsFromNode(ORecordId[] ids) {
+    return callOnRemoteMember(new GetRecordsFromNodeNodeCall(nodeAddress, ids), false);
   }
 
   @Override
@@ -161,7 +161,12 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     callOnRemoteMember(new RemoveRecordFromNodeNodeCall(nodeAddress, id, version), false);
   }
 
-  private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
+	@Override
+	public Record readRecordFromNode(ORecordId id) {
+		return callOnRemoteMember(new ReadRecordFromNodeNodeCall(nodeAddress, id), false);
+	}
+
+	private <T> T callOnRemoteMember(final NodeCall<T> call, boolean async) {
     try {
       final Member member = findMember(nodeAddress);
 
@@ -699,7 +704,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.getRecord(id);
+      return node.readRecord(id);
     }
 
     @Override
@@ -753,53 +758,77 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
   private static final class GetRecordFromNodeNodeCall extends NodeCall<Record> {
     private ORecordId id;
-    private boolean   replicate;
 
     public GetRecordFromNodeNodeCall() {
     }
 
-    private GetRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORecordId id, boolean replicate) {
+    private GetRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORecordId id) {
       super(nodeAddress);
       this.id = id;
-      this.replicate = replicate;
     }
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.getRecordFromNode(id, replicate);
+      return node.getRecordFromNode(id);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
       out.writeObject(id);
-      out.writeBoolean(replicate);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
       id = (ORecordId) in.readObject();
-      replicate = in.readBoolean();
     }
   }
 
-  private static final class GetRecordsFromNodeNodeCall extends NodeCall<Record[]> {
+	private static final class ReadRecordFromNodeNodeCall extends NodeCall<Record> {
+		private ORecordId id;
+
+		public ReadRecordFromNodeNodeCall() {
+		}
+
+		private ReadRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORecordId id) {
+			super(nodeAddress);
+			this.id = id;
+		}
+
+		@Override
+		protected Record call(ODHTNode node) {
+			return node.readRecordFromNode(id);
+		}
+
+		@Override
+		public void writeExternal(ObjectOutput out) throws IOException {
+			super.writeExternal(out);
+			out.writeObject(id);
+		}
+
+		@Override
+		public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+			super.readExternal(in);
+			id = (ORecordId) in.readObject();
+		}
+	}
+
+
+	private static final class GetRecordsFromNodeNodeCall extends NodeCall<Record[]> {
     private ORecordId[] ids;
-    private boolean     replicate;
 
     public GetRecordsFromNodeNodeCall() {
     }
 
-    private GetRecordsFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORecordId[] ids, boolean replicate) {
+    private GetRecordsFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORecordId[] ids) {
       super(nodeAddress);
       this.ids = ids;
-      this.replicate = replicate;
     }
 
     @Override
     protected Record[] call(ODHTNode node) {
-      return node.getRecordsFromNode(ids, replicate);
+      return node.getRecordsFromNode(ids);
     }
 
     @Override
@@ -809,8 +838,6 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
       out.writeInt(ids.length);
       for (ORecordId id : ids)
         out.writeObject(id);
-
-      out.writeBoolean(replicate);
     }
 
     @Override
@@ -821,8 +848,6 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
       for (int i = 0; i < len; i++)
         ids[i] = (ORecordId) in.readObject();
-
-      replicate = in.readBoolean();
     }
   }
 

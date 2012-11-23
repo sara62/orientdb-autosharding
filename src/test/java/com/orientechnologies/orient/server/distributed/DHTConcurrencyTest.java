@@ -186,6 +186,8 @@ public class DHTConcurrencyTest {
     }
 
     public Void call() throws Exception {
+			Thread.currentThread().setName("DataRemover thread");
+
       try {
         while (!testIsStopped.get()) {
           if (data.size() < 100) {
@@ -206,9 +208,13 @@ public class DHTConcurrencyTest {
             if (i % n == 0) {
               lockManager.acquireLock(Thread.currentThread(), key, OLockManager.LOCK.EXCLUSIVE);
               try {
-                final Record record = data.get(key);
+                Record record = data.get(key);
 
                 if (record != null) {
+									record = serverInstance.get(key);
+
+									Assert.assertNotNull(record);
+
                   serverInstance.remove(key, record.getVersion());
                   data.remove(key);
                 }

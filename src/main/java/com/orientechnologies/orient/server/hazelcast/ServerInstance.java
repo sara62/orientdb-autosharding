@@ -90,9 +90,9 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     localNode = new OLocalDHTNode(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance.getCluster()
         .getLocalMember().getUuid()),
 						this,
-						new ODefaultDistributedCoordinatorFactory(), new ODefaultRingProtocolsFactory(),
+						new ODefaultDistributedCoordinatorFactory(), new ODefaultRingProtocolsFactory(useReadRepair),
 						replicaCount, syncReplicaCount,
-        useReadRepair, useAntiEntropy, useGlobalMaintainence);
+						useAntiEntropy, useGlobalMaintainence);
 
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
@@ -130,7 +130,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
   }
 
   public Record get(ORecordId id) {
-    return localNode.getRecord(id);
+    return localNode.readRecord(id);
   }
 
   public void remove(ORecordId id, ODHTRecordVersion version) {

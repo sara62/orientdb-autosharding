@@ -4,7 +4,7 @@ import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
-import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
+import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +28,7 @@ public final class ODistributedRecordOperationCoordinatorImpl implements ODistri
   }
 
   public <T> T executeRecordOperation(ODHTNode node, ODistributedRecordOperation<T> recordOperation) {
-    waitTillJoin(node);
+		OWaitTillNodeJoin.waitTillNodeJoin(node);
 
     int retryCount = 0;
 
@@ -62,18 +62,6 @@ public final class ODistributedRecordOperationCoordinatorImpl implements ODistri
     }
   }
 
-  private void waitTillJoin(final ODHTNode node) {
-    while (!ODHTNode.NodeState.PRODUCTION.equals(node.state())) {
-      LOGGER.info("Wait till node {} will be joined.", node.getNodeAddress());
-      try {
-        Thread.sleep(100);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new IllegalStateException(e);
-      }
-    }
-  }
-
   private <T> ORemoteNodeCallResult<T> executeOperationOnRemoteNode(ODistributedRecordOperation<T> recordOperation, int retryCount,
       ONodeAddress remoteNodeAddress) {
     final ODHTNode node = nodeLookup.findById(remoteNodeAddress);
@@ -81,14 +69,6 @@ public final class ODistributedRecordOperationCoordinatorImpl implements ODistri
     if (node == null) {
       if (retryCount < MAX_RETRIES) {
         LOGGER.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
-
-        try {
-          Thread.sleep(50);
-        } catch (InterruptedException e) {
-          LOGGER.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
-        }
-
         return new ORemoteNodeCallResult<T>(true, null);
       } else {
         LOGGER.error("Node {} is offline, retry limit is reached.", remoteNodeAddress);
@@ -102,13 +82,6 @@ public final class ODistributedRecordOperationCoordinatorImpl implements ODistri
     } catch (ONodeOfflineException ooe) {
       if (retryCount < MAX_RETRIES) {
         LOGGER.debug("Node {} is offline, retry {}-d time.", remoteNodeAddress, retryCount);
-
-        try {
-          Thread.sleep(50);
-        } catch (InterruptedException e) {
-          LOGGER.error("Thread execution was interrupted.", e);
-          throw new ORemoteNodeCallException("Thread execution was interrupted.", e, remoteNodeAddress.getNodeId());
-        }
 
         return new ORemoteNodeCallResult<T>(true, null);
       } else {

@@ -8,31 +8,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
-import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
-import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
-import com.orientechnologies.orient.server.distributed.operations.ODistributedCoordinatorFactory;
-import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordCreation;
-import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordDelete;
-import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordOperationCoordinator;
-import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordRead;
-import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordUpdate;
-import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordReplicator;
-import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordSynchronizer;
-import com.orientechnologies.orient.server.distributed.ringprotocols.OReplicaDistributionStrategy;
-import com.orientechnologies.orient.server.distributed.ringprotocols.ORingProtocolsFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,12 +25,25 @@ import com.orientechnologies.orient.core.exception.OConcurrentModificationExcept
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
+import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedCoordinatorFactory;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordCreation;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordDelete;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordOperationCoordinator;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordRead;
+import com.orientechnologies.orient.server.distributed.operations.ODistributedRecordUpdate;
+import com.orientechnologies.orient.server.distributed.ringprotocols.ORingProtocolsFactory;
+import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordCreator;
+import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordDeleter;
+import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordReader;
+import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordUpdater;
 
 /**
  * @author Andrey Lomakin
  * @since 17.08.12
  */
-public final class OLocalDHTNode implements ODHTNode {
+public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   private static final int                             MAX_RETRIES           = 10;
   private static final int                             MAX_RECORDS_TO_RETURN = 64;
 
@@ -69,51 +66,45 @@ public final class OLocalDHTNode implements ODHTNode {
 
   private final ScheduledExecutorService               gmExecutorService;
   private final ScheduledExecutorService               lmExecutorService;
-  private final ExecutorService                        readRepairService;
 
   private volatile NodeState                           state;
 
-  private final OMerkleTree merkleTree            = new OMerkleTree(db, 1);
+  private final OMerkleTree                            merkleTree            = new OMerkleTree(db, 1);
 
   private final int                                    replicaCount;
-  private final int                                    syncReplicaCount;
 
-  private final boolean                                useReadRepair;
   private final boolean                                useAntiEntropy;
   private final boolean                                useGlobalMaintainence;
 
   private final ODistributedRecordOperationCoordinator operationCoordinator;
-	private final ORecordReplicator recordReplicator;
-	private final ORecordSynchronizer recordSynchronizer;
+
+  private final ORecordCreator                         recordCreator;
+  private final ORecordUpdater                         recordUpdater;
+  private final ORecordDeleter                         recordDeleter;
+  private final ORecordReader                          recordReader;
 
   public OLocalDHTNode(ONodeAddress nodeAddress, ODHTNodeLookup nodeLookup,
-      ODistributedCoordinatorFactory distributedCoordinatorFactory,
-			ORingProtocolsFactory ringProtocolsFactory,
-			int replicaCount, int syncReplicaCount,
-			boolean useReadRepair,	boolean useAntiEntropy, boolean useGlobalMaintainence) {
+											 ODistributedCoordinatorFactory distributedCoordinatorFactory,
+											 ORingProtocolsFactory ringProtocolsFactory, int replicaCount,
+											 int syncReplicaCount, boolean useAntiEntropy, boolean useGlobalMaintainence) {
 
-    this.useReadRepair = useReadRepair;
     this.useAntiEntropy = useAntiEntropy;
     this.useGlobalMaintainence = useGlobalMaintainence;
 
     this.nodeAddress = nodeAddress;
 
     this.replicaCount = replicaCount;
-    this.syncReplicaCount = syncReplicaCount;
     this.nodeLookup = nodeLookup;
 
     this.operationCoordinator = distributedCoordinatorFactory.createOperationCoordinator(nodeLookup);
 
-		final OReplicaDistributionStrategy replicaDistributionStrategy = ringProtocolsFactory.createReplicaDistributionStrategy();
-
-		this.recordReplicator     = ringProtocolsFactory.createRecordReplicator(nodeLookup, replicaDistributionStrategy);
-		this.recordSynchronizer   = ringProtocolsFactory.createRecordSynchronizer(nodeLookup, replicaDistributionStrategy);
+    this.recordCreator = ringProtocolsFactory.createRecordCreator(nodeLookup, replicaCount, syncReplicaCount);
+    this.recordUpdater = ringProtocolsFactory.createRecordUpdater(nodeLookup, replicaCount, syncReplicaCount);
+    this.recordReader = ringProtocolsFactory.createRecordReader(nodeLookup, replicaCount, syncReplicaCount);
+    this.recordDeleter = ringProtocolsFactory.createRecordDeleter(nodeLookup, replicaCount, syncReplicaCount);
 
     gmExecutorService = Executors.newSingleThreadScheduledExecutor(new GlobalMaintenanceProtocolThreadFactory(nodeAddress));
     lmExecutorService = Executors.newSingleThreadScheduledExecutor(new LocalMaintenanceProtocolThreadFactory(nodeAddress));
-
-    readRepairService = new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() / 2, 60L, TimeUnit.SECONDS,
-        new ArrayBlockingQueue<Runnable>(256), new ReadRepairThreadFactory(nodeAddress), new ThreadPoolExecutor.CallerRunsPolicy());
   }
 
   public NavigableMap<ORecordId, Record> getDb() {
@@ -357,7 +348,7 @@ public final class OLocalDHTNode implements ODHTNode {
     return operationCoordinator.executeRecordOperation(this, new ODistributedRecordCreation(data, recordId));
   }
 
-  public Record getRecord(ORecordId recordId) {
+  public Record readRecord(ORecordId recordId) {
     return operationCoordinator.executeRecordOperation(this, new ODistributedRecordRead(recordId));
   }
 
@@ -371,50 +362,32 @@ public final class OLocalDHTNode implements ODHTNode {
 
   @Override
   public Record createRecordInNode(ORecordId recordId, String data) {
-    waitTillJoin();
-
-    final Record result = addData(recordId, data);
-		recordReplicator.replicateRecord(this, result.getId(), replicaCount, syncReplicaCount);
-
-    return result;
+    return recordCreator.createRecord(this, recordId, data);
   }
 
   @Override
   public void updateRecordInNode(ORecordId recordId, Record record) {
-    updateData(recordId, record);
-
-    recordReplicator.replicateRecord(this, recordId, replicaCount, syncReplicaCount);
-
-    startReadRepair(recordId);
+    recordUpdater.updateRecord(this, record);
   }
 
   @Override
   public void deleteRecordFromNode(ORecordId recordId, ODHTRecordVersion version) {
-		recordSynchronizer.synchronizeSyncReplicas(this, recordId, replicaCount, syncReplicaCount);
-    removeData(recordId, version);
-
-		recordReplicator.replicateRecord(this, recordId, replicaCount, syncReplicaCount);
-    startReadRepair(recordId);
+    recordDeleter.deleteRecord(this, recordId, version);
   }
 
-  private void startReadRepair(ORecordId recordId) {
-    readRepairService.submit(new ReadRepairTask(recordId));
+  public Record readRecordFromNode(ORecordId recordId) {
+    return recordReader.readRecord(this, recordId);
   }
 
-  public Record getRecordFromNode(ORecordId recordId, boolean replicate) {
-    if (replicate) {
-			recordSynchronizer.synchronizeSyncReplicas(this, recordId, replicaCount, syncReplicaCount);
-      startReadRepair(recordId);
-    }
-
+  public Record getRecordFromNode(ORecordId recordId) {
     return readData(recordId);
   }
 
   @Override
-  public Record[] getRecordsFromNode(ORecordId[] ids, boolean replicate) {
+  public Record[] getRecordsFromNode(ORecordId[] ids) {
     final ArrayList<Record> records = new ArrayList<Record>();
     for (ORecordId id : ids) {
-      final Record record = getRecordFromNode(id, replicate);
+      final Record record = getRecordFromNode(id);
       if (record != null)
         records.add(record);
     }
@@ -491,19 +464,16 @@ public final class OLocalDHTNode implements ODHTNode {
   public void shutdown() throws Exception {
     gmExecutorService.shutdownNow();
     lmExecutorService.shutdownNow();
-    readRepairService.shutdownNow();
 
     if (!gmExecutorService.awaitTermination(180000, TimeUnit.MILLISECONDS))
       throw new IllegalStateException("GM service was not terminated.");
 
     if (!lmExecutorService.awaitTermination(180000, TimeUnit.MILLISECONDS))
       throw new IllegalStateException("LM service was not terminated.");
-
-    if (!readRepairService.awaitTermination(180000, TimeUnit.MILLISECONDS))
-      throw new IllegalStateException("RR service was not terminated.");
   }
 
-  private Record addData(ORecordId id, String data) {
+  @Override
+  public Record addData(ORecordId id, String data) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       return this.merkleTree.addData(id, data);
@@ -512,7 +482,8 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void updateData(ORecordId id, Record record) {
+  @Override
+  public void updateData(ORecordId id, Record record) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       this.merkleTree.updateData(id, record.getVersion(), record.getData());
@@ -521,22 +492,8 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void waitTillJoin() {
-    Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
-
-    while (!NodeState.PRODUCTION.equals(state)) {
-      logger.info("Wait till node {} will be joined.", nodeAddress);
-
-      try {
-        Thread.sleep(100);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new IllegalStateException(e);
-      }
-    }
-  }
-
-  private Record readData(ORecordId dataId) {
+  @Override
+  public Record readData(ORecordId dataId) {
     Record data;
     lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
     try {
@@ -556,7 +513,8 @@ public final class OLocalDHTNode implements ODHTNode {
     }
   }
 
-  private void removeData(ORecordId id, ODHTRecordVersion version) {
+  @Override
+  public void removeData(ORecordId id, ODHTRecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version);
@@ -836,8 +794,6 @@ public final class OLocalDHTNode implements ODHTNode {
       } else
         result = true;
     }
-
-    // log("Parent check is finished.");
 
     return prevPredecessor;
   }
@@ -1381,7 +1337,7 @@ public final class OLocalDHTNode implements ODHTNode {
       for (int i = 0; i < missedRecordsArray.length; i++)
         missedRecordsArray[i] = missedRecords.get(i);
 
-      final Record[] replicas = remoteNode.getRecordsFromNode(missedRecordsArray, false);
+      final Record[] replicas = remoteNode.getRecordsFromNode(missedRecordsArray);
       logger.debug("Replicas  {} were found for node {}", new Object[] { replicas, nodeAddress });
 
       for (Record replica : replicas) {
@@ -1405,51 +1361,6 @@ public final class OLocalDHTNode implements ODHTNode {
       remoteNode.updateReplicas(missedRecordsArray, false);
 
       logger.debug("Replicas {} were updated for node {}", new Object[] { missedRecords, remoteNodeId });
-    }
-  }
-
-  private static final class ReadRepairThreadFactory implements ThreadFactory {
-    private static final AtomicInteger counter = new AtomicInteger();
-
-    private final ONodeAddress         nodeAddress;
-
-    private ReadRepairThreadFactory(ONodeAddress nodeAddress) {
-      this.nodeAddress = nodeAddress;
-    }
-
-    public Thread newThread(Runnable r) {
-      final Thread thread = new Thread(r);
-
-      thread.setName("Read Repair Protocol for node '" + nodeAddress + "' [" + counter.incrementAndGet() + "]");
-      thread.setDaemon(true);
-
-      return thread;
-    }
-  }
-
-  private final class ReadRepairTask implements Callable<Void> {
-    private final Logger    logger = LoggerFactory.getLogger(ReadRepairTask.class);
-    private final ORecordId recordId;
-
-    private ReadRepairTask(ORecordId recordId) {
-      this.recordId = recordId;
-    }
-
-    @Override
-    public Void call() throws Exception {
-      try {
-        if (!useReadRepair)
-          return null;
-
-        if (!NodeState.PRODUCTION.equals(state))
-          return null;
-
-				recordSynchronizer.synchronizeReplicas(OLocalDHTNode.this, recordId, replicaCount, syncReplicaCount);
-      } catch (Exception e) {
-        logger.error("Exception during read repair for record " + recordId, e);
-      }
-
-      return null;
     }
   }
 

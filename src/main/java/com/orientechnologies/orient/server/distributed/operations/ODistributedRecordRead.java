@@ -18,7 +18,7 @@ public class ODistributedRecordRead implements ODistributedRecordOperation<Recor
 
   @Override
   public Record execute(ODHTNode node) {
-    return node.getRecordFromNode(recordId, true);
+    return node.readRecordFromNode(recordId);
   }
 
   @Override
