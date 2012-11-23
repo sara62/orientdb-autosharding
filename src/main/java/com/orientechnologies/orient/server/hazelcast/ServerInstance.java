@@ -10,7 +10,10 @@ import java.util.TimerTask;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import com.hazelcast.config.XmlConfigBuilder;
 import com.hazelcast.core.DistributedTask;
@@ -31,6 +34,7 @@ import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.ringprotocols.ODefaultRingProtocolsFactory;
+import com.orientechnologies.orient.server.distributed.ringprotocols.OLocalMaintenanceProtocolRunnable;
 
 /**
  * @author Andrey Lomakin
@@ -55,6 +59,8 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
   private final int                                       replicaCount;
   private final int                                       syncReplicaCount;
 
+	private final ScheduledExecutorService                  lmExecutorService;
+
   public ServerInstance() {
     useReadRepair = true;
     useAntiEntropy = true;
@@ -62,6 +68,8 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
 
     replicaCount = REPLICA_COUNT;
     syncReplicaCount = SYNC_REPLICA_COUNT;
+
+		lmExecutorService = Executors.newSingleThreadScheduledExecutor();
   }
 
   public ServerInstance(int replicaCount, int syncReplicaCount) {
@@ -71,6 +79,8 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
 
     this.replicaCount = replicaCount;
     this.syncReplicaCount = syncReplicaCount;
+
+		lmExecutorService = Executors.newSingleThreadScheduledExecutor();
   }
 
   public ServerInstance(boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence) {
@@ -80,6 +90,8 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
 
     replicaCount = REPLICA_COUNT;
     syncReplicaCount = SYNC_REPLICA_COUNT;
+
+		lmExecutorService = Executors.newSingleThreadScheduledExecutor();
   }
 
   public void init() throws InterruptedException {
@@ -87,12 +99,13 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
 
     hazelcastInstance = Hazelcast.newHazelcastInstance(xmlConfigBuilder.build());
 
-    localNode = new OLocalDHTNode(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance.getCluster()
+		final ODefaultRingProtocolsFactory ringProtocolsFactory = new ODefaultRingProtocolsFactory(useReadRepair);
+		localNode = new OLocalDHTNode(new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance.getCluster()
         .getLocalMember().getUuid()),
 						this,
-						new ODefaultDistributedCoordinatorFactory(), new ODefaultRingProtocolsFactory(useReadRepair),
+						new ODefaultDistributedCoordinatorFactory(), ringProtocolsFactory,
 						replicaCount, syncReplicaCount,
-						useAntiEntropy, useGlobalMaintainence);
+						useGlobalMaintainence);
 
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
@@ -109,6 +122,11 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
         nodeAddress = peekAnyLocalNodeFromRemoteMember(hazelcastInstance.getCluster().getMembers().iterator().next());
       } while (!localNode.joinDHT(nodeAddress));
     }
+
+		if (useAntiEntropy)
+			lmExecutorService.scheduleWithFixedDelay(
+							new OLocalMaintenanceProtocolRunnable(localNode, replicaCount, syncReplicaCount,
+											ringProtocolsFactory.createLocalMaintenanceProtocol(localNode, this)), 1, 1, TimeUnit.SECONDS);
 
     timer.schedule(new TimerTask() {
       @Override
@@ -195,10 +213,16 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     final String memberUUID = hazelcastInstance.getCluster().getLocalMember().getUuid();
 
     timer.cancel();
-    localNode.shutdown();
-    hazelcastInstance.getLifecycleService().shutdown();
+		lmExecutorService.shutdown();
+
+		localNode.shutdown();
+
+		if (!lmExecutorService.awaitTermination(180000, TimeUnit.MILLISECONDS))
+			throw new IllegalStateException("LM service was not terminated.");
+
+		hazelcastInstance.getLifecycleService().shutdown();
     INSTANCES.remove(memberUUID);
-  }
+	}
 
   private ONodeAddress peekAnyLocalNodeFromRemoteMember(Member member) throws InterruptedException {
 

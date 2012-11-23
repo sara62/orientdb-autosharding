@@ -75,7 +75,7 @@ public class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
         final Record result;
 
         if (localNode.getNodeAddress().equals(primaryHolder.getNodeAddress()))
-          result = localNode.readData(recordId);
+          result = localNode.readRecordLocal(recordId);
         else
           result = primaryHolder.getRecordFromNode(recordId);
 

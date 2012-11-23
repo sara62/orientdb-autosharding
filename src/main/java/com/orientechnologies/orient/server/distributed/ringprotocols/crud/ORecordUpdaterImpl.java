@@ -24,10 +24,10 @@ public class ORecordUpdaterImpl implements ORecordUpdater {
 	public Record updateRecord(ODHTNodeLocal localNode, Record record) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
-		localNode.updateData(record.getId(), record);
+		localNode.updateRecordLocal(record.getId(), record);
 
 		recordReplicator.replicateRecord(localNode, record.getId(), replicaCount, syncReplicaCount);
 
-		return localNode.readData(record.getId());
+		return localNode.readRecordLocal(record.getId());
 	}
 }

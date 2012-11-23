@@ -11,6 +11,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -21,10 +22,11 @@ import java.util.concurrent.TimeUnit;
 final class OReadRepairTask implements Callable<Void> {
 	private static final Logger logger = LoggerFactory.getLogger(OReadRepairTask.class);
 
-	private static final ExecutorService readRepairService = new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() / 2,
+	private static final ExecutorService readRepairService =
+					new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() / 2,
 					60L, TimeUnit.SECONDS,
 					new ArrayBlockingQueue<Runnable>(256),
-					Executors.defaultThreadFactory(),
+					new OReadRepairFactory(),
 					new ThreadPoolExecutor.CallerRunsPolicy());
 
 	private final ORecordId recordId;
@@ -53,5 +55,16 @@ final class OReadRepairTask implements Callable<Void> {
 
 	public void submit() {
 		readRepairService.submit(this);
+	}
+
+	private static final class OReadRepairFactory implements ThreadFactory {
+
+		@Override
+		public Thread newThread(Runnable r) {
+			final Thread thread = new Thread(r);
+			thread.setDaemon(true);
+
+			return thread;
+		}
 	}
 }

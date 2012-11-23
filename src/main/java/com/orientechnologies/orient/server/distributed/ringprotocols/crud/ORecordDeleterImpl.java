@@ -26,7 +26,7 @@ public class ORecordDeleterImpl implements ORecordDeleter {
   public void deleteRecord(ODHTNodeLocal localNode, ORecordId recordId, ODHTRecordVersion version) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
-    localNode.removeData(recordId, version);
+    localNode.removeRecordLocal(recordId, version);
     recordReplicator.replicateRecord(localNode, recordId, replicaCount, syncReplicaCount);
   }
 }

@@ -5,6 +5,7 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
+import com.orientechnologies.orient.server.distributed.merkletree.OInMemoryMerkleTree;
 import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -22,7 +23,7 @@ public class MerkleTreeTest {
   public void testAdd67KeysToNext1024NodeCompareDetachedNodes() throws Exception {
     NavigableMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
 
-    OMerkleTree tree = new OMerkleTree(map, 1);
+    OMerkleTree tree = new OInMemoryMerkleTree(map, 1);
     for (int i = 0; i < 2; i++)
       tree.addData(convertToRecordId(i), i + "");
 
@@ -36,7 +37,7 @@ public class MerkleTreeTest {
       Assert.assertEquals(map.get(convertToRecordId(i)).getData(), i + "");
 
     NavigableMap<ORecordId, Record> mapTwo = new TreeMap<ORecordId, Record>();
-    OMerkleTree sampleTree = new OMerkleTree(mapTwo, 1);
+    OMerkleTree sampleTree = new OInMemoryMerkleTree(mapTwo, 1);
 
     for (Map.Entry<ORecordId, Record> entry : map.entrySet())
       sampleTree.updateReplica(entry.getKey(), entry.getValue());

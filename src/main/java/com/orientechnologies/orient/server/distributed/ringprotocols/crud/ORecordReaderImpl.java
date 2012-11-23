@@ -45,7 +45,7 @@ public class ORecordReaderImpl implements ORecordReader {
 
 		recordMergeStrategy.mergeReplicaVersions(nodeLocal, recordId, syncReplicas);
 
-    final Record result = nodeLocal.readData(recordId);
+    final Record result = nodeLocal.readRecordLocal(recordId);
 
     if (!asyncReplicas.isEmpty())
 			new OReadRepairTask(recordId, asyncReplicas, nodeLocal, recordMergeStrategy).submit();

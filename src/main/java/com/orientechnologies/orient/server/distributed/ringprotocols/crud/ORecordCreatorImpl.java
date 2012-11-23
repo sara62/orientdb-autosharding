@@ -26,7 +26,7 @@ public class ORecordCreatorImpl implements ORecordCreator {
 	public Record createRecord(ODHTNodeLocal node, ORecordId recordId, String data) {
 		OWaitTillNodeJoin.waitTillNodeJoin(node);
 
-		final Record result = node.addData(recordId, data);
+		final Record result = node.addRecordLocal(recordId, data);
 		recordReplicator.replicateRecord(node, recordId, replicaCount, syncReplicaCount);
 
 		return result;
