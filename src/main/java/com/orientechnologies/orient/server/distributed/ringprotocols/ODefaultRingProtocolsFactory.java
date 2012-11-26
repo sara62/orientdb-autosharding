@@ -1,6 +1,5 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols;
 
-import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordCreator;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordCreatorImpl;
@@ -65,7 +64,12 @@ public class ODefaultRingProtocolsFactory implements ORingProtocolsFactory {
 	}
 
 	@Override
-	public OLocalMaintenanceProtocol createLocalMaintenanceProtocol(ODHTNodeLocal localDHTNode, ODHTNodeLookup nodeLookup) {
-		return new OLocalMaintenanceProtocolImpl(localDHTNode, createReplicaDistributionStrategy(), nodeLookup);
+	public OLocalMaintenanceProtocol createLocalMaintenanceProtocol(ODHTNodeLookup nodeLookup) {
+		return new OLocalMaintenanceProtocolImpl(createReplicaDistributionStrategy(), nodeLookup);
+	}
+
+	@Override
+	public OGlobalMaintenanceProtocol createGlobalMaintenanceProtocol(ODHTNodeLookup nodeLookup) {
+		return new OGlobalMaintenanceProtocolImpl(nodeLookup, createReplicaDistributionStrategy());
 	}
 }

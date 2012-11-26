@@ -11,7 +11,7 @@ import com.orientechnologies.orient.core.id.ORecordId;
  * @author Andrey Lomakin
  * @since 12.10.12
  */
-public class ODHTRingIterator implements Iterator<RecordMetadata> {
+public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
   private final NavigableMap<ORecordId, Record> db;
   private final ORecordId                       start;
   private final ORecordId                       end;
@@ -21,7 +21,7 @@ public class ODHTRingIterator implements Iterator<RecordMetadata> {
   private ORecordId                             currentIntervalStart;
   private ORecordId                             currentIntervalEnd;
 
-  public ODHTRingIterator(NavigableMap<ORecordId, Record> db, ORecordId start, ORecordId end) {
+  public ODatabaseRingIterator(NavigableMap<ORecordId, Record> db, ORecordId start, ORecordId end) {
     this.db = db;
     this.start = start;
     this.end = end;

@@ -2,18 +2,11 @@ package com.orientechnologies.orient.server.distributed;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -21,8 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.orientechnologies.common.concur.lock.OLockManager;
-import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
-import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
@@ -65,15 +56,11 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
   private volatile ONodeAddress[]                      successorsList        = new ONodeAddress[0];
 
-  private final ScheduledExecutorService               gmExecutorService;
-
   private volatile NodeState                           state;
 
   private final OMerkleTree                            merkleTree            = new OInMemoryMerkleTree(db, 1);
 
   private final int                                    replicaCount;
-
-  private final boolean                                useGlobalMaintainence;
 
   private final ODistributedRecordOperationCoordinator operationCoordinator;
 
@@ -83,9 +70,9 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   private final ORecordReader                          recordReader;
 
   public OLocalDHTNode(ONodeAddress nodeAddress, ODHTNodeLookup nodeLookup,
-      ODistributedCoordinatorFactory distributedCoordinatorFactory, ORingProtocolsFactory ringProtocolsFactory, int replicaCount,
-      int syncReplicaCount, boolean useGlobalMaintainence) {
-    this.useGlobalMaintainence = useGlobalMaintainence;
+											 ODistributedCoordinatorFactory distributedCoordinatorFactory,
+											 ORingProtocolsFactory ringProtocolsFactory,
+											 int replicaCount, int syncReplicaCount) {
 
     this.nodeAddress = nodeAddress;
 
@@ -98,8 +85,6 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     this.recordUpdater = ringProtocolsFactory.createRecordUpdater(nodeLookup, replicaCount, syncReplicaCount);
     this.recordReader = ringProtocolsFactory.createRecordReader(nodeLookup, replicaCount, syncReplicaCount);
     this.recordDeleter = ringProtocolsFactory.createRecordDeleter(nodeLookup, replicaCount, syncReplicaCount);
-
-    gmExecutorService = Executors.newSingleThreadScheduledExecutor(new GlobalMaintenanceProtocolThreadFactory(nodeAddress));
   }
 
   public NavigableMap<ORecordId, Record> getDb() {
@@ -112,9 +97,6 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
     fingerPoints.set(0, nodeAddress);
     state = NodeState.PRODUCTION;
-
-    if (useGlobalMaintainence)
-      gmExecutorService.scheduleWithFixedDelay(new GlobalMaintenanceProtocol(), 100, 100, TimeUnit.MILLISECONDS);
 
     logger.info("New ring was created");
   }
@@ -133,11 +115,6 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
       if (node == null) {
         logger.error("Node {} is absent.", nodeAddress);
         return false;
-      }
-
-      if (state == null) {
-        if (useGlobalMaintainence)
-          gmExecutorService.scheduleWithFixedDelay(new GlobalMaintenanceProtocol(), 100, 100, TimeUnit.MILLISECONDS);
       }
 
       state = NodeState.JOIN;
@@ -433,7 +410,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
     int processedRecords = 0;
 
-    final ODHTRingIterator ringIterator = new ODHTRingIterator(db, startId, endId);
+    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(db, startId, endId);
     while (ringIterator.hasNext()) {
       final RecordMetadata recordMetadata = ringIterator.next();
       if (recordMetadata != null)
@@ -449,13 +426,6 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     result = recordMetadatas.toArray(result);
 
     return result;
-  }
-
-  public void shutdown() throws Exception {
-    gmExecutorService.shutdownNow();
-
-    if (!gmExecutorService.awaitTermination(180000, TimeUnit.MILLISECONDS))
-      throw new IllegalStateException("GM service was not terminated.");
   }
 
   @Override
@@ -514,13 +484,28 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     return merkleTree;
   }
 
-  private void cleanOutData(ORecordId id, ODHTRecordVersion version) {
+  public void cleanOutData(ORecordId id, ODHTRecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version, false);
     } finally {
       lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     }
+  }
+
+  @Override
+  public ODatabaseRingIterator getLocalRingIterator(ORecordId startRid, ORecordId endId) {
+    return new ODatabaseRingIterator(db, startRid, endId);
+  }
+
+  @Override
+  public ORecordId getHigherLocalId(ORecordId rid) {
+    return db.higherKey(rid);
+  }
+
+  @Override
+  public ORecordId getCeilingLocalId(ORecordId rid) {
+    return db.ceilingKey(rid);
   }
 
   public int size() {
@@ -833,188 +818,5 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
       return null;
 
     return localNode;
-  }
-
-  private final class GlobalMaintenanceProtocol implements Runnable {
-    private final Logger logger = LoggerFactory.getLogger(GlobalMaintenanceProtocol.class);
-
-    private ONodeId      idToTest;
-
-    private GlobalMaintenanceProtocol() {
-      idToTest = nodeAddress.getNodeId();
-    }
-
-    public void run() {
-      try {
-        if (state == null || !state.equals(NodeState.PRODUCTION)) {
-          logger.debug("Illegal state , wait till node will be ready to serve requests in DHT ring.");
-
-          return;
-        }
-
-        logger.debug("Finding record with id next to {}", idToTest);
-        final ORecordId nextRecordId = nextInDB(new ORecordId(1, new OClusterPositionNodeId(idToTest)));
-        if (nextRecordId == null) {
-          logger.debug("There are no records with id next to {}", idToTest);
-          return;
-        }
-
-        ONodeId nextId = ((OClusterPositionNodeId) nextRecordId.clusterPosition).getNodeId();
-        logger.debug("Record with id {} is closest successor for id {}", nextId, idToTest);
-
-        logger.debug("Finding successor for record {}", nextId);
-        ONodeAddress successor = findSuccessor(nextId);
-
-        logger.debug("Successor for record is {}", successor);
-        if (nodeAddress.equals(successor)) {
-          idToTest = nodeAddress.getNodeId();
-
-          logger.debug("We are owner of {} record. So we start from the beginning", nextId);
-          return;
-        }
-
-        final ODHTNode successorNode = nodeLookup.findById(successor);
-        if (successorNode == null) {
-          idToTest = nodeAddress.getNodeId();
-
-          logger.debug("Successor with id {} is absent, starting from beginning", successor);
-          return;
-        }
-
-        logger.debug("Find the successors for node {}", successor);
-
-        ONodeAddress[] successors = successorNode.getSuccessors();
-        if (successors.length > replicaCount) {
-          final ONodeAddress[] oldSuccessors = successors;
-          successors = new ONodeAddress[replicaCount];
-
-          System.arraycopy(oldSuccessors, 0, successors, 0, successors.length);
-        }
-
-        logger.debug("Successors list for node {} is {}", successor, successors);
-
-        for (ONodeAddress s : successors) {
-          if (s.equals(nodeAddress)) {
-            idToTest = nodeAddress.getNodeId();
-
-            logger.debug("We are owner of {} record. So we start from the beginning", nextId);
-
-            return;
-          }
-        }
-
-        List<ONodeAddress> nodesToReplicate = new ArrayList<ONodeAddress>();
-        nodesToReplicate.add(successor);
-        Collections.addAll(nodesToReplicate, successors);
-
-        logger.debug("List of nodes to replicate records starting from {} to {} is {}", new Object[] { nextId, successor,
-            nodesToReplicate });
-
-        final Iterator<RecordMetadata> iterator = new ODHTRingIterator(db, new ORecordId(1, new OClusterPositionNodeId(idToTest)),
-            new ORecordId(1, new OClusterPositionNodeId(successor.getNodeId())));
-
-        final List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>(64);
-
-        while (iterator.hasNext()) {
-          final RecordMetadata recordMetadata = iterator.next();
-
-          recordMetadatas.add(recordMetadata);
-
-          if (recordMetadatas.size() >= 64)
-            cleanOutForeignRecords(recordMetadatas, nodesToReplicate);
-        }
-
-        if (!recordMetadatas.isEmpty())
-          cleanOutForeignRecords(recordMetadatas, nodesToReplicate);
-
-        idToTest = successor.getNodeId();
-      } catch (Exception e) {
-        logger.error(e.toString(), e);
-
-        idToTest = nodeAddress.getNodeId();
-      }
-    }
-
-    private void cleanOutForeignRecords(List<RecordMetadata> recordMetadatas, List<ONodeAddress> nodesToReplicate) {
-      RecordMetadata[] metadatas = new RecordMetadata[recordMetadatas.size()];
-      metadatas = recordMetadatas.toArray(metadatas);
-
-      for (ONodeAddress replicaHolderAddress : nodesToReplicate) {
-        final ODHTNode node = nodeLookup.findById(replicaHolderAddress);
-
-        if (node == null) {
-          logger.debug("Node with id {} is absent. Continue replication with other node.", replicaHolderAddress);
-          continue;
-        }
-
-        try {
-          logger.debug("Finding missing ids for records with metadata {}", recordMetadatas);
-
-          final ORecordId[] missingIds = node.findMissedRecords(metadatas);
-
-          logger.debug("Missing ids are {}", missingIds);
-
-          for (ORecordId missingId : missingIds) {
-            final Record replica = db.get(missingId);
-            if (replica != null)
-              node.updateReplica(replica, false);
-          }
-
-        } catch (ONodeOfflineException noe) {
-          logger.debug("Node with id {} is absent. Continue replication with other node.", replicaHolderAddress);
-        }
-      }
-
-      logger.debug("Clean out foreign records");
-
-      for (RecordMetadata recordMetadata : metadatas) {
-        logger.debug("Cleaning out of record with id {} and version {}", recordMetadata.getId(), recordMetadata.getVersion());
-        try {
-          cleanOutData(recordMetadata.getId(), recordMetadata.getVersion());
-          logger.debug("Record with id {} was cleaned out.", recordMetadata.getId());
-        } catch (OConcurrentModificationException e) {
-          logger.debug("Record with id {} and version {} is out of date and can not be cleaned out", recordMetadata.getId(),
-              recordMetadata.getVersion());
-        }
-      }
-
-      recordMetadatas.clear();
-
-      logger.debug("Clean out was completed.");
-    }
-
-    private ORecordId nextInDB(ORecordId id) {
-      ORecordId result = db.higherKey(id);
-
-      if (result != null)
-        return result;
-
-      if (id.compareTo(new ORecordId(1, new OClusterPositionNodeId(ONodeId.ZERO))) > 0)
-        result = db.ceilingKey(new ORecordId(1, new OClusterPositionNodeId(ONodeId.ZERO)));
-
-      if (result != null && result != id)
-        return result;
-
-      return null;
-    }
-  }
-
-  private static final class GlobalMaintenanceProtocolThreadFactory implements ThreadFactory {
-    private static final AtomicInteger counter = new AtomicInteger();
-
-    private final ONodeAddress         nodeAddress;
-
-    private GlobalMaintenanceProtocolThreadFactory(ONodeAddress nodeAddress) {
-      this.nodeAddress = nodeAddress;
-    }
-
-    public Thread newThread(Runnable r) {
-      final Thread thread = new Thread(r);
-
-      thread.setName("Global Maintenance Protocol for node '" + nodeAddress + "' [" + counter.incrementAndGet() + "]");
-      thread.setDaemon(true);
-
-      return thread;
-    }
   }
 }

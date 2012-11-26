@@ -27,5 +27,6 @@ public interface ORingProtocolsFactory {
 
   public ORecordReader createRecordReader(ODHTNodeLookup nodeLookup, int replicaCount, int syncReplicaCount);
 
-  public OLocalMaintenanceProtocol createLocalMaintenanceProtocol(ODHTNodeLocal localDHTNode, ODHTNodeLookup nodeLookup);
+  public OLocalMaintenanceProtocol createLocalMaintenanceProtocol(ODHTNodeLookup nodeLookup);
+  public OGlobalMaintenanceProtocol createGlobalMaintenanceProtocol(ODHTNodeLookup nodeLookup);
 }

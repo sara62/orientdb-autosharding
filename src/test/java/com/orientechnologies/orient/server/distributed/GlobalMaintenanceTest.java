@@ -81,7 +81,7 @@ public class GlobalMaintenanceTest {
       final NavigableMap<ORecordId, Record> firstSuccessorDb = localFirstSuccessor.getDb();
       final NavigableMap<ORecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
+      ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
           .getNodeId())));
 
@@ -120,7 +120,7 @@ public class GlobalMaintenanceTest {
       final NavigableMap<ORecordId, Record> secondSuccessorDb = localSecondSuccessor.getDb();
       final NavigableMap<ORecordId, Record> thirdSuccessorDb = localThirdSuccessor.getDb();
 
-      ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
+      ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
           .getNodeId())));
 
@@ -150,7 +150,7 @@ public class GlobalMaintenanceTest {
   private int getOwnRecordsCount(OLocalDHTNode localDHTNode) {
     final NavigableMap<ORecordId, Record> nodeDb = localDHTNode.getDb();
 
-    ODHTRingIterator ringIterator = new ODHTRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
+    ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
         .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()
         .getNodeId())));
 

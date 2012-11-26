@@ -14,8 +14,8 @@ import com.orientechnologies.orient.core.id.ORecordId;
  * @since 12.10.12
  */
 @Test
-public class DHTRingIteratorTest {
-  public void continiousIntervalTest() {
+public class DatabaseRingIteratorTest {
+  public void continuousIntervalTest() {
     final TreeMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
 
     for (long i = 0; i < 100; i++) {
@@ -23,7 +23,7 @@ public class DHTRingIteratorTest {
       map.put(recordId, new Record(recordId, i + ""));
     }
 
-    final ODHTRingIterator ringIterator = new ODHTRingIterator(map, convertToRecordId(20), convertToRecordId(30));
+    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(map, convertToRecordId(20), convertToRecordId(30));
 
     for (long i = 20; i <= 30; i++) {
       Assert.assertTrue(ringIterator.hasNext());
@@ -46,7 +46,7 @@ public class DHTRingIteratorTest {
       map.put(recordId, new Record(recordId, i + ""));
     }
 
-    final ODHTRingIterator ringIterator = new ODHTRingIterator(map, convertToRecordId(25), convertToRecordId(22));
+    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(map, convertToRecordId(25), convertToRecordId(22));
 
     for (long i = 25; i < 100; i++) {
       Assert.assertTrue(ringIterator.hasNext());
