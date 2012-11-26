@@ -5,6 +5,8 @@ import java.util.NavigableMap;
 
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
@@ -12,16 +14,16 @@ import com.orientechnologies.orient.core.id.ORecordId;
  * @since 12.10.12
  */
 public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
-  private final NavigableMap<ORecordId, Record> db;
-  private final ORecordId                       start;
-  private final ORecordId                       end;
+  private final NavigableMap<ORID, Record> db;
+  private final ORID 														start;
+  private final ORID                            end;
 
   private Iterator<Record>                      currentIterator;
 
-  private ORecordId                             currentIntervalStart;
-  private ORecordId                             currentIntervalEnd;
+  private ORID                                  currentIntervalStart;
+  private ORID                                  currentIntervalEnd;
 
-  public ODatabaseRingIterator(NavigableMap<ORecordId, Record> db, ORecordId start, ORecordId end) {
+  public ODatabaseRingIterator(NavigableMap<ORID, Record> db, ORID start, ORID end) {
     this.db = db;
     this.start = start;
     this.end = end;
@@ -31,7 +33,7 @@ public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
       currentIntervalEnd = end;
     } else {
       currentIntervalStart = start;
-      currentIntervalEnd = new ORecordId(start.clusterId, new OClusterPositionNodeId(ONodeId.MAX_VALUE));
+      currentIntervalEnd = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.MAX_VALUE));
     }
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
@@ -45,7 +47,7 @@ public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
     if (currentIterator.hasNext())
       return true;
 
-    currentIntervalStart = new ORecordId(start.clusterId, new OClusterPositionNodeId(ONodeId.MIN_VALUE));
+    currentIntervalStart = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.MIN_VALUE));
     currentIntervalEnd = end;
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();

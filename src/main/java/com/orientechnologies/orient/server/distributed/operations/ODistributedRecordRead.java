@@ -1,7 +1,7 @@
 package com.orientechnologies.orient.server.distributed.operations;
 
 import com.orientechnologies.orient.core.id.OClusterPosition;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -10,9 +10,9 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 21.11.12
  */
 public class ODistributedRecordRead implements ODistributedRecordOperation<Record> {
-  private final ORecordId recordId;
+  private final ORID recordId;
 
-  public ODistributedRecordRead(ORecordId recordId) {
+  public ODistributedRecordRead(ORID recordId) {
     this.recordId = recordId;
   }
 
@@ -23,16 +23,16 @@ public class ODistributedRecordRead implements ODistributedRecordOperation<Recor
 
   @Override
   public OClusterPosition getClusterPosition() {
-    return recordId.clusterPosition;
+    return recordId.getClusterPosition();
   }
 
   @Override
   public int getClusterId() {
-    return recordId.clusterId;
+    return recordId.getClusterId();
   }
 
   @Override
-  public void setRecordId(ORecordId recordId) {
+  public void setRecordId(ORID recordId) {
     throw new UnsupportedOperationException("setRecordId");
   }
 }

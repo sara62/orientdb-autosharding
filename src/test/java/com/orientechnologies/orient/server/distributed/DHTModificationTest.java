@@ -15,6 +15,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.orientechnologies.orient.core.id.ORecordId;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -22,7 +23,7 @@ import com.orientechnologies.common.concur.lock.OLockManager;
 import com.orientechnologies.common.util.MersenneTwister;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastNodeAddress;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -125,8 +126,8 @@ public class DHTModificationTest {
       ringMap.put(si.getLocalNode().getNodeAddress(), si);
     }
 
-    final NavigableMap<ORecordId, Record> data = new ConcurrentSkipListMap<ORecordId, Record>();
-    final OLockManager<ORecordId, Runnable> lockManager = new OLockManager<ORecordId, Runnable>(true, 500);
+    final NavigableMap<ORID, Record> data = new ConcurrentSkipListMap<ORID, Record>();
+    final OLockManager<ORID, Runnable> lockManager = new OLockManager<ORID, Runnable>(true, 500);
 
     final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
 
@@ -209,8 +210,8 @@ public class DHTModificationTest {
   }
 
   private static class DataRemover implements Callable<Void> {
-    private final OLockManager<ORecordId, Runnable>          lockManager;
-    private final Map<ORecordId, Record>                     data;
+    private final OLockManager<ORID, Runnable>          lockManager;
+    private final Map<ORID, Record>                     data;
 
     private final Random                                     random = new Random();
 
@@ -219,8 +220,8 @@ public class DHTModificationTest {
     private final AtomicBoolean                              testIsStopped;
     private final AtomicBoolean                              exceptionIsThrown;
 
-    private DataRemover(final NavigableMap<ONodeAddress, ServerInstance> ringMap, Map<ORecordId, Record> data,
-        OLockManager<ORecordId, Runnable> lockManager, AtomicBoolean testIsStopped, final AtomicBoolean exceptionIsThrown) {
+    private DataRemover(final NavigableMap<ONodeAddress, ServerInstance> ringMap, Map<ORID, Record> data,
+        OLockManager<ORID, Runnable> lockManager, AtomicBoolean testIsStopped, final AtomicBoolean exceptionIsThrown) {
       this.data = data;
 
       this.lockManager = lockManager;
@@ -243,7 +244,7 @@ public class DHTModificationTest {
             n = 5;
 
           int i = 0;
-          for (ORecordId key : data.keySet()) {
+          for (ORID key : data.keySet()) {
             if (testIsStopped.get())
               break;
 
@@ -281,16 +282,16 @@ public class DHTModificationTest {
   }
 
   private static class DataWriter implements Callable<Void> {
-    private final OLockManager<ORecordId, Runnable>          lockManager;
+    private final OLockManager<ORID, Runnable>          lockManager;
 
-    private final Map<ORecordId, Record>                     data;
+    private final Map<ORID, Record>                     data;
 
     private final NavigableMap<ONodeAddress, ServerInstance> ringMap;
 
     private final AtomicBoolean                              testIsStopped;
     private final AtomicBoolean                              exceptionIsThrown;
 
-    private DataWriter(Map<ORecordId, Record> data, OLockManager<ORecordId, Runnable> lockManager,
+    private DataWriter(Map<ORID, Record> data, OLockManager<ORID, Runnable> lockManager,
         final NavigableMap<ONodeAddress, ServerInstance> ringMap, AtomicBoolean testIsStopped, AtomicBoolean exceptionIsThrown) {
       this.data = data;
       this.lockManager = lockManager;
@@ -301,7 +302,7 @@ public class DHTModificationTest {
     }
 
     public Void call() throws Exception {
-      ORecordId id;
+      ORID id;
       try {
         while (!testIsStopped.get()) {
           if (data.size() > 50000) {
@@ -344,14 +345,14 @@ public class DHTModificationTest {
   }
 
   private class DataReader implements Callable<Void> {
-    private final Map<ORecordId, Record>                     data;
-    private final OLockManager<ORecordId, Runnable>          lockManager;
+    private final Map<ORID, Record>                     data;
+    private final OLockManager<ORID, Runnable>          lockManager;
 
     private final AtomicBoolean                              testIsStopped;
     private final AtomicBoolean                              exceptionIsThrown;
     private final NavigableMap<ONodeAddress, ServerInstance> ringMap;
 
-    public DataReader(Map<ORecordId, Record> data, OLockManager<ORecordId, Runnable> lockManager,
+    public DataReader(Map<ORID, Record> data, OLockManager<ORID, Runnable> lockManager,
         final NavigableMap<ONodeAddress, ServerInstance> ringMap, final AtomicBoolean testIsStopped,
         final AtomicBoolean exceptionIsThrown) {
       this.data = data;
@@ -366,7 +367,7 @@ public class DHTModificationTest {
       try {
         while (!testIsStopped.get()) {
           int i = 0;
-          for (Map.Entry<ORecordId, Record> entry : data.entrySet()) {
+          for (Map.Entry<ORID, Record> entry : data.entrySet()) {
             if (testIsStopped.get())
               break;
             for (ServerInstance si : ringMap.values()) {

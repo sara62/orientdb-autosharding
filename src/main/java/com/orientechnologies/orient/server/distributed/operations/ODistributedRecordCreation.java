@@ -1,7 +1,8 @@
 package com.orientechnologies.orient.server.distributed.operations;
 
 import com.orientechnologies.orient.core.id.OClusterPosition;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -11,9 +12,9 @@ import com.orientechnologies.orient.server.distributed.Record;
  */
 public final class ODistributedRecordCreation implements ODistributedRecordOperation<Record> {
   private final String data;
-  private ORecordId    recordId;
+  private ORID         recordId;
 
-  public ODistributedRecordCreation(String data, ORecordId recordId) {
+  public ODistributedRecordCreation(String data, ORID recordId) {
     this.data = data;
     this.recordId = recordId;
   }
@@ -23,7 +24,7 @@ public final class ODistributedRecordCreation implements ODistributedRecordOpera
     if (recordId == null)
       return null;
 
-    return recordId.clusterPosition;
+    return recordId.getClusterPosition();
   }
 
   @Override
@@ -31,7 +32,7 @@ public final class ODistributedRecordCreation implements ODistributedRecordOpera
     return 1;
   }
 
-  public void setRecordId(ORecordId recordId) {
+  public void setRecordId(ORID recordId) {
     this.recordId = recordId;
   }
 

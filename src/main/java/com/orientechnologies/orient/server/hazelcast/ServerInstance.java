@@ -26,7 +26,7 @@ import com.hazelcast.core.Member;
 import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
@@ -148,7 +148,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
 
   }
 
-  public Record create(ORecordId id, String data) {
+  public Record create(ORID id, String data) {
     return localNode.createRecord(id, data);
   }
 
@@ -156,11 +156,11 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     return localNode.createRecord(data);
   }
 
-  public Record get(ORecordId id) {
+  public Record get(ORID id) {
     return localNode.readRecord(id);
   }
 
-  public void remove(ORecordId id, ODHTRecordVersion version) {
+  public void remove(ORID id, ODHTRecordVersion version) {
     localNode.deleteRecord(id, version);
   }
 

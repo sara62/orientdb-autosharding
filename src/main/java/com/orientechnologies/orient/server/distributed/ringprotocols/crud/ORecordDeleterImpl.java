@@ -3,7 +3,7 @@ package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordReplicator;
 
@@ -23,7 +23,7 @@ public class ORecordDeleterImpl implements ORecordDeleter {
   }
 
   @Override
-  public void deleteRecord(ODHTNodeLocal localNode, ORecordId recordId, ODHTRecordVersion version) {
+  public void deleteRecord(ODHTNodeLocal localNode, ORID recordId, ODHTRecordVersion version) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
     localNode.removeRecordLocal(recordId, version);

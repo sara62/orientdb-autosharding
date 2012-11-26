@@ -1,7 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.orient.core.id.OClusterPosition;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
 
 /**
@@ -9,15 +9,15 @@ import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
  * @since 22.11.12
  */
 public interface ODHTNodeLocal extends ODHTNode {
-	public Record addRecordLocal(ORecordId id, String data);
-	public void updateRecordLocal(ORecordId id, Record record);
-	public Record readRecordLocal(ORecordId recordId);
-	public void removeRecordLocal(ORecordId id, ODHTRecordVersion version);
-	public void cleanOutData(ORecordId id, ODHTRecordVersion version);
+	public Record addRecordLocal(ORID id, String data);
+	public void updateRecordLocal(ORID id, Record record);
+	public Record readRecordLocal(ORID recordId);
+	public void removeRecordLocal(ORID id, ODHTRecordVersion version);
+	public void cleanOutData(ORID id, ODHTRecordVersion version);
 
 	public OMerkleTree getLocalMerkleTree();
 
-	public ODatabaseRingIterator getLocalRingIterator(ORecordId startRid, ORecordId endId);
-	public ORecordId getHigherLocalId(ORecordId clusterPosition);
-	public ORecordId getCeilingLocalId(ORecordId clusterPosition);
+	public ODatabaseRingIterator getLocalRingIterator(ORID startRid, ORID endId);
+	public ORID getHigherLocalId(ORID clusterPosition);
+	public ORID getCeilingLocalId(ORID clusterPosition);
 }

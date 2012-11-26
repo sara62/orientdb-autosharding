@@ -5,7 +5,8 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.id.ORID;
 
 /**
  * @author Andrey Lomakin
@@ -13,14 +14,14 @@ import com.orientechnologies.orient.core.id.ORecordId;
  */
 public class Record implements Externalizable {
   private String            data;
-  private ORecordId         id;
+  private ORID              id;
 
   private ODHTRecordVersion version;
 
   public Record() {
   }
 
-  public Record(ORecordId id, String data) {
+  public Record(ORID id, String data) {
     this.id = id;
     this.data = data;
 
@@ -28,7 +29,7 @@ public class Record implements Externalizable {
     version.init();
   }
 
-  public Record(ORecordId id, String data, int shortVersion) {
+  public Record(ORID id, String data, int shortVersion) {
     this.id = id;
     this.data = data;
 
@@ -48,7 +49,7 @@ public class Record implements Externalizable {
     this.data = data;
   }
 
-  public ORecordId getId() {
+  public ORID getId() {
     return id;
   }
 
@@ -117,7 +118,7 @@ public class Record implements Externalizable {
   }
 
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    id = (ORecordId) in.readObject();
+    id = (ORID) in.readObject();
     version = (ODHTRecordVersion) in.readObject();
 
     final boolean dataIsNotNull = in.readBoolean();

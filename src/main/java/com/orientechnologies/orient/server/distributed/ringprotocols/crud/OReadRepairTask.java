@@ -1,6 +1,6 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import org.slf4j.Logger;
@@ -29,12 +29,12 @@ final class OReadRepairTask implements Callable<Void> {
 					new OReadRepairFactory(),
 					new ThreadPoolExecutor.CallerRunsPolicy());
 
-	private final ORecordId recordId;
+	private final ORID recordId;
 	private final Set<ONodeAddress> replicaHolders;
 	private final ODHTNodeLocal localNode;
 	private final ORecordMergeStrategy recordMergeStrategy;
 
-	OReadRepairTask(ORecordId recordId, Set<ONodeAddress> replicaHolders,
+	OReadRepairTask(ORID recordId, Set<ONodeAddress> replicaHolders,
 									ODHTNodeLocal localNode, ORecordMergeStrategy recordMergeStrategy) {
 		this.recordId = recordId;
 		this.replicaHolders = replicaHolders;

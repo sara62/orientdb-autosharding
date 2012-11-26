@@ -2,12 +2,13 @@ package com.orientechnologies.orient.server.distributed;
 
 import java.util.TreeMap;
 
+import com.orientechnologies.orient.core.id.ORecordId;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 
 /**
  * @author Andrey Lomakin
@@ -16,19 +17,19 @@ import com.orientechnologies.orient.core.id.ORecordId;
 @Test
 public class DatabaseRingIteratorTest {
   public void continuousIntervalTest() {
-    final TreeMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
+    final TreeMap<ORID, Record> map = new TreeMap<ORID, Record>();
 
     for (long i = 0; i < 100; i++) {
-      final ORecordId recordId = convertToRecordId(i);
+      final ORID recordId = convertTORID(i);
       map.put(recordId, new Record(recordId, i + ""));
     }
 
-    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(map, convertToRecordId(20), convertToRecordId(30));
+    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(map, convertTORID(20), convertTORID(30));
 
     for (long i = 20; i <= 30; i++) {
       Assert.assertTrue(ringIterator.hasNext());
 
-      final ORecordId recordId = convertToRecordId(i);
+      final ORID recordId = convertTORID(i);
 
       final Record record = map.get(recordId);
 
@@ -39,35 +40,35 @@ public class DatabaseRingIteratorTest {
   }
 
   public void overlappingTest() {
-    final TreeMap<ORecordId, Record> map = new TreeMap<ORecordId, Record>();
+    final TreeMap<ORID, Record> map = new TreeMap<ORID, Record>();
 
     for (long i = 0; i < 100; i++) {
-      final ORecordId recordId = convertToRecordId(i);
+      final ORID recordId = convertTORID(i);
       map.put(recordId, new Record(recordId, i + ""));
     }
 
-    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(map, convertToRecordId(25), convertToRecordId(22));
+    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(map, convertTORID(25), convertTORID(22));
 
     for (long i = 25; i < 100; i++) {
       Assert.assertTrue(ringIterator.hasNext());
 
-      final Record record = map.get(convertToRecordId(i));
+      final Record record = map.get(convertTORID(i));
 
-      Assert.assertEquals(ringIterator.next(), new RecordMetadata(convertToRecordId(i), record.getVersion()));
+      Assert.assertEquals(ringIterator.next(), new RecordMetadata(convertTORID(i), record.getVersion()));
     }
 
     for (long i = 0; i <= 22; i++) {
       Assert.assertTrue(ringIterator.hasNext());
 
-      final Record record = map.get(convertToRecordId(i));
+      final Record record = map.get(convertTORID(i));
 
-      Assert.assertEquals(ringIterator.next(), new RecordMetadata(convertToRecordId(i), record.getVersion()));
+      Assert.assertEquals(ringIterator.next(), new RecordMetadata(convertTORID(i), record.getVersion()));
     }
 
     Assert.assertTrue(!ringIterator.hasNext());
   }
 
-  private ORecordId convertToRecordId(long i) {
+  private ORID convertTORID(long i) {
     return new ORecordId(1, new OClusterPositionNodeId(ONodeId.valueOf(i)));
   }
 

@@ -7,7 +7,7 @@ import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
@@ -28,7 +28,7 @@ public class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
   }
 
   @Override
-  public void mergeReplicaVersions(ODHTNodeLocal localNode, ORecordId recordId, Set<ONodeAddress> replicaHolders) {
+  public void mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders) {
     final Set<ONodeAddress> replicaHoldersToUpdate = new HashSet<ONodeAddress>();
 
     try {

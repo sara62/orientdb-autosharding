@@ -5,7 +5,7 @@ import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
 import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordReplicator;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 
 /**
  * @author Andrey Lomakin
@@ -23,7 +23,7 @@ public class ORecordCreatorImpl implements ORecordCreator {
 	}
 
 	@Override
-	public Record createRecord(ODHTNodeLocal node, ORecordId recordId, String data) {
+	public Record createRecord(ODHTNodeLocal node, ORID recordId, String data) {
 		OWaitTillNodeJoin.waitTillNodeJoin(node);
 
 		final Record result = node.addRecordLocal(recordId, data);

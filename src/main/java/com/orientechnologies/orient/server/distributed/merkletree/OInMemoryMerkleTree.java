@@ -7,6 +7,7 @@ import java.util.NavigableMap;
 
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.Record;
@@ -19,9 +20,9 @@ import com.orientechnologies.orient.server.distributed.RecordMetadata;
 public class OInMemoryMerkleTree implements OMerkleTree {
   private final int                             clusterId;
   private final OMerkleTreeNode[]               roots;
-  private final NavigableMap<ORecordId, Record> db;
+  private final NavigableMap<ORID, Record> db;
 
-  public OInMemoryMerkleTree(final NavigableMap<ORecordId, Record> db, final int clusterId) {
+  public OInMemoryMerkleTree(final NavigableMap<ORID, Record> db, final int clusterId) {
     this.db = db;
     this.clusterId = clusterId;
 
@@ -34,8 +35,8 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public Record addData(final ORecordId id, final String data) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.clusterPosition).getNodeId());
+	public Record addData(final ORID id, final String data) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
@@ -44,8 +45,8 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void deleteData(final ORecordId id, final ODHTRecordVersion version) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.clusterPosition).getNodeId());
+	public void deleteData(final ORID id, final ODHTRecordVersion version) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
@@ -53,8 +54,8 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void deleteData(final ORecordId id, final ODHTRecordVersion version, boolean softDelete) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.clusterPosition).getNodeId());
+	public void deleteData(final ORID id, final ODHTRecordVersion version, boolean softDelete) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId startId = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
@@ -65,8 +66,8 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void updateData(final ORecordId id, final ODHTRecordVersion version, final String data) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.clusterPosition).getNodeId());
+	public void updateData(final ORID id, final ODHTRecordVersion version, final String data) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];
@@ -74,8 +75,8 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void updateReplica(final ORecordId id, final Record replica) {
-    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.clusterPosition).getNodeId());
+	public void updateReplica(final ORID id, final Record replica) {
+    final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
     final OMerkleTreeNode node = roots[childIndex];

@@ -2,6 +2,7 @@ package com.orientechnologies.orient.server.distributed.ringprotocols;
 
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
@@ -172,8 +173,8 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 							new ORecordId(1, new OClusterPositionNodeId(endId)));
 
 			while (nodeMetadatas.length > 0) {
-				final ORecordId[] missedIds = remoteDHTNode.findMissedRecords(nodeMetadatas);
-				for (ORecordId missedId : missedIds) {
+				final ORID[] missedIds = remoteDHTNode.findMissedRecords(nodeMetadatas);
+				for (ORID missedId : missedIds) {
 					final Record record = localDHTNode.readRecordLocal(missedId);
 					if (record != null)
 						recordsToReplicate.add(record);
@@ -185,12 +186,12 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 
 				}
 
-				startId = ((OClusterPositionNodeId) nodeMetadatas[nodeMetadatas.length - 1].getId().clusterPosition).getNodeId().add(
+				startId = ((OClusterPositionNodeId) nodeMetadatas[nodeMetadatas.length - 1].getId().getClusterPosition()).getNodeId().add(
 						ONodeId.ONE);
 
 				if (recordsInterval.insideInterval(startId))
-					nodeMetadatas = localDHTNode.getRecordsForIntervalFromNode(new ORecordId(1, new OClusterPositionNodeId(startId)), new ORecordId(1,
-									new OClusterPositionNodeId(endId)));
+					nodeMetadatas = localDHTNode.getRecordsForIntervalFromNode(new ORecordId(1, new OClusterPositionNodeId(startId)),
+									new ORecordId(1, new OClusterPositionNodeId(endId)));
 			}
 
 			if (!recordsToReplicate.isEmpty())
@@ -218,7 +219,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 						recordsToReplicate.clear();
 					}
 				}
-				startId = ((OClusterPositionNodeId) recordMetadatas[recordMetadatas.length - 1].getId().clusterPosition).getNodeId().add(
+				startId = ((OClusterPositionNodeId) recordMetadatas[recordMetadatas.length - 1].getId().getClusterPosition()).getNodeId().add(
 						ONodeId.ONE);
 
 				if (recordsInterval.insideInterval(startId))
@@ -248,13 +249,13 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
     final ODHTRingInterval dhtNodeInterval = new ODHTRingInterval(localPredecessor.getNodeId().add(ONodeId.ONE),
 				localDHTNode.getNodeAddress().getNodeId());
 
-		final ArrayList<ORecordId> recordsToFetch = new ArrayList<ORecordId>();
+		final ArrayList<ORID> recordsToFetch = new ArrayList<ORID>();
 
 		if (remoteNode.isLeaf()) {
 			for (int i = 0; i < remoteNode.getRecordsCount(); i++) {
 				final RecordMetadata recordMetadata = remoteNode.getRecordMetadata(i);
 
-				if (dhtNodeInterval.insideInterval(((OClusterPositionNodeId) recordMetadata.getId().clusterPosition).getNodeId())) {
+				if (dhtNodeInterval.insideInterval(((OClusterPositionNodeId) recordMetadata.getId().getClusterPosition()).getNodeId())) {
 					final Record dbRecord = localDHTNode.readRecordLocal(recordMetadata.getId());
 					if (dbRecord == null || dbRecord.getVersion().compareTo(recordMetadata.getVersion()) < 0)
 						recordsToFetch.add(recordMetadata.getId());
@@ -296,7 +297,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 					}
 				}
 
-				startId = ((OClusterPositionNodeId) nodeMetadatas[nodeMetadatas.length - 1].getId().clusterPosition).getNodeId().add(
+				startId = ((OClusterPositionNodeId) nodeMetadatas[nodeMetadatas.length - 1].getId().getClusterPosition()).getNodeId().add(
 						ONodeId.ONE);
 
 				if (recordsInterval.insideInterval(startId))
@@ -310,12 +311,12 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 	}
 
 	private void fetchRecords(final ODHTNodeLocal localDHTNode,
-														List<ORecordId> missedRecords, ONodeAddress remoteNodeId) {
+														List<ORID> missedRecords, ONodeAddress remoteNodeId) {
 		final ODHTNode remoteNode = nodeLookup.findById(remoteNodeId);
 		if (remoteNode == null)
 			throw new ONodeSynchronizationFailedException("Node with id " + remoteNodeId + " is absent in ring.");
 
-		final ORecordId[] missedRecordsArray = new ORecordId[missedRecords.size()];
+		final ORID[] missedRecordsArray = new ORID[missedRecords.size()];
 		for (int i = 0; i < missedRecordsArray.length; i++)
 			missedRecordsArray[i] = missedRecords.get(i);
 

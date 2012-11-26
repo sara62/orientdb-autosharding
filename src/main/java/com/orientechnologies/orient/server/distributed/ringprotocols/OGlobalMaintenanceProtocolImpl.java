@@ -6,13 +6,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.orientechnologies.orient.core.id.ORecordId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
@@ -42,11 +43,11 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
     if (nodeLocal.state() == null || !nodeLocal.state().equals(ODHTNode.NodeState.PRODUCTION))
       return nodeLocal.getNodeAddress().getNodeId();
 
-    final ORecordId nextRecordId = nextInDB(nodeLocal, new ORecordId(1, new OClusterPositionNodeId(idToTest)));
+    final ORID nextRecordId = nextInDB(nodeLocal, new ORecordId(1, new OClusterPositionNodeId(idToTest)));
     if (nextRecordId == null)
       return idToTest;
 
-    ONodeId nextId = ((OClusterPositionNodeId) nextRecordId.clusterPosition).getNodeId();
+    ONodeId nextId = ((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId();
 
     ONodeAddress successor = nodeLocal.findSuccessor(nextId);
 
@@ -109,9 +110,9 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
         continue;
 
       try {
-        final ORecordId[] missingIds = node.findMissedRecords(metadatas);
+        final ORID[] missingIds = node.findMissedRecords(metadatas);
 
-        for (ORecordId missingId : missingIds) {
+        for (ORID missingId : missingIds) {
           final Record replica = nodeLocal.readRecordLocal(missingId);
           if (replica != null)
             node.updateReplica(replica, false);
@@ -134,8 +135,8 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
     recordMetadatas.clear();
   }
 
-  private ORecordId nextInDB(final ODHTNodeLocal nodeLocal, ORecordId id) {
-    ORecordId result = nodeLocal.getHigherLocalId(id);
+  private ORID nextInDB(final ODHTNodeLocal nodeLocal, ORID id) {
+    ORID result = nodeLocal.getHigherLocalId(id);
 
     if (result != null)
       return result;

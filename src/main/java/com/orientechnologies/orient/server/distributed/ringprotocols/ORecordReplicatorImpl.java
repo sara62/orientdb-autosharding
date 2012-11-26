@@ -5,7 +5,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
@@ -27,7 +27,7 @@ public class ORecordReplicatorImpl implements ORecordReplicator {
   }
 
   @Override
-  public void replicateRecord(ODHTNode node, ORecordId recordId, int replicaCount, int syncReplicaCount) {
+  public void replicateRecord(ODHTNode node, ORID recordId, int replicaCount, int syncReplicaCount) {
     if (replicaCount < 1)
       return;
 

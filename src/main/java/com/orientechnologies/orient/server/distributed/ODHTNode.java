@@ -1,7 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 
 /**
@@ -33,37 +33,37 @@ public interface ODHTNode {
 
   public Record createRecord(String data);
 
-  public Record createRecord(ORecordId id, String data);
+  public Record createRecord(ORID id, String data);
 
-  public Record readRecord(ORecordId id);
+  public Record readRecord(ORID id);
 
-  public void updateRecord(ORecordId id, Record record);
+  public void updateRecord(ORID id, Record record);
 
-  public void deleteRecord(ORecordId id, ODHTRecordVersion version);
+  public void deleteRecord(ORID id, ODHTRecordVersion version);
 
   public void updateReplica(Record replica, boolean async);
 
   public void updateReplicas(Record[] replicas, boolean async);
 
-  public Record getRecordFromNode(ORecordId id);
+  public Record getRecordFromNode(ORID id);
 
-  public Record[] getRecordsFromNode(ORecordId[] ids);
+  public Record[] getRecordsFromNode(ORID[] ids);
 
-  public Record createRecordInNode(ORecordId id, String data);
+  public Record createRecordInNode(ORID id, String data);
 
-  public void updateRecordInNode(ORecordId id, Record record);
+  public void updateRecordInNode(ORID id, Record record);
 
-  public void deleteRecordFromNode(ORecordId id, ODHTRecordVersion version);
+  public void deleteRecordFromNode(ORID id, ODHTRecordVersion version);
 
-  public Record readRecordFromNode(ORecordId id);
+  public Record readRecordFromNode(ORID id);
 
-  public RecordMetadata getRecordMetadataFromNode(ORecordId id);
+  public RecordMetadata getRecordMetadataFromNode(ORID id);
 
-  public RecordMetadata[] getRecordsForIntervalFromNode(ORecordId startId, ORecordId endId);
+  public RecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId);
 
   public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node);
 
   public int size();
 
-  public ORecordId[] findMissedRecords(RecordMetadata[] recordMetadatas);
+  public ORID[] findMissedRecords(RecordMetadata[] recordMetadatas);
 }

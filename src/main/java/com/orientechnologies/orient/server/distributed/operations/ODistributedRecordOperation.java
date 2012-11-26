@@ -1,7 +1,7 @@
 package com.orientechnologies.orient.server.distributed.operations;
 
 import com.orientechnologies.orient.core.id.OClusterPosition;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 
 /**
@@ -15,5 +15,5 @@ public interface ODistributedRecordOperation<T> {
 
   public int getClusterId();
 
-  public void setRecordId(ORecordId recordId);
+  public void setRecordId(ORID recordId);
 }

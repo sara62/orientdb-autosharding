@@ -6,7 +6,7 @@ import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
 import com.orientechnologies.orient.server.distributed.ringprotocols.OReplicaDistributionStrategy;
 
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -32,7 +32,7 @@ public class ORecordReaderImpl implements ORecordReader {
 	}
 
   @Override
-  public Record readRecord(ODHTNodeLocal nodeLocal, ORecordId recordId) {
+  public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId) {
 		OWaitTillNodeJoin.waitTillNodeJoin(nodeLocal);
 
 		final ONodeAddress[] successors = nodeLocal.getSuccessors();

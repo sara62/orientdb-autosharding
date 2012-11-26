@@ -13,6 +13,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.orientechnologies.orient.core.id.ORecordId;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -20,7 +21,7 @@ import com.orientechnologies.common.concur.lock.OLockManager;
 import com.orientechnologies.common.util.MersenneTwisterFast;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
 /**
@@ -73,8 +74,8 @@ public class DHTConcurrencyTest {
 
     Thread.sleep(5000);
 
-    final NavigableMap<ORecordId, Record> data = new ConcurrentSkipListMap<ORecordId, Record>();
-    final OLockManager<ORecordId, Runnable> lockManager = new OLockManager<ORecordId, Runnable>(true, 500);
+    final NavigableMap<ORID, Record> data = new ConcurrentSkipListMap<ORID, Record>();
+    final OLockManager<ORID, Runnable> lockManager = new OLockManager<ORID, Runnable>(true, 500);
 
     final List<Future<Void>> readerFutures = new ArrayList<Future<Void>>();
 
@@ -130,7 +131,7 @@ public class DHTConcurrencyTest {
     int i = 0;
 
     long start = System.currentTimeMillis();
-    for (Map.Entry<ORecordId, Record> entry : data.entrySet()) {
+    for (Map.Entry<ORID, Record> entry : data.entrySet()) {
 
       serverInstance.get(entry.getKey());
       Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
@@ -168,15 +169,15 @@ public class DHTConcurrencyTest {
   }
 
   private static class DataRemover implements Callable<Void> {
-    private final OLockManager<ORecordId, Runnable> lockManager;
-    private final Map<ORecordId, Record>            data;
+    private final OLockManager<ORID, Runnable> lockManager;
+    private final Map<ORID, Record>            data;
 
     private final Random                            random = new Random();
 
     private final ServerInstance                    serverInstance;
     private final AtomicBoolean                     testIsStopped;
 
-    private DataRemover(ServerInstance serverInstance, Map<ORecordId, Record> data, OLockManager<ORecordId, Runnable> lockManager,
+    private DataRemover(ServerInstance serverInstance, Map<ORID, Record> data, OLockManager<ORID, Runnable> lockManager,
         AtomicBoolean testIsStopped) {
       this.data = data;
 
@@ -201,7 +202,7 @@ public class DHTConcurrencyTest {
             n = 5;
 
           int i = 0;
-          for (ORecordId key : data.keySet()) {
+          for (ORID key : data.keySet()) {
             if (testIsStopped.get())
               break;
 
@@ -234,15 +235,15 @@ public class DHTConcurrencyTest {
   }
 
   private static class DataWriter implements Callable<Void> {
-    private final OLockManager<ORecordId, Runnable> lockManager;
+    private final OLockManager<ORID, Runnable> lockManager;
 
     private final MersenneTwisterFast               random = new MersenneTwisterFast();
-    private final Map<ORecordId, Record>            data;
+    private final Map<ORID, Record>            data;
 
     private final ServerInstance                    serverInstance;
     private final AtomicBoolean                     testIsStopped;
 
-    private DataWriter(Map<ORecordId, Record> data, OLockManager<ORecordId, Runnable> lockManager, ServerInstance serverInstance,
+    private DataWriter(Map<ORID, Record> data, OLockManager<ORID, Runnable> lockManager, ServerInstance serverInstance,
         AtomicBoolean testIsStopped) {
       random.setSeed((new Random()).nextLong());
       this.data = data;
@@ -253,7 +254,7 @@ public class DHTConcurrencyTest {
     }
 
     public Void call() throws Exception {
-      ORecordId id;
+      ORID id;
       try {
         while (!testIsStopped.get()) {
           id = new ORecordId(1, new OClusterPositionNodeId(ONodeId.generateUniqueId()));
@@ -274,12 +275,12 @@ public class DHTConcurrencyTest {
   }
 
   private class DataReader implements Callable<Void> {
-    private final Map<ORecordId, Record>            data;
-    private final OLockManager<ORecordId, Runnable> lockManager;
+    private final Map<ORID, Record>            data;
+    private final OLockManager<ORID, Runnable> lockManager;
 
     private final ServerInstance                    serverInstance;
 
-    public DataReader(Map<ORecordId, Record> data, OLockManager<ORecordId, Runnable> lockManager, ServerInstance serverInstance) {
+    public DataReader(Map<ORID, Record> data, OLockManager<ORID, Runnable> lockManager, ServerInstance serverInstance) {
       this.data = data;
       this.lockManager = lockManager;
 
@@ -290,7 +291,7 @@ public class DHTConcurrencyTest {
       try {
         while (!testIsStopped.get()) {
           int i = 0;
-          for (Map.Entry<ORecordId, Record> entry : data.entrySet()) {
+          for (Map.Entry<ORID, Record> entry : data.entrySet()) {
             if (testIsStopped.get())
               break;
 
