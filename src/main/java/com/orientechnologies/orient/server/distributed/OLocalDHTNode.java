@@ -45,14 +45,14 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
                                                                                  ONodeId.NODE_SIZE_BITS - 1);
   private AtomicReference<ONodeAddress>                predecessor           = new AtomicReference<ONodeAddress>();
 
-  private final NavigableMap<ORID, Record>        db                    = new ConcurrentSkipListMap<ORID, Record>();
+  private final NavigableMap<ORID, Record>             db                    = new ConcurrentSkipListMap<ORID, Record>();
 
   private final ODHTNodeLookup                         nodeLookup;
 
   private int                                          nextIndex             = 0;
   private final Object                                 fingersLock           = new Object();
 
-  private final OLockManager<ORID, Runnable>      lockManager           = new OLockManager<ORID, Runnable>(true, 500);
+  private final OLockManager<ORID, Runnable>           lockManager           = new OLockManager<ORID, Runnable>(true, 500);
 
   private volatile ONodeAddress[]                      successorsList        = new ONodeAddress[0];
 
@@ -61,6 +61,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   private final OMerkleTree                            merkleTree            = new OInMemoryMerkleTree(db, 1);
 
   private final int                                    replicaCount;
+	private final int 																	 syncReplicaCount;
 
   private final ODistributedRecordOperationCoordinator operationCoordinator;
 
@@ -78,8 +79,9 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
     this.replicaCount = replicaCount;
     this.nodeLookup = nodeLookup;
+		this.syncReplicaCount = syncReplicaCount;
 
-    this.operationCoordinator = distributedCoordinatorFactory.createOperationCoordinator(nodeLookup);
+		this.operationCoordinator = distributedCoordinatorFactory.createOperationCoordinator(nodeLookup);
 
     this.recordCreator = ringProtocolsFactory.createRecordCreator(nodeLookup, replicaCount, syncReplicaCount);
     this.recordUpdater = ringProtocolsFactory.createRecordUpdater(nodeLookup, replicaCount, syncReplicaCount);
@@ -329,21 +331,21 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
   @Override
   public Record createRecordInNode(ORID recordId, String data) {
-    return recordCreator.createRecord(this, recordId, data);
+    return recordCreator.createRecord(this, recordId, data, replicaCount, syncReplicaCount);
   }
 
   @Override
   public void updateRecordInNode(ORID recordId, Record record) {
-    recordUpdater.updateRecord(this, record);
+    recordUpdater.updateRecord(this, record, replicaCount, syncReplicaCount);
   }
 
   @Override
   public void deleteRecordFromNode(ORID recordId, ODHTRecordVersion version) {
-    recordDeleter.deleteRecord(this, recordId, version);
+    recordDeleter.deleteRecord(this, recordId, version, replicaCount, syncReplicaCount);
   }
 
   public Record readRecordFromNode(ORID recordId) {
-    return recordReader.readRecord(this, recordId);
+    return recordReader.readRecord(this, recordId, replicaCount, syncReplicaCount);
   }
 
   public Record getRecordFromNode(ORID recordId) {
@@ -522,6 +524,19 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   public NodeState state() {
     return state;
   }
+
+	public void stop() {
+		synchronized (fingersLock) {
+			state = null;
+
+			predecessor.set(null);
+			for (int i = 0; i < fingerPoints.length(); i++) {
+				fingerPoints.set(i, null);
+			}
+
+			successorsList  = new ONodeAddress[0];
+		}
+	}
 
   public void stabilize() {
     final Logger logger = LoggerFactory.getLogger(this.getClass().getName() + ".stabilize");

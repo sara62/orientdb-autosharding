@@ -41,17 +41,17 @@ public class ODefaultRingProtocolsFactory implements ORingProtocolsFactory {
 
 	@Override
 	public ORecordCreator createRecordCreator(ODHTNodeLookup nodeLookup, int replicaCount, int syncReplicaCount) {
-		return new ORecordCreatorImpl(createRecordReplicator(nodeLookup), replicaCount, syncReplicaCount);
+		return new ORecordCreatorImpl(createRecordReplicator(nodeLookup));
 	}
 
 	@Override
 	public ORecordUpdater createRecordUpdater(ODHTNodeLookup nodeLookup, int replicaCount, int syncReplicaCount) {
-		return new ORecordUpdaterImpl(createRecordReplicator(nodeLookup), replicaCount, syncReplicaCount);
+		return new ORecordUpdaterImpl(createRecordReplicator(nodeLookup));
 	}
 
 	@Override
 	public ORecordDeleter createRecordDeleter(ODHTNodeLookup nodeLookup, int replicaCount, int syncReplicaCount) {
-		return new ORecordDeleterImpl(createRecordReplicator(nodeLookup), replicaCount, replicaCount);
+		return new ORecordDeleterImpl(createRecordReplicator(nodeLookup));
 	}
 
 	@Override

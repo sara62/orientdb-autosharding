@@ -13,17 +13,13 @@ import com.orientechnologies.orient.core.id.ORID;
  */
 public class ORecordCreatorImpl implements ORecordCreator {
 	private final ORecordReplicator recordReplicator;
-	private final int replicaCount;
-	private final int syncReplicaCount;
 
-	public ORecordCreatorImpl(ORecordReplicator recordReplicator, int replicaCount, int syncReplicaCount) {
+	public ORecordCreatorImpl(ORecordReplicator recordReplicator) {
 		this.recordReplicator = recordReplicator;
-		this.replicaCount = replicaCount;
-		this.syncReplicaCount = syncReplicaCount;
 	}
 
 	@Override
-	public Record createRecord(ODHTNodeLocal node, ORID recordId, String data) {
+	public Record createRecord(ODHTNodeLocal node, ORID recordId, String data, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(node);
 
 		final Record result = node.addRecordLocal(recordId, data);

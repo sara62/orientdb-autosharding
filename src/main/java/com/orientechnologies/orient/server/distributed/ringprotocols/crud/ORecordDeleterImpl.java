@@ -13,17 +13,13 @@ import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordRepl
  */
 public class ORecordDeleterImpl implements ORecordDeleter {
   private final ORecordReplicator recordReplicator;
-  private final int               replicaCount;
-  private final int               syncReplicaCount;
 
-  public ORecordDeleterImpl(ORecordReplicator recordReplicator, int replicaCount, int syncReplicaCount) {
+  public ORecordDeleterImpl(ORecordReplicator recordReplicator) {
     this.recordReplicator = recordReplicator;
-    this.replicaCount = replicaCount;
-    this.syncReplicaCount = syncReplicaCount;
   }
 
   @Override
-  public void deleteRecord(ODHTNodeLocal localNode, ORID recordId, ODHTRecordVersion version) {
+  public void deleteRecord(ODHTNodeLocal localNode, ORID recordId, ODHTRecordVersion version, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
     localNode.removeRecordLocal(recordId, version);

@@ -11,17 +11,13 @@ import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordRepl
  */
 public class ORecordUpdaterImpl implements ORecordUpdater {
 	private final ORecordReplicator recordReplicator;
-	private final int replicaCount;
-	private final int  syncReplicaCount;
 
-	public ORecordUpdaterImpl(ORecordReplicator recordReplicator, int replicaCount, int syncReplicaCount) {
+	public ORecordUpdaterImpl(ORecordReplicator recordReplicator) {
 		this.recordReplicator = recordReplicator;
-		this.replicaCount = replicaCount;
-		this.syncReplicaCount = syncReplicaCount;
 	}
 
 	@Override
-	public Record updateRecord(ODHTNodeLocal localNode, Record record) {
+	public Record updateRecord(ODHTNodeLocal localNode, Record record, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
 		localNode.updateRecordLocal(record.getId(), record);

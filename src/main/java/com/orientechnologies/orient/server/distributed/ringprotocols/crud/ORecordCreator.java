@@ -9,5 +9,5 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 21.11.12
  */
 public interface ORecordCreator {
-  public Record createRecord(ODHTNodeLocal node, ORID id, String data);
+  public Record createRecord(ODHTNodeLocal node, ORID id, String data, int replicaCount, int syncReplicaCount);
 }

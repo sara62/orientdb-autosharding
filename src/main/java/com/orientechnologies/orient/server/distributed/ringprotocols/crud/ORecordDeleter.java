@@ -9,5 +9,6 @@ import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
  * @since 22.11.12
  */
 public interface ORecordDeleter {
-	public void deleteRecord(ODHTNodeLocal localNode, ORID recordId, ODHTRecordVersion version);
+	public void deleteRecord(ODHTNodeLocal localNode, ORID recordId, ODHTRecordVersion version,
+													 int replicaCount, int syncReplicaCount);
 }

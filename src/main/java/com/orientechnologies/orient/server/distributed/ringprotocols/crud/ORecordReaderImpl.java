@@ -32,13 +32,13 @@ public class ORecordReaderImpl implements ORecordReader {
 	}
 
   @Override
-  public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId) {
+  public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(nodeLocal);
 
 		final ONodeAddress[] successors = nodeLocal.getSuccessors();
 
     final Set<ONodeAddress>[] replicas = replicaDistributionStrategy.chooseReplicas(successors,
-						replicaCount, syncReplicaCount);
+						this.replicaCount, this.syncReplicaCount);
 
     final Set<ONodeAddress> syncReplicas = replicas[0];
     final Set<ONodeAddress> asyncReplicas = replicas[1];

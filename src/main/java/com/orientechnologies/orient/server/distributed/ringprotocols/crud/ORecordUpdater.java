@@ -8,5 +8,5 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 22.11.12
  */
 public interface ORecordUpdater {
-	public Record updateRecord(ODHTNodeLocal localNode, Record record);
+	public Record updateRecord(ODHTNodeLocal localNode, Record record, int replicaCount, int syncReplicaCount);
 }

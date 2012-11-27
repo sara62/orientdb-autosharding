@@ -17,19 +17,19 @@ public interface ODHTNode {
 
   public ONodeAddress getSuccessor();
 
-  public ONodeAddress[] getSuccessors();
-
   public ONodeAddress getPredecessor();
 
-  public void requestStabilization();
+	public NodeState state();
+
+	public ONodeAddress[] getSuccessors();
+
+	public void requestStabilization();
 
   public ONodeAddress notifyParent(ONodeAddress nodeId);
 
   public boolean joinDHT(ONodeAddress nodeId);
 
   public ONodeAddress findSuccessor(ONodeId id);
-
-  public NodeState state();
 
   public Record createRecord(String data);
 

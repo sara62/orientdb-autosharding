@@ -14,7 +14,7 @@ public class ORecordReaderWithoutReadRepairImpl implements ORecordReader {
 	}
 
 	@Override
-	public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId) {
+	public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(nodeLocal);
 		return nodeLocal.readRecordLocal(recordId);
 	}
