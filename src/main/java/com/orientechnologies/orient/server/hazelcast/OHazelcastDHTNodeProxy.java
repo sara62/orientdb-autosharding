@@ -19,8 +19,8 @@ import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import com.orientechnologies.orient.server.distributed.Record;
-import com.orientechnologies.orient.server.distributed.RecordMetadata;
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNodeCallException;
 
@@ -70,7 +70,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     return callOnRemoteMember(new SizeNodeCall(nodeAddress), false);
   }
 
-  public ORID[] findMissedRecords(RecordMetadata[] recordMetadatas) {
+  public ORID[] findMissedRecords(ORecordMetadata[] recordMetadatas) {
     return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeAddress, recordMetadatas), false);
   }
 
@@ -132,12 +132,12 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public RecordMetadata getRecordMetadataFromNode(ORID id) {
+  public ORecordMetadata getRecordMetadataFromNode(ORID id) {
     return callOnRemoteMember(new GetRecordMetadataFromNodeNodeCall(nodeAddress, id), false);
   }
 
   @Override
-  public RecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId) {
+  public ORecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId) {
     return callOnRemoteMember(new GetExistingRecordsForIntervalNodeCall(nodeAddress, startId, endId), false);
   }
 
@@ -236,12 +236,12 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   private static final class FindMissedRecordsNodeCall extends NodeCall<ORID[]> {
-    private RecordMetadata[] recordMetadatas;
+    private ORecordMetadata[] recordMetadatas;
 
     public FindMissedRecordsNodeCall() {
     }
 
-    private FindMissedRecordsNodeCall(OHazelcastNodeAddress nodeAddress, RecordMetadata[] recordMetadatas) {
+    private FindMissedRecordsNodeCall(OHazelcastNodeAddress nodeAddress, ORecordMetadata[] recordMetadatas) {
       super(nodeAddress);
       this.recordMetadatas = recordMetadatas;
     }
@@ -257,7 +257,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
       out.writeInt(recordMetadatas.length);
 
-      for (RecordMetadata recordMetadata : recordMetadatas)
+      for (ORecordMetadata recordMetadata : recordMetadatas)
         out.writeObject(recordMetadata);
     }
 
@@ -266,10 +266,10 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
       super.readExternal(in);
 
       final int dataLength = in.readInt();
-      recordMetadatas = new RecordMetadata[dataLength];
+      recordMetadatas = new ORecordMetadata[dataLength];
 
       for (int i = 0; i < dataLength; i++)
-        recordMetadatas[i] = (RecordMetadata) in.readObject();
+        recordMetadatas[i] = (ORecordMetadata) in.readObject();
     }
   }
 
@@ -720,7 +720,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
-  private static final class GetExistingRecordsForIntervalNodeCall extends NodeCall<RecordMetadata[]> {
+  private static final class GetExistingRecordsForIntervalNodeCall extends NodeCall<ORecordMetadata[]> {
     private ORID startId;
     private ORID endId;
 
@@ -735,7 +735,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
 
     @Override
-    protected RecordMetadata[] call(ODHTNode node) {
+    protected ORecordMetadata[] call(ODHTNode node) {
       return node.getRecordsForIntervalFromNode(startId, endId);
     }
 
@@ -851,7 +851,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
-  private static final class GetRecordMetadataFromNodeNodeCall extends NodeCall<RecordMetadata> {
+  private static final class GetRecordMetadataFromNodeNodeCall extends NodeCall<ORecordMetadata> {
     private ORID id;
 
     public GetRecordMetadataFromNodeNodeCall() {
@@ -863,7 +863,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
 
     @Override
-    protected RecordMetadata call(ODHTNode node) {
+    protected ORecordMetadata call(ODHTNode node) {
       return node.getRecordMetadataFromNode(id);
     }
 

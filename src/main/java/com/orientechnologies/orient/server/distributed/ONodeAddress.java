@@ -21,7 +21,7 @@ public abstract class ONodeAddress implements Externalizable, Comparable<ONodeAd
     this.nodeId = nodeId;
   }
 
-  public ONodeId getNodeId() {
+  public final ONodeId getNodeId() {
     return nodeId;
   }
 

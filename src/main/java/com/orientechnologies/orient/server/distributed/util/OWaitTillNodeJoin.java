@@ -1,7 +1,6 @@
 package com.orientechnologies.orient.server.distributed.util;
 
 import com.orientechnologies.orient.server.distributed.ODHTNode;
-import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,7 +10,7 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class OWaitTillNodeJoin {
 	public static void waitTillNodeJoin(ODHTNode node) {
-		Logger logger = LoggerFactory.getLogger(OLocalDHTNode.class);
+		Logger logger = LoggerFactory.getLogger(OWaitTillNodeJoin.class);
 
 		while (!ODHTNode.NodeState.PRODUCTION.equals(node.state())) {
 			logger.info("Wait till node {} will be joined.", node.getNodeAddress());

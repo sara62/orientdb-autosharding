@@ -6,21 +6,22 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
-import com.orientechnologies.orient.core.id.ORecordId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
+import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import com.orientechnologies.orient.server.distributed.Record;
-import com.orientechnologies.orient.server.distributed.RecordMetadata;
 
 /**
  * @author Andrey Lomakin
@@ -38,53 +39,54 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
   }
 
   @Override
-  public ONodeId reallocateWrongPlacedReplicas(final ODHTNodeLocal nodeLocal, ONodeId idToTest,
-																							 int replicaCount, int syncReplicaCount) {
-    if (nodeLocal.state() == null || !nodeLocal.state().equals(ODHTNode.NodeState.PRODUCTION))
-      return nodeLocal.getNodeAddress().getNodeId();
+  public ONodeId reallocateWrongPlacedReplicas(final ODHTNodeLocal nodeLocal, ONodeId idToTest, int replicaCount,
+      int syncReplicaCount) {
+    final ONodeAddress localNodeAddress = nodeLocal.getNodeAddress();
+
+    final ODHTNode.NodeState nodeState = nodeLocal.state();
+
+    if (nodeState == null || !nodeState.equals(ODHTNode.NodeState.PRODUCTION))
+      return localNodeAddress.getNodeId();
 
     final ORID nextRecordId = nextInDB(nodeLocal, new ORecordId(1, new OClusterPositionNodeId(idToTest)));
     if (nextRecordId == null)
-      return idToTest;
+      return localNodeAddress.getNodeId();
 
-    ONodeId nextId = ((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId();
+    final ONodeId nextId = ((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId();
 
-    ONodeAddress successor = nodeLocal.findSuccessor(nextId);
+    final ONodeAddress successor = nodeLocal.findSuccessor(nextId);
 
-    if (nodeLocal.getNodeAddress().equals(successor)) {
-      return idToTest;
-    }
+    if (localNodeAddress.equals(successor))
+      return localNodeAddress.getNodeId();
 
     final ODHTNode successorNode = nodeLookup.findById(successor);
     if (successorNode == null)
-      return nodeLocal.getNodeAddress().getNodeId();
+      return localNodeAddress.getNodeId();
 
     final Set<ONodeAddress> replicaHolderAddresses = new HashSet<ONodeAddress>();
     final Set<ONodeAddress>[] replicaHolders = replicaDistributionStrategy.chooseReplicas(successorNode.getSuccessors(),
-						replicaCount,
-						syncReplicaCount);
+        replicaCount, syncReplicaCount);
 
     replicaHolderAddresses.addAll(replicaHolders[0]);
     replicaHolderAddresses.addAll(replicaHolders[1]);
 
     for (ONodeAddress s : replicaHolderAddresses) {
-      if (s.equals(nodeLocal.getNodeAddress()))
-        return nodeLocal.getNodeAddress().getNodeId();
-
+      if (s.equals(localNodeAddress))
+        return localNodeAddress.getNodeId();
     }
 
-    List<ONodeAddress> nodesToReplicate = new ArrayList<ONodeAddress>();
+    final List<ONodeAddress> nodesToReplicate = new ArrayList<ONodeAddress>();
     nodesToReplicate.add(successor);
     nodesToReplicate.addAll(replicaHolderAddresses);
 
-    final Iterator<RecordMetadata> iterator = nodeLocal
+    final Iterator<ORecordMetadata> iterator = nodeLocal
         .getLocalRingIterator(new ORecordId(1, new OClusterPositionNodeId(idToTest)), new ORecordId(1, new OClusterPositionNodeId(
             successor.getNodeId())));
 
-    final List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>(64);
+    final List<ORecordMetadata> recordMetadatas = new ArrayList<ORecordMetadata>(64);
 
     while (iterator.hasNext()) {
-      final RecordMetadata recordMetadata = iterator.next();
+      final ORecordMetadata recordMetadata = iterator.next();
 
       recordMetadatas.add(recordMetadata);
 
@@ -98,9 +100,9 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
     return successor.getNodeId();
   }
 
-  private void cleanOutForeignRecords(final ODHTNodeLocal nodeLocal, List<RecordMetadata> recordMetadatas,
+  private void cleanOutForeignRecords(final ODHTNodeLocal nodeLocal, List<ORecordMetadata> recordMetadatas,
       List<ONodeAddress> nodesToReplicate) {
-    RecordMetadata[] metadatas = new RecordMetadata[recordMetadatas.size()];
+    ORecordMetadata[] metadatas = new ORecordMetadata[recordMetadatas.size()];
     metadatas = recordMetadatas.toArray(metadatas);
 
     for (ONodeAddress replicaHolderAddress : nodesToReplicate) {
@@ -123,12 +125,14 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
       }
     }
 
-    for (RecordMetadata recordMetadata : metadatas) {
+    for (ORecordMetadata recordMetadata : metadatas) {
       try {
         nodeLocal.cleanOutData(recordMetadata.getId(), recordMetadata.getVersion());
       } catch (OConcurrentModificationException e) {
         logger.error("Record with id {} and version {} is out of date and can not be cleaned out", recordMetadata.getId(),
             recordMetadata.getVersion());
+      } catch (ORecordNotFoundException e) {
+        logger.error("Record with id {} is absent and can not be cleaned out", recordMetadata.getId());
       }
     }
 
@@ -136,16 +140,16 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
   }
 
   private ORID nextInDB(final ODHTNodeLocal nodeLocal, ORID id) {
-    ORID result = nodeLocal.getHigherLocalId(id);
+    final Iterator<ORecordMetadata> ringIterator = nodeLocal.getLocalRingIterator(id.nextRid(), id);
 
-    if (result != null)
-      return result;
+    if (ringIterator.hasNext()) {
+      final ORecordMetadata result = ringIterator.next();
 
-    if (id.compareTo(new ORecordId(1, new OClusterPositionNodeId(ONodeId.ZERO))) > 0)
-      result = nodeLocal.getCeilingLocalId(new ORecordId(1, new OClusterPositionNodeId(ONodeId.ZERO)));
+      if (result.getId().equals(id))
+        return null;
 
-    if (result != null && result != id)
-      return result;
+      return result.getId();
+    }
 
     return null;
   }

@@ -33,7 +33,7 @@ public class DatabaseRingIteratorTest {
 
       final Record record = map.get(recordId);
 
-      Assert.assertEquals(ringIterator.next(), new RecordMetadata(recordId, record.getVersion()));
+      Assert.assertEquals(ringIterator.next(), new ORecordMetadata(recordId, record.getVersion()));
     }
 
     Assert.assertTrue(!ringIterator.hasNext());
@@ -54,7 +54,7 @@ public class DatabaseRingIteratorTest {
 
       final Record record = map.get(convertTORID(i));
 
-      Assert.assertEquals(ringIterator.next(), new RecordMetadata(convertTORID(i), record.getVersion()));
+      Assert.assertEquals(ringIterator.next(), new ORecordMetadata(convertTORID(i), record.getVersion()));
     }
 
     for (long i = 0; i <= 22; i++) {
@@ -62,7 +62,7 @@ public class DatabaseRingIteratorTest {
 
       final Record record = map.get(convertTORID(i));
 
-      Assert.assertEquals(ringIterator.next(), new RecordMetadata(convertTORID(i), record.getVersion()));
+      Assert.assertEquals(ringIterator.next(), new ORecordMetadata(convertTORID(i), record.getVersion()));
     }
 
     Assert.assertTrue(!ringIterator.hasNext());

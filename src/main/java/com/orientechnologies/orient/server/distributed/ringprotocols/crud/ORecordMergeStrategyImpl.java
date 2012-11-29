@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,7 +13,6 @@ import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.Record;
-import com.orientechnologies.orient.server.distributed.RecordMetadata;
 
 /**
  * @author Andrey Lomakin
@@ -33,7 +33,7 @@ public class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
 
     try {
       ODHTNode primaryHolder = localNode;
-      RecordMetadata primaryMetadata = primaryHolder.getRecordMetadataFromNode(recordId);
+      ORecordMetadata primaryMetadata = primaryHolder.getRecordMetadataFromNode(recordId);
 
       for (ONodeAddress holderId : replicaHolders) {
         final ODHTNode holderNode = nodeLookup.findById(holderId);
@@ -41,7 +41,7 @@ public class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
           continue;
 
         try {
-          final RecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(recordId);
+          final ORecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(recordId);
           if (primaryMetadata == null) {
             if (nodeMetadata != null) {
               replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());

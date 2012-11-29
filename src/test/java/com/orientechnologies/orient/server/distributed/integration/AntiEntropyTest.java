@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.integration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -6,6 +6,11 @@ import java.util.NavigableMap;
 import java.util.Random;
 
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.server.distributed.ODHTNode;
+import com.orientechnologies.orient.server.distributed.ODatabaseRingIterator;
+import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
+import com.orientechnologies.orient.server.distributed.Record;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -190,7 +195,7 @@ public class AntiEntropyTest {
           .getNodeId())));
 
       while (ringIterator.hasNext()) {
-        final RecordMetadata recordMetadata = ringIterator.next();
+        final ORecordMetadata recordMetadata = ringIterator.next();
 
         while (!firstSuccessorDb.containsKey(recordMetadata.getId())) {
           System.out.println("Wait for record " + recordMetadata.getId() + " for node " + firstSuccessor.getNodeAddress()
@@ -227,7 +232,7 @@ public class AntiEntropyTest {
         .getNodeId())));
     int count = 0;
     while (ringIterator.hasNext()) {
-      final RecordMetadata recordMetadata = ringIterator.next();
+      final ORecordMetadata recordMetadata = ringIterator.next();
       count++;
     }
 

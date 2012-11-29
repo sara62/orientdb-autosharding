@@ -57,13 +57,13 @@ public interface ODHTNode {
 
   public Record readRecordFromNode(ORID id);
 
-  public RecordMetadata getRecordMetadataFromNode(ORID id);
+  public ORecordMetadata getRecordMetadataFromNode(ORID id);
 
-  public RecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId);
+  public ORecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId);
 
   public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node);
 
   public int size();
 
-  public ORID[] findMissedRecords(RecordMetadata[] recordMetadatas);
+  public ORID[] findMissedRecords(ORecordMetadata[] recordMetadatas);
 }

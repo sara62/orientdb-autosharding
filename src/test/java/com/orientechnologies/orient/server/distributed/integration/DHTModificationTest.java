@@ -1,4 +1,4 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.integration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +16,9 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.server.distributed.ODHTNode;
+import com.orientechnologies.orient.server.distributed.ONodeAddress;
+import com.orientechnologies.orient.server.distributed.Record;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

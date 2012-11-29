@@ -6,14 +6,13 @@ import java.util.NavigableMap;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
-import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 
 /**
  * @author Andrey Lomakin
  * @since 12.10.12
  */
-public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
+public class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
   private final NavigableMap<ORID, Record> db;
   private final ORID 														start;
   private final ORID                            end;
@@ -41,13 +40,13 @@ public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
 
   @Override
   public boolean hasNext() {
-    if (currentIntervalEnd == end)
+    if (currentIntervalEnd.equals(end))
       return currentIterator.hasNext();
 
     if (currentIterator.hasNext())
       return true;
 
-    currentIntervalStart = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.MIN_VALUE));
+    currentIntervalStart = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.ZERO));
     currentIntervalEnd = end;
 
     currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
@@ -56,10 +55,10 @@ public class ODatabaseRingIterator implements Iterator<RecordMetadata> {
   }
 
   @Override
-  public RecordMetadata next() {
+  public ORecordMetadata next() {
     final Record record = currentIterator.next();
 
-    return new RecordMetadata(record.getId(), record.getVersion());
+    return new ORecordMetadata(record.getId(), record.getVersion());
   }
 
   @Override

@@ -11,7 +11,7 @@ import com.orientechnologies.orient.server.distributed.ONodeAddress;
  * @author Andrey Lomakin
  * @since 09.11.12
  */
-public class OHazelcastNodeAddress extends ONodeAddress {
+public final class OHazelcastNodeAddress extends ONodeAddress {
   private String memberUUID;
 
   public OHazelcastNodeAddress() {

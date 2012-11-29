@@ -9,8 +9,8 @@ import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ODHTRingInterval;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import com.orientechnologies.orient.server.distributed.Record;
-import com.orientechnologies.orient.server.distributed.RecordMetadata;
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
 import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
@@ -119,6 +119,9 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 			for (int i = 0; i < 64; i++) {
 
 				final ODetachedMerkleTreeNode childTreeNode = localDHTNode.getLocalMerkleTree().getChildNode(localTreeNode, i);
+				if (childTreeNode == null)
+					throw new ONodeSynchronizationFailedException("Children of Merklee tree node were removed.");
+
 				final ONodeId startNodeId = childTreeNode.getStartId();
 				final ONodeId endNodeId = childTreeNode.getEndId();
 
@@ -168,7 +171,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 
 		final ArrayList<Record> recordsToReplicate = new ArrayList<Record>();
 		if (localTreeNode.isLeaf()) {
-			RecordMetadata[] nodeMetadatas =
+			ORecordMetadata[] nodeMetadatas =
 							localDHTNode.getRecordsForIntervalFromNode(new ORecordId(1, new OClusterPositionNodeId(startId)),
 							new ORecordId(1, new OClusterPositionNodeId(endId)));
 
@@ -197,9 +200,9 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 			if (!recordsToReplicate.isEmpty())
 				sendRecords(recordsToReplicate, remoteNodeAddress);
 		} else if (remoteNode.isLeaf()) {
-			final Set<RecordMetadata> merkleTreeMetadataSet = new HashSet<RecordMetadata>();
+			final Set<ORecordMetadata> merkleTreeMetadataSet = new HashSet<ORecordMetadata>();
 
-			RecordMetadata[] recordMetadatas =
+			ORecordMetadata[] recordMetadatas =
 							localDHTNode.getRecordsForIntervalFromNode(new ORecordId(1, new OClusterPositionNodeId(startId)),
 							new ORecordId(1, new OClusterPositionNodeId(endId)));
 
@@ -207,7 +210,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 				merkleTreeMetadataSet.add(remoteNode.getRecordMetadata(i));
 
 			while (recordMetadatas.length > 0) {
-				for (RecordMetadata recordMetadata : recordMetadatas) {
+				for (ORecordMetadata recordMetadata : recordMetadatas) {
 					if (!merkleTreeMetadataSet.contains(recordMetadata)) {
 						final Record record = localDHTNode.readRecordLocal(recordMetadata.getId());
 						if (record != null)
@@ -253,7 +256,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 
 		if (remoteNode.isLeaf()) {
 			for (int i = 0; i < remoteNode.getRecordsCount(); i++) {
-				final RecordMetadata recordMetadata = remoteNode.getRecordMetadata(i);
+				final ORecordMetadata recordMetadata = remoteNode.getRecordMetadata(i);
 
 				if (dhtNodeInterval.insideInterval(((OClusterPositionNodeId) recordMetadata.getId().getClusterPosition()).getNodeId())) {
 					final Record dbRecord = localDHTNode.readRecordLocal(recordMetadata.getId());
@@ -281,11 +284,11 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 			ONodeId endId = recordsInterval.getEnd();
 
 
-			RecordMetadata[] nodeMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(new ORecordId(1, new OClusterPositionNodeId(
+			ORecordMetadata[] nodeMetadatas = remoteDHTNode.getRecordsForIntervalFromNode(new ORecordId(1, new OClusterPositionNodeId(
 					startId)), new ORecordId(1, new OClusterPositionNodeId(endId)));
 
 			while (nodeMetadatas.length > 0) {
-				for (RecordMetadata nodeMetadata : nodeMetadatas) {
+				for (ORecordMetadata nodeMetadata : nodeMetadatas) {
 					final Record dbRecord = localDHTNode.readRecordLocal(nodeMetadata.getId());
 
 					if (dbRecord == null || dbRecord.getVersion().compareTo(nodeMetadata.getVersion()) < 0)

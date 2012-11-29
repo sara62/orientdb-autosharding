@@ -6,20 +6,19 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
 import com.orientechnologies.orient.core.id.ORID;
-import com.orientechnologies.orient.core.id.ORID;
 
 /**
  * @author Andrey Lomakin
  * @since 01.10.12
  */
-public class RecordMetadata implements Externalizable {
+public class ORecordMetadata implements Externalizable {
   private ORID              id;
   private ODHTRecordVersion version;
 
-  public RecordMetadata() {
+  public ORecordMetadata() {
   }
 
-  public RecordMetadata(ORID id, ODHTRecordVersion version) {
+  public ORecordMetadata(ORID id, ODHTRecordVersion version) {
     this.id = id;
     this.version = version;
   }
@@ -39,7 +38,7 @@ public class RecordMetadata implements Externalizable {
     if (o == null || getClass() != o.getClass())
       return false;
 
-    RecordMetadata that = (RecordMetadata) o;
+    ORecordMetadata that = (ORecordMetadata) o;
 
     if (id != null ? !id.equals(that.id) : that.id != null)
       return false;

@@ -368,18 +368,18 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public RecordMetadata getRecordMetadataFromNode(ORID id) {
+  public ORecordMetadata getRecordMetadataFromNode(ORID id) {
     final Record record = readRecordLocal(id);
     if (record == null)
       return null;
 
-    return new RecordMetadata(record.getId(), record.getVersion());
+    return new ORecordMetadata(record.getId(), record.getVersion());
   }
 
-  public ORID[] findMissedRecords(RecordMetadata[] recordMetadatas) {
+  public ORID[] findMissedRecords(ORecordMetadata[] recordMetadatas) {
     ArrayList<ORID> result = new ArrayList<ORID>();
 
-    for (RecordMetadata recordMetadata : recordMetadatas) {
+    for (ORecordMetadata recordMetadata : recordMetadatas) {
       final Record record = db.get(recordMetadata.getId());
 
       if (record == null)
@@ -407,14 +407,14 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public RecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId) {
-    final List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>();
+  public ORecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId) {
+    final List<ORecordMetadata> recordMetadatas = new ArrayList<ORecordMetadata>();
 
     int processedRecords = 0;
 
     final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(db, startId, endId);
     while (ringIterator.hasNext()) {
-      final RecordMetadata recordMetadata = ringIterator.next();
+      final ORecordMetadata recordMetadata = ringIterator.next();
       if (recordMetadata != null)
         recordMetadatas.add(recordMetadata);
 
@@ -424,7 +424,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
         break;
     }
 
-    RecordMetadata[] result = new RecordMetadata[recordMetadatas.size()];
+    ORecordMetadata[] result = new ORecordMetadata[recordMetadatas.size()];
     result = recordMetadatas.toArray(result);
 
     return result;
@@ -498,16 +498,6 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   @Override
   public ODatabaseRingIterator getLocalRingIterator(ORID startRid, ORID endId) {
     return new ODatabaseRingIterator(db, startRid, endId);
-  }
-
-  @Override
-  public ORID getHigherLocalId(ORID rid) {
-    return db.higherKey(rid);
-  }
-
-  @Override
-  public ORID getCeilingLocalId(ORID rid) {
-    return db.ceilingKey(rid);
   }
 
   public int size() {
@@ -645,7 +635,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
       while (processedSuccessors.size() < successorsSize)
         try {
           final ONodeAddress nodeSuccessor = dhtNode.findSuccessor(dhtNode.getNodeAddress().getNodeId().add(ONodeId.ONE));
-          if (nodeSuccessor == nodeAddress)
+          if (nodeSuccessor.equals(nodeAddress))
             break;
 
           dhtNode = nodeLookup.findById(nodeSuccessor);

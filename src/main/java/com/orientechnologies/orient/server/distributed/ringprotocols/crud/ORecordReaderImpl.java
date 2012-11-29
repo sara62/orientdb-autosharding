@@ -50,6 +50,9 @@ public class ORecordReaderImpl implements ORecordReader {
     if (!asyncReplicas.isEmpty())
 			new OReadRepairTask(recordId, asyncReplicas, nodeLocal, recordMergeStrategy).submit();
 
+		if (result.isTombstone())
+			return null;
+
     return result;
   }
 }

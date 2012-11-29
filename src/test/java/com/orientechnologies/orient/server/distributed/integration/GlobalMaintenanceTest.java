@@ -1,8 +1,13 @@
-package com.orientechnologies.orient.server.distributed;
+package com.orientechnologies.orient.server.distributed.integration;
 
 import java.util.NavigableMap;
 
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.server.distributed.ODHTNode;
+import com.orientechnologies.orient.server.distributed.ODatabaseRingIterator;
+import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
+import com.orientechnologies.orient.server.distributed.Record;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -87,7 +92,7 @@ public class GlobalMaintenanceTest {
           .getNodeId())));
 
       while (ringIterator.hasNext()) {
-        final RecordMetadata recordMetadata = ringIterator.next();
+        final ORecordMetadata recordMetadata = ringIterator.next();
 
         Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getId()));
         Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getId()));
@@ -126,7 +131,7 @@ public class GlobalMaintenanceTest {
           .getNodeId())));
 
       while (ringIterator.hasNext()) {
-        final RecordMetadata recordMetadata = ringIterator.next();
+        final ORecordMetadata recordMetadata = ringIterator.next();
 
         Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getId()));
         Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getId()));
@@ -157,7 +162,7 @@ public class GlobalMaintenanceTest {
 
     int count = 0;
     while (ringIterator.hasNext()) {
-      final RecordMetadata recordMetadata = ringIterator.next();
+      final ORecordMetadata recordMetadata = ringIterator.next();
       count++;
     }
 

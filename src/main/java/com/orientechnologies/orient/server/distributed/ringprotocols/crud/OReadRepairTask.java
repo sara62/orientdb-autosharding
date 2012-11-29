@@ -24,7 +24,7 @@ final class OReadRepairTask implements Callable<Void> {
 
 	private static final ExecutorService readRepairService =
 					new ThreadPoolExecutor(0, Runtime.getRuntime().availableProcessors() / 2,
-					60L, TimeUnit.SECONDS,
+					60, TimeUnit.SECONDS,
 					new ArrayBlockingQueue<Runnable>(256),
 					new OReadRepairFactory(),
 					new ThreadPoolExecutor.CallerRunsPolicy());
@@ -58,7 +58,6 @@ final class OReadRepairTask implements Callable<Void> {
 	}
 
 	private static final class OReadRepairFactory implements ThreadFactory {
-
 		@Override
 		public Thread newThread(Runnable r) {
 			final Thread thread = new Thread(r);

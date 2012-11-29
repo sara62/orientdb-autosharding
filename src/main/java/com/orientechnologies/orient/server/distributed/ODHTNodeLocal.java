@@ -1,8 +1,9 @@
 package com.orientechnologies.orient.server.distributed;
 
-import com.orientechnologies.orient.core.id.OClusterPosition;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
+
+import java.util.Iterator;
 
 /**
  * @author Andrey Lomakin
@@ -17,7 +18,5 @@ public interface ODHTNodeLocal extends ODHTNode {
 
 	public OMerkleTree getLocalMerkleTree();
 
-	public ODatabaseRingIterator getLocalRingIterator(ORID startRid, ORID endId);
-	public ORID getHigherLocalId(ORID clusterPosition);
-	public ORID getCeilingLocalId(ORID clusterPosition);
+	public Iterator<ORecordMetadata> getLocalRingIterator(ORID startRid, ORID endId);
 }

@@ -7,7 +7,7 @@ import java.io.ObjectOutput;
 import java.util.Arrays;
 
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.server.distributed.RecordMetadata;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 
 /**
  * @author Andrey Lomakin
@@ -18,7 +18,7 @@ public class ODetachedMerkleTreeNode implements Externalizable {
   private ONodeId          startId;
   private ONodeId          endId;
 
-  private RecordMetadata[] recordMetadata;
+  private ORecordMetadata[] recordMetadata;
   private byte[][]         childrenHash;
 
   private int[]            path;
@@ -26,7 +26,7 @@ public class ODetachedMerkleTreeNode implements Externalizable {
   public ODetachedMerkleTreeNode() {
   }
 
-  public ODetachedMerkleTreeNode(byte[] hash, ONodeId startId, ONodeId endId, RecordMetadata[] recordMetadata,
+  public ODetachedMerkleTreeNode(byte[] hash, ONodeId startId, ONodeId endId, ORecordMetadata[] recordMetadata,
       byte[][] childrenHash, int[] path) {
     this.hash = hash;
 
@@ -43,7 +43,7 @@ public class ODetachedMerkleTreeNode implements Externalizable {
     return recordMetadata.length;
   }
 
-  public RecordMetadata getRecordMetadata(int index) {
+  public ORecordMetadata getRecordMetadata(int index) {
     return recordMetadata[index];
   }
 
@@ -105,7 +105,7 @@ public class ODetachedMerkleTreeNode implements Externalizable {
     if (leaf) {
       out.writeInt(recordMetadata.length);
 
-      for (RecordMetadata metadata : recordMetadata)
+      for (ORecordMetadata metadata : recordMetadata)
         out.writeObject(metadata);
     } else {
       out.writeInt(childrenHash.length);
@@ -144,9 +144,9 @@ public class ODetachedMerkleTreeNode implements Externalizable {
     if (leaf) {
       final int metadataLength = in.readInt();
 
-      recordMetadata = new RecordMetadata[metadataLength];
+      recordMetadata = new ORecordMetadata[metadataLength];
       for (int i = 0; i < metadataLength; i++)
-        recordMetadata[i] = (RecordMetadata) in.readObject();
+        recordMetadata[i] = (ORecordMetadata) in.readObject();
     } else {
       final int childrenHashLength = in.readInt();
 

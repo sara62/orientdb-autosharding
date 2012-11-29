@@ -10,8 +10,8 @@ import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
+import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import com.orientechnologies.orient.server.distributed.Record;
-import com.orientechnologies.orient.server.distributed.RecordMetadata;
 
 /**
  * @author Andrey Lomakin
@@ -181,7 +181,7 @@ public class OInMemoryMerkleTree implements OMerkleTree {
     node.acquireReadLock();
     try {
       if (node.isLeaf()) {
-        List<RecordMetadata> recordMetadatas = new ArrayList<RecordMetadata>();
+        List<ORecordMetadata> recordMetadatas = new ArrayList<ORecordMetadata>();
 
         final Iterator<Record> recordIterator;
         if (endId.compareTo(startId) >= 0)
@@ -193,10 +193,10 @@ public class OInMemoryMerkleTree implements OMerkleTree {
 
         while (recordIterator.hasNext()) {
           final Record record = recordIterator.next();
-          recordMetadatas.add(new RecordMetadata(record.getId(), record.getVersion()));
+          recordMetadatas.add(new ORecordMetadata(record.getId(), record.getVersion()));
         }
 
-        RecordMetadata[] metadata = new RecordMetadata[recordMetadatas.size()];
+        ORecordMetadata[] metadata = new ORecordMetadata[recordMetadatas.size()];
         metadata = recordMetadatas.toArray(metadata);
 
         result = new ODetachedMerkleTreeNode(node.getHash(), startId, endId, metadata, null, path);
