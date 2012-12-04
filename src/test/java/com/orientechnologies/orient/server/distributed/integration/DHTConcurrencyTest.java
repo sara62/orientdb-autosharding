@@ -14,6 +14,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -70,6 +71,8 @@ public class DHTConcurrencyTest {
   }
 
   public void addRemoveData() throws Exception {
+		OGlobalConfiguration.DB_USE_DISTRIBUTED_VERSION.setValue(true);
+
     final ServerInstance serverInstance = new ServerInstance();
     serverInstance.init();
 

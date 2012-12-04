@@ -73,13 +73,12 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 
     final List<ODetachedMerkleTreeNode> result = new ArrayList<ODetachedMerkleTreeNode>();
 
-    final List<ODetachedMerkleTreeNode> firstInterval = tree.getRootNodesForInterval(startId, ONodeId.MAX_VALUE);
-    final List<ODetachedMerkleTreeNode> secondInterval = tree.getRootNodesForInterval(ONodeId.ZERO, endId);
+    final List<ODetachedMerkleTreeNode> firstInterval = tree.getRootNodesForInterval(ONodeId.ZERO, endId);
+    final List<ODetachedMerkleTreeNode> secondInterval = tree.getRootNodesForInterval(startId, ONodeId.MAX_VALUE);
 
     result.addAll(firstInterval);
 
-    if (!secondInterval.isEmpty() && !firstInterval.isEmpty()
-        && Arrays.equals(secondInterval.get(0).getHash(), firstInterval.get(firstInterval.size() - 1).getHash())) {
+    if (Arrays.equals(secondInterval.get(0).getHash(), firstInterval.get(firstInterval.size() - 1).getHash())) {
       if (secondInterval.size() > 1)
         result.addAll(secondInterval.subList(1, secondInterval.size()));
     } else {
@@ -103,7 +102,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 
     final ONodeAddress localPredecessor = localDHTNode.getPredecessor();
     if (localPredecessor == null)
-      throw new OLocalProtocolException("Predecessor " + localPredecessor + " is absent.");
+      throw new OLocalProtocolException("Predecessor is absent.");
 
     if (Arrays.equals(remoteTreeNode.getHash(), localTreeNode.getHash()))
       return;

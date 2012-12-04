@@ -272,12 +272,106 @@ public class LocalMaintenanceProtocolImplTest {
 		verifyNoMoreInteractions(nodeComparator);
 	}
 
-//	public void testPredecessorIsGreaterThanNodeIdSecondIntervalIsEmpty() {
-//		PredecessorIsGreaterThanNodeIdSecondIntervalIsEmpty processFlow =
-//						new PredecessorIsGreaterThanNodeIdSecondIntervalIsEmpty();
-//
-//		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
-//	}
+	public void testPredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst() {
+		PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst processFlow =
+						new PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst();
+
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
+						processFlow.replicaHolderTwo);
+
+
+		verifyNoMoreInteractions(nodeComparator);
+	}
+
+	public void testPredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst() {
+		PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst processFlow =
+						new PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst();
+
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+						processFlow.replicaHolderTwo);
+
+
+		verifyNoMoreInteractions(nodeComparator);
+	}
+
+	public void testPredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne() {
+		PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne processFlow =
+						new PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne();
+
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+						processFlow.replicaHolderTwo);
+
+
+		verifyNoMoreInteractions(nodeComparator);
+	}
+
+	public void testPredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo() {
+		PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo processFlow =
+						new PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo();
+
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+						processFlow.replicaHolderTwo);
+
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+						processFlow.replicaHolderOne);
+		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+						processFlow.replicaHolderTwo);
+
+
+		verifyNoMoreInteractions(nodeComparator);
+	}
+
 
 	private class LocalTreeNodeIsNull extends CreateTwoDifferentNodesWithOnlyOneInside {
 		private LocalTreeNodeIsNull() {
@@ -291,20 +385,198 @@ public class LocalMaintenanceProtocolImplTest {
 		}
 	}
 
-	private class PredecessorIsGreaterThanNodeIdSecondIntervalIsEmpty extends CreateTwoDifferentNodesWithOnlyOneInside {
-		private PredecessorIsGreaterThanNodeIdSecondIntervalIsEmpty() {
-			when(merkleTree.getRootNodesForInterval(ONodeId.valueOf(10001), ONodeId.MAX_VALUE)).
+	private class PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo extends
+					PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst {
+
+		private PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo() {
+			when(merkleTree.getRootNodesForInterval(ONodeId.ZERO, localNodeAddress().getNodeId())).
+							thenReturn(Arrays.asList(localRootNode));
+			when(merkleTree.getRootNodesForInterval(predecessorAddress().getNodeId().add(ONodeId.ONE), ONodeId.MAX_VALUE)).
+							thenReturn(Arrays.asList(localRootNode, secondLocalRootNode));
+		}
+	}
+
+	private class PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne extends
+					PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst {
+
+		private PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne() {
+			when(merkleTree.getRootNodesForInterval(ONodeId.ZERO, localNodeAddress().getNodeId())).
+							thenReturn(Arrays.asList(localRootNode, secondLocalRootNode));
+			when(merkleTree.getRootNodesForInterval(predecessorAddress().getNodeId().add(ONodeId.ONE), ONodeId.MAX_VALUE)).
+							thenReturn(Arrays.asList(secondLocalRootNode));
+		}
+	}
+
+	private class PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst extends
+					PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst {
+
+		public 	ODetachedMerkleTreeNode secondLocalRootNode;
+		public  ODetachedMerkleTreeNode secondRemoteRootNode;
+
+		private PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst() {
+			final byte[] secondRootLocalHash = new byte[256];
+
+			final Random random = new Random();
+			random.nextBytes(secondRootLocalHash);
+
+			final byte[] secondRootRemoteHash = Arrays.copyOf(secondRootLocalHash, 256);
+			secondRootRemoteHash[0] = (byte)(secondRootLocalHash[0] + 1);
+
+			secondLocalRootNode = new ODetachedMerkleTreeNode(secondRootLocalHash,
+							predecessorAddress().getNodeId().add(ONodeId.ONE), ONodeId.MAX_VALUE, new ORecordMetadata[0],
+							null, new int[0]);
+
+			secondRemoteRootNode = new ODetachedMerkleTreeNode(secondRootRemoteHash,
+							predecessorAddress().getNodeId().add(ONodeId.ONE), ONodeId.MAX_VALUE, new ORecordMetadata[0],
+							null, new int[0]);
+
+			when(merkleTree.getRootNodesForInterval(predecessorAddress().getNodeId().add(ONodeId.ONE), ONodeId.MAX_VALUE)).
+							thenReturn(Arrays.asList(localRootNode));
+			when(merkleTree.getRootNodesForInterval(ONodeId.ZERO, localNodeAddress().getNodeId())).
+							thenReturn(Arrays.asList(secondLocalRootNode));
+
+
+			when(remoteNodeOne.findMerkleTreeNode(secondLocalRootNode)).thenReturn(secondRemoteRootNode);
+			when(remoteNodeTwo.findMerkleTreeNode(secondLocalRootNode)).thenReturn(secondRemoteRootNode);
+		}
+
+		@Override
+		protected ONodeId localRootNodeStartId() {
+			return ONodeId.ZERO;
+		}
+
+		@Override
+		protected ONodeId localRootNodeEndId() {
+			return predecessorAddress().getNodeId();
+		}
+
+		@Override
+		protected ONodeId remoteRootNodeEndId() {
+			return localRootNodeEndId();
+		}
+
+		@Override
+		protected ONodeId remoteRootNodeStartId() {
+			return localRootNodeStartId();
+		}
+
+		@Override
+		protected ONodeId secondRemoteChildNodeEndId() {
+			return secondLocalChildNodeEndId();
+		}
+
+		@Override
+		protected ONodeId secondRemoteChildNodeStartId() {
+			return secondLocalChildNodeStartId();
+		}
+
+		@Override
+		protected ONodeId secondLocalChildNodeEndId() {
+			return predecessorAddress().getNodeId();
+		}
+
+		@Override
+		protected ONodeId secondLocalChildNodeStartId() {
+			return localNodeAddress().getNodeId().add(ONodeId.ONE);
+		}
+	}
+
+	private class PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst extends CreateTwoDifferentNodesWithOnlyOneInside {
+		private PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst() {
+			when(merkleTree.getRootNodesForInterval(predecessorAddress().getNodeId().add(ONodeId.ONE), ONodeId.MAX_VALUE)).
+							thenReturn(Arrays.asList(localRootNode));
+			when(merkleTree.getRootNodesForInterval(ONodeId.ZERO, localNodeAddress().getNodeId())).
 							thenReturn(Arrays.asList(localRootNode));
 		}
 
 		@Override
-		protected ONodeAddressStub getLocalNodeAddress() {
+		protected ONodeAddressStub localNodeAddress() {
 			return new ONodeAddressStub(ONodeId.valueOf(1000));
 		}
 
 		@Override
-		protected ONodeAddressStub getPredecessorAddress(ONodeAddress localNodeAddress) {
+		protected ONodeAddressStub predecessorAddress() {
 			return new ONodeAddressStub(ONodeId.valueOf(10000));
+		}
+
+		@Override
+		protected ONodeId secondRemoteChildNodeEndId() {
+			return secondLocalChildNodeEndId();
+		}
+
+		@Override
+		protected ONodeId secondRemoteChildNodeStartId() {
+			return secondLocalChildNodeStartId();
+		}
+
+		@Override
+		protected ONodeId secondLocalChildNodeEndId() {
+			return ONodeId.MAX_VALUE;
+		}
+
+		@Override
+		protected ONodeId secondLocalChildNodeStartId() {
+			return localNodeAddress().getNodeId().subtract(ONodeId.ONE);
+		}
+
+		@Override
+		protected ONodeId firstRemoteChildNodeStartId() {
+			return localChildNodeStartId();
+		}
+
+		@Override
+		protected ONodeId firstRemoteChildNodeEndId() {
+			return localChildNodeEndId();
+		}
+
+		@Override
+		protected ONodeId firstLocalChildNodeEndId() {
+			return localNodeAddress().getNodeId().subtract(ONodeId.TWO);
+		}
+
+		@Override
+		protected ONodeId firstLocalChildNodeStartId() {
+			return ONodeId.ZERO;
+		}
+
+		@Override
+		protected ONodeId remoteChildNodeEndId() {
+			return localChildNodeEndId();
+		}
+
+		@Override
+		protected ONodeId remoteChildNodeStartId() {
+			return localChildNodeStartId();
+		}
+
+		@Override
+		protected ONodeId localChildNodeEndId() {
+			return localNodeAddress().getNodeId().subtract(ONodeId.TWO);
+		}
+
+		@Override
+		protected ONodeId localChildNodeStartId() {
+			return ONodeId.ZERO;
+		}
+
+		@Override
+		protected ONodeId remoteRootNodeStartId() {
+			return ONodeId.ZERO;
+		}
+
+		@Override
+		protected ONodeId remoteRootNodeEndId() {
+			return ONodeId.MAX_VALUE;
+		}
+
+		@Override
+		protected ONodeId localRootNodeEndId() {
+			return ONodeId.MAX_VALUE;
+		}
+
+		@Override
+		protected ONodeId localRootNodeStartId() {
+			return ONodeId.ZERO;
 		}
 	}
 
@@ -624,11 +896,14 @@ public class LocalMaintenanceProtocolImplTest {
 		public ONodeAddress predecessorAddress;
 
 		public ODHTNode remoteNodeTwo;
+		public ODetachedMerkleTreeNode secondLocalChildNode;
+		public ODetachedMerkleTreeNode secondRemoteChildNode;
+		public ODHTNode remoteNodeOne;
 
 		private CreateTwoDifferentNodesWithOnlyOneInside() {
-			final ONodeAddress localNodeAddress = getLocalNodeAddress();
+			final ONodeAddress localNodeAddress = localNodeAddress();
 
-			predecessorAddress = getPredecessorAddress(localNodeAddress);
+			predecessorAddress = predecessorAddress();
 
 			when(localNode.getNodeAddress()).thenReturn(localNodeAddress);
 			when(localNode.getPredecessor()).thenReturn(predecessorAddress);
@@ -691,35 +966,43 @@ public class LocalMaintenanceProtocolImplTest {
 					localChildHash[i] = childHash;
 			}
 
-			localRootNode = new ODetachedMerkleTreeNode(localRootHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
-							localNodeAddress.getNodeId(), null, localChildHash, new int[0]);
+			localRootNode = new ODetachedMerkleTreeNode(localRootHash,
+							localRootNodeStartId(),
+							localRootNodeEndId(), null, localChildHash, new int[0]);
 
-			remoteRootNode = new ODetachedMerkleTreeNode(remoteRootHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
-							localNodeAddress.getNodeId(), null, remoteChildHash, new int[0]);
+			remoteRootNode = new ODetachedMerkleTreeNode(remoteRootHash,
+							remoteRootNodeStartId(),
+							remoteRootNodeEndId(), null, remoteChildHash, new int[0]);
 
-			final ODetachedMerkleTreeNode localChildNode = new ODetachedMerkleTreeNode(childHash, predecessorAddress.getNodeId().add(
-							ONodeId.ONE), localNodeAddress.getNodeId().subtract(ONodeId.TWO), recordMetadata, null, new int[0]);
+			final ODetachedMerkleTreeNode localChildNode = new ODetachedMerkleTreeNode(childHash,
+							localChildNodeStartId(),
+							localChildNodeEndId(), recordMetadata, null, new int[0]);
 
-			final ODetachedMerkleTreeNode remoteChildNode = new ODetachedMerkleTreeNode(childHash, predecessorAddress.getNodeId().add(
-							ONodeId.ONE), localNodeAddress.getNodeId().subtract(ONodeId.TWO), recordMetadata, null, new int[0]);
+			final ODetachedMerkleTreeNode remoteChildNode = new ODetachedMerkleTreeNode(childHash,
+							remoteChildNodeStartId(),
+							remoteChildNodeEndId(), recordMetadata, null, new int[0]);
 
-			firstLocalChildNode = new ODetachedMerkleTreeNode(firstLocalDiffChildHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
-							localNodeAddress.getNodeId().subtract(ONodeId.TWO), recordMetadata, null, new int[0]);
+			firstLocalChildNode = new ODetachedMerkleTreeNode(firstLocalDiffChildHash,
+							firstLocalChildNodeStartId(),
+							firstLocalChildNodeEndId(), recordMetadata, null, new int[0]);
 
-			firstRemoteChildNode = new ODetachedMerkleTreeNode(firstRemoteDiffChildHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
-							localNodeAddress.getNodeId().subtract(ONodeId.TWO), recordMetadata, null, new int[0]);
+			firstRemoteChildNode = new ODetachedMerkleTreeNode(firstRemoteDiffChildHash,
+							firstRemoteChildNodeStartId(),
+							firstRemoteChildNodeEndId(), recordMetadata, null, new int[0]);
 
-			final ODetachedMerkleTreeNode secondLocalChildNode = new ODetachedMerkleTreeNode(secondLocalDiffChildHash, localNodeAddress
-							.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId().add(ONodeId.TWO), recordMetadata, null, new int[0]);
+			secondLocalChildNode = new ODetachedMerkleTreeNode(secondLocalDiffChildHash,
+							secondLocalChildNodeStartId(),
+							secondLocalChildNodeEndId(), recordMetadata, null, new int[0]);
 
-			final ODetachedMerkleTreeNode secondRemoteChildNode = new ODetachedMerkleTreeNode(secondRemoteDiffChildHash, localNodeAddress
-							.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId().add(ONodeId.TWO), recordMetadata, null, new int[0]);
+			secondRemoteChildNode = new ODetachedMerkleTreeNode(secondRemoteDiffChildHash,
+							secondRemoteChildNodeStartId(),
+							secondRemoteChildNodeEndId(), recordMetadata, null, new int[0]);
 
 			when(localNode.getLocalMerkleTree()).thenReturn(merkleTree);
-			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
+			when(merkleTree.getRootNodesForInterval(localChildNodeStartId(), localRootNodeEndId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
-			final ODHTNode remoteNodeOne = mock(ODHTNode.class);
+			remoteNodeOne = mock(ODHTNode.class);
 
 			remoteNodeTwo = mock(ODHTNode.class);
 
@@ -746,11 +1029,82 @@ public class LocalMaintenanceProtocolImplTest {
 			}
 		}
 
-		protected ONodeAddressStub getPredecessorAddress(ONodeAddress localNodeAddress) {
-			return new ONodeAddressStub(localNodeAddress.getNodeId().subtract(ONodeId.valueOf(10000)));
+		protected ONodeId firstRemoteChildNodeStartId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
 		}
 
-		protected ONodeAddressStub getLocalNodeAddress() {
+		protected ONodeId secondRemoteChildNodeEndId() {
+			ONodeAddress localNodeAddress = localNodeAddress();
+			return localNodeAddress.getNodeId().add(ONodeId.TWO);
+		}
+
+		protected ONodeId secondRemoteChildNodeStartId() {
+			ONodeAddress localNodeAddress  = localNodeAddress();
+			return localNodeAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId secondLocalChildNodeEndId() {
+			ONodeAddress localNodeAddress = localNodeAddress();
+			return localNodeAddress.getNodeId().add(ONodeId.TWO);
+		}
+
+		protected ONodeId secondLocalChildNodeStartId() {
+			ONodeAddress localNodeAddress = localNodeAddress();
+			return localNodeAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId firstRemoteChildNodeEndId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId firstLocalChildNodeEndId() {
+			ONodeAddress localNodeAddress = localNodeAddress();
+			return localNodeAddress.getNodeId().subtract(ONodeId.TWO);
+		}
+
+		protected ONodeId firstLocalChildNodeStartId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId remoteChildNodeEndId() {
+			ONodeAddress localNodeAddress = localNodeAddress();
+			return localNodeAddress.getNodeId().subtract(ONodeId.TWO);
+		}
+
+		protected ONodeId remoteChildNodeStartId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId localChildNodeEndId() {
+			ONodeAddress localNodeAddress= localNodeAddress();
+			return localNodeAddress.getNodeId().subtract(ONodeId.TWO);
+		}
+
+		protected ONodeId localChildNodeStartId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId remoteRootNodeEndId() {
+			return localNodeAddress().getNodeId();
+		}
+
+		protected ONodeId localRootNodeEndId() {
+			return localNodeAddress().getNodeId();
+		}
+
+		protected ONodeId remoteRootNodeStartId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeId localRootNodeStartId() {
+			return predecessorAddress.getNodeId().add(ONodeId.ONE);
+		}
+
+		protected ONodeAddressStub predecessorAddress() {
+			return new ONodeAddressStub(localNodeAddress().getNodeId().subtract(ONodeId.valueOf(10000)));
+		}
+
+		protected ONodeAddressStub localNodeAddress() {
 			return new ONodeAddressStub(ONodeId.valueOf(20000));
 		}
 	}
