@@ -9,7 +9,7 @@ import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
  * @author Andrey Lomakin
  * @since 23.11.12
  */
-public class ORecordReaderWithoutReadRepairImpl implements ORecordReader {
+public final class ORecordReaderWithoutReadRepairImpl implements ORecordReader {
 	public ORecordReaderWithoutReadRepairImpl() {
 	}
 

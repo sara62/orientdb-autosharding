@@ -15,8 +15,8 @@ import com.hazelcast.core.Member;
 import com.hazelcast.core.MemberLeftException;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
-import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
@@ -107,7 +107,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public void deleteRecord(ORID id, ODHTRecordVersion version) {
+  public void deleteRecord(ORID id, ORecordVersion version) {
     callOnRemoteMember(new RemoveNodeCall(nodeAddress, id, version), false);
   }
 
@@ -157,7 +157,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public void deleteRecordFromNode(ORID id, ODHTRecordVersion version) {
+  public void deleteRecordFromNode(ORID id, ORecordVersion version) {
     callOnRemoteMember(new RemoveRecordFromNodeNodeCall(nodeAddress, id, version), false);
   }
 
@@ -882,12 +882,12 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
   private static final class RemoveNodeCall extends NodeCall<Void> {
     private ORID         id;
-    private ODHTRecordVersion version;
+    private ORecordVersion version;
 
     public RemoveNodeCall() {
     }
 
-    private RemoveNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, ODHTRecordVersion version) {
+    private RemoveNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, ORecordVersion version) {
       super(nodeAddress);
       this.id = id;
       this.version = version;
@@ -910,18 +910,18 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
       id = (ORID) in.readObject();
-      version = (ODHTRecordVersion) in.readObject();
+      version = (ORecordVersion) in.readObject();
     }
   }
 
   private static final class RemoveRecordFromNodeNodeCall extends NodeCall<Void> {
     private ORID         id;
-    private ODHTRecordVersion version;
+    private ORecordVersion version;
 
     public RemoveRecordFromNodeNodeCall() {
     }
 
-    private RemoveRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, ODHTRecordVersion version) {
+    private RemoveRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, ORecordVersion version) {
       super(nodeAddress);
       this.id = id;
       this.version = version;
@@ -944,7 +944,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
       id = (ORID) in.readObject();
-      version = (ODHTRecordVersion) in.readObject();
+      version = (ORecordVersion) in.readObject();
     }
   }
 

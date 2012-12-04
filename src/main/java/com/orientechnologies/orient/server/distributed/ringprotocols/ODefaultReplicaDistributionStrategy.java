@@ -10,7 +10,7 @@ import java.util.Set;
  * @author Andrey Lomakin
  * @since 22.11.12
  */
-public class ODefaultReplicaDistributionStrategy implements OReplicaDistributionStrategy {
+public final class ODefaultReplicaDistributionStrategy implements OReplicaDistributionStrategy {
 	@Override
 	public Set<ONodeAddress>[] chooseReplicas(ONodeAddress[] successors, int replicaCount, int syncReplicaCount) {
 		final Set<ONodeAddress>[] result = new Set[2];

@@ -14,10 +14,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
+import com.orientechnologies.orient.core.version.ODistributedVersion;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.testng.Assert;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -29,7 +33,6 @@ import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
-import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
@@ -54,6 +57,8 @@ public class GlobalMaintenanceProtocolImplTest {
 
   @BeforeMethod
   public void setUp() {
+		OGlobalConfiguration.DB_USE_DISTRIBUTED_VERSION.setValue(true);
+
     MockitoAnnotations.initMocks(this);
 
     globalMaintenanceProtocol = new OGlobalMaintenanceProtocolImpl(nodeLookup, replicaDistributionStrategy);
@@ -142,7 +147,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(startRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(startRecordId, new ODistributedVersion(0)));
 
     final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
 
@@ -172,7 +177,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(nodeId));
@@ -207,7 +212,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -246,7 +251,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -295,7 +300,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -344,7 +349,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -422,7 +427,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -500,7 +505,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -588,7 +593,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -665,7 +670,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -743,7 +748,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -794,9 +799,11 @@ public class GlobalMaintenanceProtocolImplTest {
     final Record outOfDateRecordOne = missedRecords.get(2);
     final Record outOfDateRecordTwo = missedRecords.get(3);
 
-    doThrow(new OConcurrentModificationException(outOfDateRecordOne.getId(), 0, outOfDateRecordOne.getShortVersion(), 0)).when(
+    doThrow(new OConcurrentModificationException(outOfDateRecordOne.getId(),
+						new ODistributedVersion(0), outOfDateRecordOne.getVersion(), 0)).when(
 						nodeLocal).cleanOutData(outOfDateRecordOne.getId(), outOfDateRecordOne.getVersion());
-    doThrow(new OConcurrentModificationException(outOfDateRecordTwo.getId(), 0, outOfDateRecordTwo.getShortVersion(), 0)).when(
+    doThrow(new OConcurrentModificationException(outOfDateRecordTwo.getId(),
+						new ODistributedVersion(0), outOfDateRecordTwo.getVersion(), 0)).when(
 						nodeLocal).cleanOutData(outOfDateRecordTwo.getId(), outOfDateRecordTwo.getVersion());
 
     final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
@@ -829,7 +836,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
-    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODHTRecordVersion()));
+    when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(successorNodeId));
@@ -900,12 +907,6 @@ public class GlobalMaintenanceProtocolImplTest {
 			}
 
       verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
-    }
-  }
-
-  private final class ONodeAddressStub extends ONodeAddress {
-    private ONodeAddressStub(ONodeId nodeId) {
-      super(nodeId);
     }
   }
 

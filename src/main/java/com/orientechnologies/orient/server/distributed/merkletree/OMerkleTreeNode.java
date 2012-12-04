@@ -19,7 +19,8 @@ import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
-import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
+import com.orientechnologies.orient.core.version.ODistributedVersion;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.Record;
 
 /**
@@ -28,7 +29,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  */
 public class OMerkleTreeNode extends OSharedResourceAdaptive {
   public static final int                       KEY_SIZE               = ONodeId.NODE_SIZE_BYTES;
-  public static final int                       LEAF_BUFFER_ENTRY_SIZE = KEY_SIZE + ODHTRecordVersion.STREAMED_SIZE;
+  public static final int                       LEAF_BUFFER_ENTRY_SIZE = KEY_SIZE +	ODistributedVersion.STREAMED_SIZE;
 
   private final NavigableMap<ORID, Record> db;
 
@@ -114,7 +115,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     return record;
   }
 
-  public void updateRecord(int level, ONodeId offset, ORID id, ODHTRecordVersion version, String data) {
+  public void updateRecord(int level, ONodeId offset, ORID id, ORecordVersion version, String data) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -145,8 +146,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
         throw new ORecordNotFoundException("Record with id " + id + " not found.");
 
       if (record.getVersion().compareTo(version) != 0)
-        throw new OConcurrentModificationException(id, record.getShortVersion(), version.getShortVersion(),
-            ORecordOperation.UPDATED);
+        throw new OConcurrentModificationException(id, record.getVersion(), version, ORecordOperation.UPDATED);
 
       record.updateData(data, version);
 
@@ -231,10 +231,10 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
     while (idIterator.hasNext()) {
       final ORID currentId = idIterator.next();
-      final ODHTRecordVersion version = db.get(currentId).getVersion();
+      final ORecordVersion version = db.get(currentId).getVersion();
 
       byteBuffer.put(((OClusterPositionNodeId) currentId.getClusterPosition()).getNodeId().chunksToByteArray());
-      byteBuffer.put(version.toStream());
+      byteBuffer.put(version.getSerializer().toByteArray(version));
 
       actualRecordsCount++;
     }
@@ -249,7 +249,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     treeNode.hash = messageDigest.digest();
   }
 
-  public void deleteRecord(int level, ONodeId offset, ORID id, ODHTRecordVersion version) {
+  public void deleteRecord(int level, ONodeId offset, ORID id, ORecordVersion version) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -281,7 +281,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
           rehashLeafNode(level, offset, treeNode, childIndex);
         } else
-          throw new OConcurrentModificationException(id, record.getShortVersion(), version.getShortVersion(),
+          throw new OConcurrentModificationException(id, record.getVersion(), version,
               ORecordOperation.DELETED);
       } else
         throw new ORecordNotFoundException("Record with id " + id + " can not be deleted from database because it is absent");
@@ -291,7 +291,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
     rehashParentNodes(hashPathNodes);
   }
 
-  public void cleanOutRecord(int level, ONodeId offset, ORID id, ODHTRecordVersion version) {
+  public void cleanOutRecord(int level, ONodeId offset, ORID id, ORecordVersion version) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -325,7 +325,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
           rehashLeafNode(level, offset, treeNode, childIndex);
         } else
-          throw new OConcurrentModificationException(id, record.getShortVersion(), version.getShortVersion(),
+          throw new OConcurrentModificationException(id, record.getVersion(), version,
               ORecordOperation.UPDATED);
       } else
         throw new ORecordNotFoundException("Record with id " + id + " can not be cleaned out from database because it is absent");
@@ -381,7 +381,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       int recordsCount = 0;
 
-      final Map<ORID, ODHTRecordVersion> recordsToHash = new LinkedHashMap<ORID, ODHTRecordVersion>(64);
+      final Map<ORID, ORecordVersion> recordsToHash = new LinkedHashMap<ORID, ORecordVersion>(64);
 
       while (idIterator.hasNext()) {
         if (recordsCount == 64) {
@@ -391,7 +391,7 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
 
         final ORID currentId = idIterator.next();
 
-        final ODHTRecordVersion version = db.get(currentId).getVersion();
+        final ORecordVersion version = db.get(currentId).getVersion();
         recordsToHash.put(currentId, version);
         recordsCount++;
       }
@@ -401,9 +401,9 @@ public class OMerkleTreeNode extends OSharedResourceAdaptive {
       if (recordsCount <= 64) {
         final ByteBuffer buffer = ByteBuffer.allocate(recordsCount * LEAF_BUFFER_ENTRY_SIZE);
 
-        for (Map.Entry<ORID, ODHTRecordVersion> entry : recordsToHash.entrySet()) {
+        for (Map.Entry<ORID, ORecordVersion> entry : recordsToHash.entrySet()) {
           buffer.put(((OClusterPositionNodeId) entry.getKey().getClusterPosition()).getNodeId().chunksToByteArray());
-          buffer.put(entry.getValue().toStream());
+          buffer.put(entry.getValue().getSerializer().toByteArray(entry.getValue()));
         }
 
         buffer.rewind();

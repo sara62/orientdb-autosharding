@@ -9,7 +9,7 @@ import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordRepl
  * @author Andrey Lomakin
  * @since 22.11.12
  */
-public class ORecordUpdaterImpl implements ORecordUpdater {
+public final class ORecordUpdaterImpl implements ORecordUpdater {
 	private final ORecordReplicator recordReplicator;
 
 	public ORecordUpdaterImpl(ORecordReplicator recordReplicator) {

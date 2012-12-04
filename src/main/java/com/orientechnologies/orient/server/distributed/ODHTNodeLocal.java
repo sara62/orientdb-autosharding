@@ -1,6 +1,7 @@
 package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
 
 import java.util.Iterator;
@@ -13,8 +14,8 @@ public interface ODHTNodeLocal extends ODHTNode {
 	public Record addRecordLocal(ORID id, String data);
 	public void updateRecordLocal(ORID id, Record record);
 	public Record readRecordLocal(ORID recordId);
-	public void removeRecordLocal(ORID id, ODHTRecordVersion version);
-	public void cleanOutData(ORID id, ODHTRecordVersion version);
+	public void removeRecordLocal(ORID id, ORecordVersion version);
+	public void cleanOutData(ORID id, ORecordVersion version);
 
 	public OMerkleTree getLocalMerkleTree();
 

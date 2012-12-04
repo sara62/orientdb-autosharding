@@ -7,6 +7,8 @@ import java.io.ObjectOutput;
 
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.version.ODistributedVersion;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 
 /**
  * @author Andrey Lomakin
@@ -16,7 +18,7 @@ public class Record implements Externalizable {
   private String            data;
   private ORID              id;
 
-  private ODHTRecordVersion version;
+  private ORecordVersion version;
 
   public Record() {
   }
@@ -25,26 +27,24 @@ public class Record implements Externalizable {
     this.id = id;
     this.data = data;
 
-    version = new ODHTRecordVersion();
-    version.init();
+    version = new ODistributedVersion(0);
   }
 
   public Record(ORID id, String data, int shortVersion) {
     this.id = id;
     this.data = data;
 
-    version = new ODHTRecordVersion();
-    version.init(shortVersion);
+    version = new ODistributedVersion(shortVersion);
   }
 
-  public void updateData(String data, ODHTRecordVersion version) {
+  public void updateData(String data, ORecordVersion version) {
     if (isTombstone())
       throw new IllegalStateException("Record was deleted and can not be updated.");
 
     if (this.version.compareTo(version) != 0)
       throw new IllegalStateException("Provided version is not up to date");
 
-    this.version.updateVersion();
+    this.version.increment();
 
     this.data = data;
   }
@@ -53,7 +53,7 @@ public class Record implements Externalizable {
     return id;
   }
 
-  public ODHTRecordVersion getVersion() {
+  public ORecordVersion getVersion() {
     return version;
   }
 
@@ -61,9 +61,9 @@ public class Record implements Externalizable {
     return data;
   }
 
-  public int getShortVersion() {
-    return version.getShortVersion();
-  }
+	public int getShortVersion() {
+		return version.getCounter();
+	}
 
   public int compareVersions(Record record) {
     return version.compareTo(record.version);
@@ -119,7 +119,7 @@ public class Record implements Externalizable {
 
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     id = (ORID) in.readObject();
-    version = (ODHTRecordVersion) in.readObject();
+    version = (ORecordVersion) in.readObject();
 
     final boolean dataIsNotNull = in.readBoolean();
 

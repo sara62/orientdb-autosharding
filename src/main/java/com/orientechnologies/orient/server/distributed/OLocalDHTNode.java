@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -325,7 +326,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     operationCoordinator.executeRecordOperation(this, new ODistributedRecordUpdate(record));
   }
 
-  public void deleteRecord(ORID recordId, ODHTRecordVersion version) {
+  public void deleteRecord(ORID recordId, ORecordVersion version) {
     operationCoordinator.executeRecordOperation(this, new ODistributedRecordDelete(recordId, version));
   }
 
@@ -340,7 +341,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public void deleteRecordFromNode(ORID recordId, ODHTRecordVersion version) {
+  public void deleteRecordFromNode(ORID recordId, ORecordVersion version) {
     recordDeleter.deleteRecord(this, recordId, version, replicaCount, syncReplicaCount);
   }
 
@@ -472,7 +473,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public void removeRecordLocal(ORID id, ODHTRecordVersion version) {
+  public void removeRecordLocal(ORID id, ORecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version);
@@ -486,7 +487,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     return merkleTree;
   }
 
-  public void cleanOutData(ORID id, ODHTRecordVersion version) {
+  public void cleanOutData(ORID id, ORecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version, false);

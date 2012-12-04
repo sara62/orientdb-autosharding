@@ -1,5 +1,6 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
@@ -15,7 +16,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 22.11.12
  */
-public class ORecordReaderImpl implements ORecordReader {
+public final class ORecordReaderImpl implements ORecordReader {
   private final OReplicaDistributionStrategy replicaDistributionStrategy;
 	private final ORecordMergeStrategy         recordMergeStrategy;
 
@@ -47,8 +48,14 @@ public class ORecordReaderImpl implements ORecordReader {
 
     final Record result = nodeLocal.readRecordLocal(recordId);
 
-    if (!asyncReplicas.isEmpty())
-			new OReadRepairTask(recordId, asyncReplicas, nodeLocal, recordMergeStrategy).submit();
+    if (!asyncReplicas.isEmpty())    {
+			final Set<ONodeAddress> readRepairReplicas = new HashSet<ONodeAddress>();
+			readRepairReplicas.addAll(syncReplicas);
+			readRepairReplicas.addAll(asyncReplicas);
+
+			new OReadRepairTask(recordId, readRepairReplicas, nodeLocal, recordMergeStrategy).submit();
+		}
+
 
 		if (result.isTombstone())
 			return null;

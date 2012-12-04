@@ -12,7 +12,7 @@ import com.orientechnologies.orient.core.id.ORecordId;
  * @author Andrey Lomakin
  * @since 12.10.12
  */
-public class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
+public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
   private final NavigableMap<ORID, Record> db;
   private final ORID 														start;
   private final ORID                            end;

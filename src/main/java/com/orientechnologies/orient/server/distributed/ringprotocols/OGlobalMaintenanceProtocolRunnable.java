@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
  * @author Andrey Lomakin
  * @since 26.11.12
  */
-public class OGlobalMaintenanceProtocolRunnable implements Runnable {
+public final class OGlobalMaintenanceProtocolRunnable implements Runnable {
 	private static final Logger LOGGER = LoggerFactory.getLogger(OGlobalMaintenanceProtocolImpl.class);
 
 	private final OGlobalMaintenanceProtocol globalMaintenanceProtocol;

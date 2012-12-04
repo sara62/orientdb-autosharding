@@ -2,6 +2,7 @@ package com.orientechnologies.orient.server.distributed;
 
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 
 /**
@@ -39,7 +40,7 @@ public interface ODHTNode {
 
   public void updateRecord(ORID id, Record record);
 
-  public void deleteRecord(ORID id, ODHTRecordVersion version);
+  public void deleteRecord(ORID id, ORecordVersion version);
 
   public void updateReplica(Record replica, boolean async);
 
@@ -53,7 +54,7 @@ public interface ODHTNode {
 
   public void updateRecordInNode(ORID id, Record record);
 
-  public void deleteRecordFromNode(ORID id, ODHTRecordVersion version);
+  public void deleteRecordFromNode(ORID id, ORecordVersion version);
 
   public Record readRecordFromNode(ORID id);
 

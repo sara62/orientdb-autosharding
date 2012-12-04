@@ -12,12 +12,14 @@ import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecor
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordReaderWithoutReadRepairImpl;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordUpdater;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordUpdaterImpl;
+import com.orientechnologies.orient.server.distributed.ringprotocols.localcomparators.OLocalWithRemoteNodeComparator;
+import com.orientechnologies.orient.server.distributed.ringprotocols.localcomparators.ORemoteWithLocalNodeComparator;
 
 /**
  * @author Andrey Lomakin
  * @since 22.11.12
  */
-public class ODefaultRingProtocolsFactory implements ORingProtocolsFactory {
+public final class ODefaultRingProtocolsFactory implements ORingProtocolsFactory {
 	private final boolean useReadRepair;
 
 	public ODefaultRingProtocolsFactory(boolean useReadRepair) {
@@ -65,7 +67,10 @@ public class ODefaultRingProtocolsFactory implements ORingProtocolsFactory {
 
 	@Override
 	public OLocalMaintenanceProtocol createLocalMaintenanceProtocol(ODHTNodeLookup nodeLookup) {
-		return new OLocalMaintenanceProtocolImpl(createReplicaDistributionStrategy(), nodeLookup);
+		return new OLocalMaintenanceProtocolImpl(createReplicaDistributionStrategy(), nodeLookup,
+						new OLocalMaintenanceProtocolNodeComparator[] {
+										new ORemoteWithLocalNodeComparator(nodeLookup), new OLocalWithRemoteNodeComparator(nodeLookup)
+						});
 	}
 
 	@Override

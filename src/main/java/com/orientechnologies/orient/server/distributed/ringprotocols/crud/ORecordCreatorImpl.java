@@ -11,7 +11,7 @@ import com.orientechnologies.orient.core.id.ORID;
  * @author Andrey Lomakin
  * @since 21.11.12
  */
-public class ORecordCreatorImpl implements ORecordCreator {
+public final class ORecordCreatorImpl implements ORecordCreator {
 	private final ORecordReplicator recordReplicator;
 
 	public ORecordCreatorImpl(ORecordReplicator recordReplicator) {

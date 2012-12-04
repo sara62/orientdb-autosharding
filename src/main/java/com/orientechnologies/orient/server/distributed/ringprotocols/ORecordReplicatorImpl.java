@@ -15,7 +15,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 22.11.12
  */
-public class ORecordReplicatorImpl implements ORecordReplicator {
+public final class ORecordReplicatorImpl implements ORecordReplicator {
   private static final Logger                LOGGER = LoggerFactory.getLogger(ORecordReplicatorImpl.class);
 
   private final ODHTNodeLookup               nodeLookup;

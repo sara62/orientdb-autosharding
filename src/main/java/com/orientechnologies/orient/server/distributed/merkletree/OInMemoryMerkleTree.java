@@ -9,7 +9,7 @@ import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
-import com.orientechnologies.orient.server.distributed.ODHTRecordVersion;
+import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -45,7 +45,7 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void deleteData(final ORID id, final ODHTRecordVersion version) {
+	public void deleteData(final ORID id, final ORecordVersion version) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -54,7 +54,7 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void deleteData(final ORID id, final ODHTRecordVersion version, boolean softDelete) {
+	public void deleteData(final ORID id, final ORecordVersion version, boolean softDelete) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId startId = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -66,7 +66,7 @@ public class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void updateData(final ORID id, final ODHTRecordVersion version, final String data) {
+	public void updateData(final ORID id, final ORecordVersion version, final String data) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 

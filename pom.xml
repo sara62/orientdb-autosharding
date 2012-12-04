@@ -28,6 +28,9 @@
                     <excludes>
                         <exclude>com/orientechnologies/orient/server/distributed/integration/**/*.java</exclude>
                     </excludes>
+                    <systemPropertyVariables>
+                        <db.use.distributedVersion>true</db.use.distributedVersion>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>
