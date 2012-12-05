@@ -11,5 +11,9 @@ import com.orientechnologies.orient.server.distributed.ONodeAddress;
  * @since 22.11.12
  */
 public interface ORecordMergeStrategy {
-  public void mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders);
+   void mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders,
+																	 ORecordMergeExecutionContext executionContext);
+
+	ORecordMergeExecutionContext mergeReplicaVersions(ODHTNodeLocal localNode,
+																										ORID recordId, Set<ONodeAddress> replicaHolders);
 }

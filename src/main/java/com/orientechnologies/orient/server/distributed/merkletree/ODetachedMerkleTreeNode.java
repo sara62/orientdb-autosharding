@@ -13,7 +13,7 @@ import com.orientechnologies.orient.server.distributed.ORecordMetadata;
  * @author Andrey Lomakin
  * @since 02.10.12
  */
-public class ODetachedMerkleTreeNode implements Externalizable {
+public final class ODetachedMerkleTreeNode implements Externalizable {
   private byte[]           hash;
   private ONodeId          startId;
   private ONodeId          endId;

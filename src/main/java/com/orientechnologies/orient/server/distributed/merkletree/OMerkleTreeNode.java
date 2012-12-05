@@ -27,7 +27,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 04.09.12
  */
-public class OMerkleTreeNode extends OSharedResourceAdaptive {
+public final class OMerkleTreeNode extends OSharedResourceAdaptive {
   public static final int                       KEY_SIZE               = ONodeId.NODE_SIZE_BYTES;
   public static final int                       LEAF_BUFFER_ENTRY_SIZE = KEY_SIZE +	ODistributedVersion.STREAMED_SIZE;
 

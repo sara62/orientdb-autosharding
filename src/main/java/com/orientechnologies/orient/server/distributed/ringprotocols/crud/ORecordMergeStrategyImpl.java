@@ -1,6 +1,5 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
-import java.util.HashSet;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -19,89 +18,103 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 22.11.12
  */
 public final class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
-  private static final Logger  LOGGER = LoggerFactory.getLogger(ORecordMergeStrategyImpl.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(ORecordMergeStrategyImpl.class);
 
-  private final ODHTNodeLookup nodeLookup;
+	private final ODHTNodeLookup nodeLookup;
 
-  public ORecordMergeStrategyImpl(ODHTNodeLookup nodeLookup) {
-    this.nodeLookup = nodeLookup;
-  }
+	public ORecordMergeStrategyImpl(ODHTNodeLookup nodeLookup) {
+		this.nodeLookup = nodeLookup;
+	}
 
-  @Override
-  public void mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders) {
-    final Set<ONodeAddress> replicaHoldersToUpdate = new HashSet<ONodeAddress>();
-    final Set<ONodeAddress> processedHolders = new HashSet<ONodeAddress>();
+	@Override
+	public ORecordMergeExecutionContext mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders) {
+		final ORecordMergeExecutionContext executionContext = new ORecordMergeExecutionContext();
 
-    try {
-      ODHTNode primaryHolder = localNode;
-      ORecordMetadata primaryMetadata = primaryHolder.getRecordMetadataFromNode(recordId);
+		executionContext.setPrimaryHolder(localNode);
+		executionContext.setPrimaryMetadata(localNode.getRecordMetadataFromNode(recordId));
 
-      for (ONodeAddress holderAddress : replicaHolders) {
-        final ODHTNode holderNode = nodeLookup.findById(holderAddress);
-        if (holderNode == null)
-          continue;
+		mergeReplicaVersions(localNode, recordId, replicaHolders, executionContext);
+		return executionContext;
+	}
 
-        try {
-          final ORecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(recordId);
-          if (primaryMetadata == null) {
-            if (nodeMetadata != null) {
-              replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());
-              replicaHoldersToUpdate.addAll(processedHolders);
+	@Override
+	public void mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders,
+																	 ORecordMergeExecutionContext executionContext) {
+		if (executionContext == null) {
+			executionContext = new ORecordMergeExecutionContext();
+			executionContext.setPrimaryHolder(localNode);
+			executionContext.setPrimaryMetadata(localNode.getRecordMetadataFromNode(recordId));
+		}
 
-              primaryMetadata = nodeMetadata;
-              primaryHolder = holderNode;
-            }
-          } else {
-            if (nodeMetadata != null) {
-              final int cp = primaryMetadata.getVersion().compareTo(nodeMetadata.getVersion());
+		try {
+			for (ONodeAddress holderAddress : replicaHolders) {
+				final ODHTNode holderNode = nodeLookup.findById(holderAddress);
+				if (holderNode == null)
+					continue;
 
-              if (cp < 0) {
-                replicaHoldersToUpdate.add(primaryHolder.getNodeAddress());
-                replicaHoldersToUpdate.addAll(processedHolders);
+				try {
+					final ORecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(recordId);
+					if (executionContext.getPrimaryMetadata() == null) {
+						if (nodeMetadata != null) {
+							executionContext.getReplicaHoldersToUpdate().add(executionContext.getPrimaryHolder().getNodeAddress());
+							executionContext.getReplicaHoldersToUpdate().addAll(executionContext.getProcessedHolders());
 
-                primaryMetadata = nodeMetadata;
-                primaryHolder = holderNode;
-              } else if (cp > 0) {
-                replicaHoldersToUpdate.add(holderAddress);
-              }
-            } else {
-              replicaHoldersToUpdate.add(holderAddress);
-            }
-          }
+							executionContext.setPrimaryMetadata(nodeMetadata);
+							executionContext.setPrimaryHolder(holderNode);
+						}
+					} else {
+						if (nodeMetadata != null) {
+							final int cp = executionContext.getPrimaryMetadata().getVersion().compareTo(nodeMetadata.getVersion());
 
-          processedHolders.add(holderAddress);
-        } catch (Exception e) {
-          // ignore
-          LOGGER.error("Exception during synchronization of record " + recordId + " for node " + holderAddress, e);
-        }
-      }
+							if (cp < 0) {
+								executionContext.getReplicaHoldersToUpdate().add(executionContext.getPrimaryHolder().getNodeAddress());
+								executionContext.getReplicaHoldersToUpdate().addAll(executionContext.getProcessedHolders());
 
-      if (!replicaHoldersToUpdate.isEmpty()) {
-        final Record result;
+								executionContext.setPrimaryMetadata(nodeMetadata);
+								executionContext.setPrimaryHolder(holderNode);
+							} else if (cp > 0) {
+								executionContext.getReplicaHoldersToUpdate().add(holderAddress);
+							}
+						} else {
+							executionContext.getReplicaHoldersToUpdate().add(holderAddress);
+						}
+					}
 
-        if (localNode.getNodeAddress().equals(primaryHolder.getNodeAddress()))
-          result = localNode.readRecordLocal(recordId);
-        else
-          result = primaryHolder.getRecordFromNode(recordId);
+					executionContext.getProcessedHolders().add(holderAddress);
+				} catch (Exception e) {
+					// ignore
+					LOGGER.error("Exception during synchronization of record " + recordId + " for node " + holderAddress, e);
+				}
+			}
 
-        if (result == null)
-          return;
+			if (!executionContext.getReplicaHoldersToUpdate().isEmpty()) {
+				final Record result;
 
-        for (ONodeAddress replicaHolderAddress : replicaHoldersToUpdate) {
-          final ODHTNode replicaHolder = nodeLookup.findById(replicaHolderAddress);
-          if (replicaHolder == null)
-            continue;
-          try {
-            replicaHolder.updateReplica(result, false);
-          } catch (Exception e) {
-            LOGGER.error(
-                "Exception during replication of record with id " + recordId + " for node " + replicaHolder.getNodeAddress(), e);
-          }
-        }
-      }
-    } catch (Exception e) {
-      LOGGER.error("Exception during merger of replicas of record with id " + recordId + " for node " + localNode.getNodeAddress(),
-          e);
-    }
-  }
+				if (localNode.getNodeAddress().equals(executionContext.getPrimaryHolder().getNodeAddress()))
+					result = localNode.readRecordLocal(recordId);
+				else
+					result = executionContext.getPrimaryHolder().getRecordFromNode(recordId);
+
+				if (result == null)
+					return;
+
+				for (ONodeAddress replicaHolderAddress : executionContext.getReplicaHoldersToUpdate()) {
+					final ODHTNode replicaHolder = nodeLookup.findById(replicaHolderAddress);
+					if (replicaHolder == null)
+						continue;
+					try {
+						replicaHolder.updateReplica(result, false);
+					} catch (Exception e) {
+						LOGGER.error(
+										"Exception during replication of record with id " + recordId + " for node " + replicaHolder.getNodeAddress(), e);
+					}
+				}
+
+				executionContext.getReplicaHoldersToUpdate().clear();
+			}
+		} catch (Exception e) {
+			LOGGER.error("Exception during merger of replicas of record with id " + recordId + " for node " + localNode.getNodeAddress(),
+							e);
+		}
+	}
 }

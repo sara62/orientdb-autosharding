@@ -9,7 +9,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 21.11.12
  */
-public class ODistributedRecordRead implements ODistributedRecordOperation<Record> {
+public final class ODistributedRecordRead implements ODistributedRecordOperation<Record> {
   private final ORID recordId;
 
   public ODistributedRecordRead(ORID recordId) {

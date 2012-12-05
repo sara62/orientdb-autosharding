@@ -7,7 +7,7 @@ import com.orientechnologies.orient.server.distributed.ringprotocols.ORemoteNode
  * @author Andrey Lomakin
  * @since 03.09.12
  */
-public class ONodeOfflineException extends ORemoteNodeCallException {
+public final class ONodeOfflineException extends ORemoteNodeCallException {
   public ONodeOfflineException(String message, Throwable cause, ONodeId nodeId) {
     super(message, cause, nodeId);
   }

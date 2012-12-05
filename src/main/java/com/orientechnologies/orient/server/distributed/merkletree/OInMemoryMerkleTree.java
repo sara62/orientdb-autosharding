@@ -17,7 +17,7 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 13.09.12
  */
-public class OInMemoryMerkleTree implements OMerkleTree {
+public final class OInMemoryMerkleTree implements OMerkleTree {
   private final int                             clusterId;
   private final OMerkleTreeNode[]               roots;
   private final NavigableMap<ORID, Record> db;

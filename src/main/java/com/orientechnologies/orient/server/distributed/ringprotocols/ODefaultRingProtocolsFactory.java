@@ -1,6 +1,7 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols;
 
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
+import com.orientechnologies.orient.server.distributed.ringprotocols.crud.OReadRepairExecutorImpl;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordCreator;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordCreatorImpl;
 import com.orientechnologies.orient.server.distributed.ringprotocols.crud.ORecordDeleter;
@@ -58,9 +59,11 @@ public final class ODefaultRingProtocolsFactory implements ORingProtocolsFactory
 
 	@Override
 	public ORecordReader createRecordReader(ODHTNodeLookup nodeLookup, int replicaCount, int syncReplicaCount) {
-		if(useReadRepair)
-			return new ORecordReaderImpl(createReplicaDistributionStrategy(), createRecordMergeStrategy(nodeLookup),
-						replicaCount, syncReplicaCount);
+		if(useReadRepair)  {
+			final ORecordMergeStrategy recordMergeStrategy = createRecordMergeStrategy(nodeLookup);
+			return new ORecordReaderImpl(createReplicaDistributionStrategy(), recordMergeStrategy,
+							new OReadRepairExecutorImpl(recordMergeStrategy), replicaCount, syncReplicaCount);
+		}
 
 		return new ORecordReaderWithoutReadRepairImpl();
 	}

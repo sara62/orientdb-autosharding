@@ -9,7 +9,7 @@ import com.orientechnologies.orient.server.distributed.ODHTNode;
  * @author Andrey Lomakin
  * @since 21.11.12
  */
-public class ODistributedRecordDelete implements ODistributedRecordOperation<Void> {
+public final class ODistributedRecordDelete implements ODistributedRecordOperation<Void> {
   private final ORID         recordId;
   private final ORecordVersion version;
 

@@ -1,6 +1,5 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
-import java.util.HashSet;
 import java.util.Set;
 
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
@@ -19,15 +18,17 @@ import com.orientechnologies.orient.server.distributed.Record;
 public final class ORecordReaderImpl implements ORecordReader {
   private final OReplicaDistributionStrategy replicaDistributionStrategy;
 	private final ORecordMergeStrategy         recordMergeStrategy;
+	private final OReadRepairExecutor          readRepairExecutor;
 
   private final int                          replicaCount;
   private final int                          syncReplicaCount;
 
   public ORecordReaderImpl(OReplicaDistributionStrategy replicaDistributionStrategy,
 													 ORecordMergeStrategy recordMergeStrategy,
-													 int replicaCount, int syncReplicaCount) {
+													 OReadRepairExecutor readRepairExecutor, int replicaCount, int syncReplicaCount) {
     this.replicaDistributionStrategy = replicaDistributionStrategy;
 		this.recordMergeStrategy = recordMergeStrategy;
+		this.readRepairExecutor = readRepairExecutor;
 		this.replicaCount = replicaCount;
     this.syncReplicaCount = syncReplicaCount;
 	}
@@ -44,18 +45,13 @@ public final class ORecordReaderImpl implements ORecordReader {
     final Set<ONodeAddress> syncReplicas = replicas[0];
     final Set<ONodeAddress> asyncReplicas = replicas[1];
 
-		recordMergeStrategy.mergeReplicaVersions(nodeLocal, recordId, syncReplicas);
+		final ORecordMergeExecutionContext executionContext =
+						recordMergeStrategy.mergeReplicaVersions(nodeLocal, recordId, syncReplicas);
 
     final Record result = nodeLocal.readRecordLocal(recordId);
 
-    if (!asyncReplicas.isEmpty())    {
-			final Set<ONodeAddress> readRepairReplicas = new HashSet<ONodeAddress>();
-			readRepairReplicas.addAll(syncReplicas);
-			readRepairReplicas.addAll(asyncReplicas);
-
-			new OReadRepairTask(recordId, readRepairReplicas, nodeLocal, recordMergeStrategy).submit();
-		}
-
+    if (!asyncReplicas.isEmpty())
+			readRepairExecutor.submit(recordId, asyncReplicas, nodeLocal, executionContext);
 
 		if (result.isTombstone())
 			return null;
