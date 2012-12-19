@@ -71,7 +71,7 @@ public class LocalMaintenanceProtocolImplTest {
 		when(localNode.getPredecessor()).thenReturn(null);
 		when(localNode.state()).thenReturn(ODHTNode.NodeState.PRODUCTION);
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
 		verify(localNode).getPredecessor();
 		verify(localNode).state();
@@ -111,7 +111,7 @@ public class LocalMaintenanceProtocolImplTest {
 		final ODetachedMerkleTreeNode remoteRootNode = new ODetachedMerkleTreeNode(hash, predecessorAddress.getNodeId()
 						.add(ONodeId.ONE), localNodeAddress.getNodeId(), null, null, new int[0]);
 
-		when(localNode.getLocalMerkleTree()).thenReturn(merkleTree);
+		when(localNode.getLocalMerkleTree(null, -1)).thenReturn(merkleTree);
 		when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 						.thenReturn(Arrays.asList(localRootNode));
 
@@ -121,28 +121,28 @@ public class LocalMaintenanceProtocolImplTest {
 		when(nodeLookup.findById(replicaHolderOne)).thenReturn(remoteNodeOne);
 		when(nodeLookup.findById(replicaHolderTwo)).thenReturn(remoteNodeTwo);
 
-		when(remoteNodeOne.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
-		when(remoteNodeTwo.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
+		when(remoteNodeOne.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
+		when(remoteNodeTwo.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
 		verifyZeroInteractions(nodeComparator);
 	}
 
 	public void testVerifyOneChildInsideRootIntervalAndSecondIsNot() {
 		final CreateTwoDifferentNodesWithOnlyOneInside processFlow = new CreateTwoDifferentNodesWithOnlyOneInside();
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -151,15 +151,15 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testOneOfTheServerNodesThrowsExceptionDuringProcessing() {
 		final OneReplicaHolderThrowsExceptionDuringProcessing processFlow = new OneReplicaHolderThrowsExceptionDuringProcessing();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -168,12 +168,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testOneOfTheServerNodesIsOffline() {
 		final OneReplicaHolderIsOffline processFlow = new OneReplicaHolderIsOffline();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -182,7 +182,7 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testPredecessorIsNullSecondTime() {
 		final PredecessorIsNullSecondTime processFlow = new PredecessorIsNullSecondTime();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
 		verifyZeroInteractions(nodeComparator);
 	}
@@ -190,15 +190,15 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testRemoteTreeNodeIsNull() {
 		RemoteTreeNodeIsNull processFlow = new RemoteTreeNodeIsNull();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -207,12 +207,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testLocalTreeChildNodeIsNull() {
 		LocalTreeNodeIsNull processFlow = new LocalTreeNodeIsNull();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -221,12 +221,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testRootNodesAreDifferentRemoteIsLeafButLocalIsNot() {
 		RootNodesAreDifferentRemoteIsLeafButLocalIsNot processFlow = new RootNodesAreDifferentRemoteIsLeafButLocalIsNot();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -236,12 +236,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testRootNodesAreDifferentLocalIsLeafButRemoteIsNot() {
 		RootNodesAreDifferentLocalIsLeafButRemoteIsNot processFlow = new RootNodesAreDifferentLocalIsLeafButRemoteIsNot();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -250,22 +250,22 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testLeafChildIsNotEqualOnThirdLevel() {
 		LeafChildIsNotEqualOnThirdLevel processFlow = new LeafChildIsNotEqualOnThirdLevel();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNodeSecondLevel,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNodeSecondLevel,
 						processFlow.firstRemoteChildNodeSecondLevel,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNodeSecondLevel,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNodeSecondLevel,
 						processFlow.firstRemoteChildNodeSecondLevel,
 						processFlow.replicaHolderTwo);
 
@@ -276,21 +276,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst processFlow =
 						new PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -301,21 +301,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst processFlow =
 						new PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -326,21 +326,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne processFlow =
 						new PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -351,21 +351,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo processFlow =
 						new PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, storageName, clusterId, 2, 1);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes(localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(storageName, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -381,7 +381,7 @@ public class LocalMaintenanceProtocolImplTest {
 
 	private class RemoteTreeNodeIsNull extends CreateTwoDifferentNodesWithOnlyOneInside {
 		private RemoteTreeNodeIsNull() {
-			when(remoteNodeTwo.findMerkleTreeNode(firstLocalChildNode)).thenReturn(null);
+			when(remoteNodeTwo.findMerkleTreeNode(null, firstLocalChildNode)).thenReturn(null);
 		}
 	}
 
@@ -436,8 +436,8 @@ public class LocalMaintenanceProtocolImplTest {
 							thenReturn(Arrays.asList(secondLocalRootNode));
 
 
-			when(remoteNodeOne.findMerkleTreeNode(secondLocalRootNode)).thenReturn(secondRemoteRootNode);
-			when(remoteNodeTwo.findMerkleTreeNode(secondLocalRootNode)).thenReturn(secondRemoteRootNode);
+			when(remoteNodeOne.findMerkleTreeNode(null, secondLocalRootNode)).thenReturn(secondRemoteRootNode);
+			when(remoteNodeTwo.findMerkleTreeNode(null, secondLocalRootNode)).thenReturn(secondRemoteRootNode);
 		}
 
 		@Override
@@ -699,7 +699,7 @@ public class LocalMaintenanceProtocolImplTest {
 											localNodeAddress.getNodeId().subtract(ONodeId.TWO), recordMetadata, null, new int[0]);
 
 
-			when(localNode.getLocalMerkleTree()).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(null, -1)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -710,34 +710,34 @@ public class LocalMaintenanceProtocolImplTest {
 			when(nodeLookup.findById(replicaHolderOne)).thenReturn(remoteNodeOne);
 			when(nodeLookup.findById(replicaHolderTwo)).thenReturn(remoteNodeTwo);
 
-			when(remoteNodeOne.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
-			when(remoteNodeTwo.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeOne.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeTwo.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 
 			for (int i = 0; i < 64; i++) {
 				if (i == 2) {
 					when(merkleTree.getChildNode(localRootNode, i)).thenReturn(firstLocalChildNode);
-					when(remoteNodeOne.findMerkleTreeNode(firstLocalChildNode)).thenReturn(firstRemoteChildNode);
-					when(remoteNodeTwo.findMerkleTreeNode(firstLocalChildNode)).thenReturn(firstRemoteChildNode);
+					when(remoteNodeOne.findMerkleTreeNode(null, firstLocalChildNode)).thenReturn(firstRemoteChildNode);
+					when(remoteNodeTwo.findMerkleTreeNode(null, firstLocalChildNode)).thenReturn(firstRemoteChildNode);
 				} else if (i == 63) {
 					when(merkleTree.getChildNode(localRootNode, i)).thenReturn(secondLocalChildNode);
-					when(remoteNodeOne.findMerkleTreeNode(secondLocalChildNode)).thenReturn(secondRemoteChildNode);
-					when(remoteNodeTwo.findMerkleTreeNode(secondLocalChildNode)).thenReturn(secondRemoteChildNode);
+					when(remoteNodeOne.findMerkleTreeNode(null, secondLocalChildNode)).thenReturn(secondRemoteChildNode);
+					when(remoteNodeTwo.findMerkleTreeNode(null, secondLocalChildNode)).thenReturn(secondRemoteChildNode);
 				} else {
 					when(merkleTree.getChildNode(localRootNode, i)).thenReturn(localChildNode);
-					when(remoteNodeOne.findMerkleTreeNode(localChildNode)).thenReturn(remoteChildNode);
-					when(remoteNodeTwo.findMerkleTreeNode(localChildNode)).thenReturn(remoteChildNode);
+					when(remoteNodeOne.findMerkleTreeNode(null, localChildNode)).thenReturn(remoteChildNode);
+					when(remoteNodeTwo.findMerkleTreeNode(null, localChildNode)).thenReturn(remoteChildNode);
 				}
 			}
 
 			for (int i = 0; i < 64; i++) {
 				if (i == 0) {
 					when(merkleTree.getChildNode(firstLocalChildNode, i)).thenReturn(firstLocalChildNodeSecondLevel);
-					when(remoteNodeOne.findMerkleTreeNode(firstLocalChildNodeSecondLevel)).thenReturn(firstRemoteChildNodeSecondLevel);
-					when(remoteNodeTwo.findMerkleTreeNode(firstLocalChildNodeSecondLevel)).thenReturn(firstRemoteChildNodeSecondLevel);
+					when(remoteNodeOne.findMerkleTreeNode(null, firstLocalChildNodeSecondLevel)).thenReturn(firstRemoteChildNodeSecondLevel);
+					when(remoteNodeTwo.findMerkleTreeNode(null, firstLocalChildNodeSecondLevel)).thenReturn(firstRemoteChildNodeSecondLevel);
 				} else {
 					when(merkleTree.getChildNode(firstLocalChildNode, i)).thenReturn(localChildNodeSecondLevel);
-					when(remoteNodeOne.findMerkleTreeNode(localChildNodeSecondLevel)).thenReturn(remoteChildNodeSecondLevel);
-					when(remoteNodeTwo.findMerkleTreeNode(localChildNodeSecondLevel)).thenReturn(remoteChildNodeSecondLevel);
+					when(remoteNodeOne.findMerkleTreeNode(null, localChildNodeSecondLevel)).thenReturn(remoteChildNodeSecondLevel);
+					when(remoteNodeTwo.findMerkleTreeNode(null, localChildNodeSecondLevel)).thenReturn(remoteChildNodeSecondLevel);
 				}
 			}
 
@@ -783,7 +783,7 @@ public class LocalMaintenanceProtocolImplTest {
 			localRootNode = new ODetachedMerkleTreeNode(remoteRootHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
 							localNodeAddress.getNodeId(), recordMetadata, null, new int[0]);
 
-			when(localNode.getLocalMerkleTree()).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(null, -1)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -794,8 +794,8 @@ public class LocalMaintenanceProtocolImplTest {
 			when(nodeLookup.findById(replicaHolderOne)).thenReturn(remoteNodeOne);
 			when(nodeLookup.findById(replicaHolderTwo)).thenReturn(remoteNodeTwo);
 
-			when(remoteNodeOne.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
-			when(remoteNodeTwo.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeOne.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeTwo.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 		}
 	}
 
@@ -838,7 +838,7 @@ public class LocalMaintenanceProtocolImplTest {
 			remoteRootNode = new ODetachedMerkleTreeNode(remoteRootHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
 							localNodeAddress.getNodeId(), recordMetadata, null, new int[0]);
 
-			when(localNode.getLocalMerkleTree()).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(null, -1)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -849,8 +849,8 @@ public class LocalMaintenanceProtocolImplTest {
 			when(nodeLookup.findById(replicaHolderOne)).thenReturn(remoteNodeOne);
 			when(nodeLookup.findById(replicaHolderTwo)).thenReturn(remoteNodeTwo);
 
-			when(remoteNodeOne.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
-			when(remoteNodeTwo.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeOne.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeTwo.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 		}
 	}
 
@@ -873,7 +873,7 @@ public class LocalMaintenanceProtocolImplTest {
 
 	private class OneReplicaHolderThrowsExceptionDuringProcessing extends CreateTwoDifferentNodesWithOnlyOneInside {
 		private OneReplicaHolderThrowsExceptionDuringProcessing() {
-			when(remoteNodeTwo.findMerkleTreeNode(firstLocalChildNode)).thenThrow(new RuntimeException("Fake exception"));
+			when(remoteNodeTwo.findMerkleTreeNode(null, firstLocalChildNode)).thenThrow(new RuntimeException("Fake exception"));
 		}
 	}
 
@@ -998,7 +998,7 @@ public class LocalMaintenanceProtocolImplTest {
 							secondRemoteChildNodeStartId(),
 							secondRemoteChildNodeEndId(), recordMetadata, null, new int[0]);
 
-			when(localNode.getLocalMerkleTree()).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(null, -1)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(localChildNodeStartId(), localRootNodeEndId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -1009,22 +1009,22 @@ public class LocalMaintenanceProtocolImplTest {
 			when(nodeLookup.findById(replicaHolderOne)).thenReturn(remoteNodeOne);
 			when(nodeLookup.findById(replicaHolderTwo)).thenReturn(remoteNodeTwo);
 
-			when(remoteNodeOne.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
-			when(remoteNodeTwo.findMerkleTreeNode(localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeOne.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
+			when(remoteNodeTwo.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 
 			for (int i = 0; i < 64; i++) {
 				if (i == 2) {
 					when(merkleTree.getChildNode(localRootNode, i)).thenReturn(firstLocalChildNode);
-					when(remoteNodeOne.findMerkleTreeNode(firstLocalChildNode)).thenReturn(firstRemoteChildNode);
-					when(remoteNodeTwo.findMerkleTreeNode(firstLocalChildNode)).thenReturn(firstRemoteChildNode);
+					when(remoteNodeOne.findMerkleTreeNode(null, firstLocalChildNode)).thenReturn(firstRemoteChildNode);
+					when(remoteNodeTwo.findMerkleTreeNode(null, firstLocalChildNode)).thenReturn(firstRemoteChildNode);
 				} else if (i == 63) {
 					when(merkleTree.getChildNode(localRootNode, i)).thenReturn(secondLocalChildNode);
-					when(remoteNodeOne.findMerkleTreeNode(secondLocalChildNode)).thenReturn(secondRemoteChildNode);
-					when(remoteNodeTwo.findMerkleTreeNode(secondLocalChildNode)).thenReturn(secondRemoteChildNode);
+					when(remoteNodeOne.findMerkleTreeNode(null, secondLocalChildNode)).thenReturn(secondRemoteChildNode);
+					when(remoteNodeTwo.findMerkleTreeNode(null, secondLocalChildNode)).thenReturn(secondRemoteChildNode);
 				} else {
 					when(merkleTree.getChildNode(localRootNode, i)).thenReturn(localChildNode);
-					when(remoteNodeOne.findMerkleTreeNode(localChildNode)).thenReturn(remoteChildNode);
-					when(remoteNodeTwo.findMerkleTreeNode(localChildNode)).thenReturn(remoteChildNode);
+					when(remoteNodeOne.findMerkleTreeNode(null, localChildNode)).thenReturn(remoteChildNode);
+					when(remoteNodeTwo.findMerkleTreeNode(null, localChildNode)).thenReturn(remoteChildNode);
 				}
 			}
 		}

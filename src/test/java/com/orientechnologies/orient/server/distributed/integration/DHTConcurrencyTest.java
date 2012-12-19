@@ -159,16 +159,16 @@ public class DHTConcurrencyTest {
 
     int totalSize = 0;
 
-    System.out.println("[stat] Node : " + startNode.getNodeAddress() + " size - " + startNode.size() + " state "
+    System.out.println("[stat] Node : " + startNode.getNodeAddress() + " size - " + startNode.size(null, -1) + " state "
         + startNode.state());
-    totalSize += startNode.size();
+    totalSize += startNode.size(null, -1);
 
     ODHTNode node = serverInstance.findById(startNode.getSuccessor());
 
     while (!node.getNodeAddress().equals(startNode.getNodeAddress())) {
-      System.out.println("[stat] Node : " + node.getNodeAddress() + " size - " + node.size() + " state " + node.state());
+      System.out.println("[stat] Node : " + node.getNodeAddress() + " size - " + node.size(null, -1) + " state " + node.state());
 
-      totalSize += node.size();
+      totalSize += node.size(null, -1);
       node = serverInstance.findById(node.getSuccessor());
     }
 

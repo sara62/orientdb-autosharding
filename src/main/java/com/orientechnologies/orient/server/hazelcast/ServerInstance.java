@@ -99,7 +99,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
         .getCluster().getLocalMember().getUuid());
 
     localNode = new OLocalDHTNode(localNodeAddress, this, new ODefaultDistributedCoordinatorFactory(), ringProtocolsFactory,
-        replicaCount, syncReplicaCount);
+        replicaCount, syncReplicaCount, databaseLookup);
 
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
@@ -122,12 +122,12 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     }
 
     if (useAntiEntropy)
-      lmExecutorService.scheduleWithFixedDelay(new OLocalMaintenanceProtocolRunnable(localNode, replicaCount, syncReplicaCount,
+      lmExecutorService.scheduleWithFixedDelay(new OLocalMaintenanceProtocolRunnable(localNode, storageName, clusterId, replicaCount, syncReplicaCount,
           ringProtocolsFactory.createLocalMaintenanceProtocol(this)), 1, 1, TimeUnit.SECONDS);
 
     if (useGlobalMaintainence)
       gmExecutorService.scheduleWithFixedDelay(
-          new OGlobalMaintenanceProtocolRunnable(ringProtocolsFactory.createGlobalMaintenanceProtocol(this), localNode,
+          new OGlobalMaintenanceProtocolRunnable(ringProtocolsFactory.createGlobalMaintenanceProtocol(this), clusterId, storageName, localNode,
               replicaCount, syncReplicaCount), 100, 100, TimeUnit.MILLISECONDS);
 
     timer.schedule(new TimerTask() {
@@ -145,15 +145,15 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
   }
 
   public Record create(String data) {
-    return localNode.createRecord(data);
+    return localNode.createRecord(null, null);
   }
 
   public Record get(ORID id) {
-    return localNode.readRecord(id);
+    return localNode.readRecord(null, id);
   }
 
   public void remove(ORID id, ORecordVersion version) {
-    localNode.deleteRecord(id, version);
+    localNode.deleteRecord(null, id, version);
   }
 
   public void memberAdded(MembershipEvent membershipEvent) {

@@ -1,8 +1,8 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
-import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
 
 /**
@@ -14,8 +14,8 @@ public final class ORecordReaderWithoutReadRepairImpl implements ORecordReader {
 	}
 
 	@Override
-	public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId, int replicaCount, int syncReplicaCount) {
+	public ORecordInternal<?> readRecord(String storageName, ODHTNodeLocal nodeLocal, ORID recordId, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(nodeLocal);
-		return nodeLocal.readRecordLocal(recordId);
+		return nodeLocal.readRecordLocal(storageName, recordId);
 	}
 }

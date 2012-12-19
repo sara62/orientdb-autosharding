@@ -15,6 +15,8 @@ import com.hazelcast.core.Member;
 import com.hazelcast.core.MemberLeftException;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.record.ORecord;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
@@ -66,11 +68,11 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     return callOnRemoteMember(new FindSuccessorNodeCall(nodeAddress, id), false);
   }
 
-  public int size() {
+  public int size(String storageName, int clusterId) {
     return callOnRemoteMember(new SizeNodeCall(nodeAddress), false);
   }
 
-  public ORID[] findMissedRecords(ORecordMetadata[] recordMetadatas) {
+  public ORID[] findMissedRecords(String storageName, ORecordMetadata[] recordMetadatas) {
     return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeAddress, recordMetadatas), false);
   }
 
@@ -87,82 +89,82 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public Record createRecord(String data) {
+  public Record createRecord(String storageName, ORecord<?> record) {
     return callOnRemoteMember(new CreateNodeCall(nodeAddress, data), false);
   }
 
   @Override
-  public Record createRecord(ORID id, String data) {
-    return callOnRemoteMember(new CreateWithIdNodeCall(nodeAddress, id, data), false);
+  public ORecordInternal<?> createRecord(String storageName, ORecordInternal<?> record) {
+    return callOnRemoteMember(new CreateWithIdNodeCall(nodeAddress, id, record), false);
   }
 
   @Override
-  public Record readRecord(ORID id) {
+  public ORecordInternal<?> readRecord(String storageName, ORID id) {
     return callOnRemoteMember(new GetNodeCall(nodeAddress, id), false);
   }
 
   @Override
-  public void updateRecord(ORID id, Record record) {
+  public ORecordInternal<?> updateRecord(String storageName, ORecordInternal<?> record) {
     callOnRemoteMember(new UpdateNodeCall(nodeAddress, id, record), false);
   }
 
   @Override
-  public void deleteRecord(ORID id, ORecordVersion version) {
+  public void deleteRecord(String storageName, ORID id, ORecordVersion version) {
     callOnRemoteMember(new RemoveNodeCall(nodeAddress, id, version), false);
   }
 
   @Override
-  public void updateReplica(Record replica, boolean async) {
+  public void updateReplica(String storageName, ORecordInternal<?> replica, boolean async) {
     callOnRemoteMember(new UpdateReplicaNodeCall(nodeAddress, replica), async);
   }
 
   @Override
-  public void updateReplicas(Record[] replicas, boolean async) {
+  public void updateReplicas(String storageName, ORecordInternal<?>[] replicas, boolean async) {
     callOnRemoteMember(new UpdateReplicasNodeCall(nodeAddress, replicas), async);
   }
 
   @Override
-  public Record getRecordFromNode(ORID id) {
+  public ORecordInternal<?> getRecordFromNode(String storageName, ORID id) {
     return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeAddress, id), false);
   }
 
   @Override
-  public Record[] getRecordsFromNode(ORID[] ids) {
+  public ORecordInternal<?>[] getRecordsFromNode(String storageName, ORID[] ids) {
     return callOnRemoteMember(new GetRecordsFromNodeNodeCall(nodeAddress, ids), false);
   }
 
   @Override
-  public ORecordMetadata getRecordMetadataFromNode(ORID id) {
+  public ORecordMetadata getRecordMetadataFromNode(String storageName, ORID id) {
     return callOnRemoteMember(new GetRecordMetadataFromNodeNodeCall(nodeAddress, id), false);
   }
 
   @Override
-  public ORecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId) {
+  public ORecordMetadata[] getRecordsForIntervalFromNode(String storageName, ORID startId, ORID endId) {
     return callOnRemoteMember(new GetExistingRecordsForIntervalNodeCall(nodeAddress, startId, endId), false);
   }
 
   @Override
-  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode node) {
+  public ODetachedMerkleTreeNode findMerkleTreeNode(String storageName, ODetachedMerkleTreeNode node) {
     return callOnRemoteMember(new FindMerkleTreeNodeNodeCall(nodeAddress, node), false);
   }
 
   @Override
-  public Record createRecordInNode(ORID id, String data) {
+  public ORecordInternal<?> createRecordInNode(String storageName, ORecordInternal<?> recordInternal) {
     return callOnRemoteMember(new CreateWithIdInNodeNodeCall(nodeAddress, id, data), false);
   }
 
   @Override
-  public void updateRecordInNode(ORID id, Record record) {
+  public ORecordInternal<?> updateRecordInNode(String storageName, ORecordInternal<?> record) {
     callOnRemoteMember(new UpdateRecordInNodeCall(nodeAddress, id, record), false);
   }
 
   @Override
-  public void deleteRecordFromNode(ORID id, ORecordVersion version) {
+  public void deleteRecordFromNode(String storageName, ORID id, ORecordVersion version) {
     callOnRemoteMember(new RemoveRecordFromNodeNodeCall(nodeAddress, id, version), false);
   }
 
 	@Override
-	public Record readRecordFromNode(ORID id) {
+	public ORecordInternal<?> readRecordFromNode(String storageName, ORID id) {
 		return callOnRemoteMember(new ReadRecordFromNodeNodeCall(nodeAddress, id), false);
 	}
 
@@ -248,7 +250,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected ORID[] call(ODHTNode node) {
-      return node.findMissedRecords(recordMetadatas);
+      return node.findMissedRecords(null, recordMetadatas);
     }
 
     @Override
@@ -286,7 +288,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Void call(ODHTNode node) {
-      node.updateReplica(record, false);
+      node.updateReplica(null, record, false);
 
       return null;
     }
@@ -317,7 +319,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Void call(ODHTNode node) {
-      node.updateReplicas(records, false);
+      node.updateReplicas(null, records, false);
 
       return null;
     }
@@ -357,7 +359,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Void call(ODHTNode node) {
-      node.updateRecord(id, record);
+      node.updateRecord(null, record);
       return null;
     }
 
@@ -391,7 +393,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Void call(ODHTNode node) {
-      node.updateRecordInNode(id, record);
+      node.updateRecordInNode(null, record);
       return null;
     }
 
@@ -423,7 +425,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.createRecord(data);
+      return node.createRecord(null, null);
     }
 
     @Override
@@ -454,7 +456,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.createRecord(id, data);
+      return node.createRecord(null, data);
     }
 
     @Override
@@ -487,7 +489,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.createRecordInNode(id, data);
+      return node.createRecordInNode(null, null);
     }
 
     @Override
@@ -543,7 +545,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Integer call(ODHTNode node) {
-      return node.size();
+      return node.size(null, -1);
     }
   }
 
@@ -646,7 +648,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected ODetachedMerkleTreeNode call(ODHTNode node) {
-      return node.findMerkleTreeNode(merkleTreeNode);
+      return node.findMerkleTreeNode(null, merkleTreeNode);
     }
 
     @Override
@@ -704,7 +706,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.readRecord(id);
+      return node.readRecord(null, id);
     }
 
     @Override
@@ -736,7 +738,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected ORecordMetadata[] call(ODHTNode node) {
-      return node.getRecordsForIntervalFromNode(startId, endId);
+      return node.getRecordsForIntervalFromNode(null, startId, endId);
     }
 
     @Override
@@ -769,7 +771,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record call(ODHTNode node) {
-      return node.getRecordFromNode(id);
+      return node.getRecordFromNode(null, id);
     }
 
     @Override
@@ -798,7 +800,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
 		@Override
 		protected Record call(ODHTNode node) {
-			return node.readRecordFromNode(id);
+			return node.readRecordFromNode(null, id);
 		}
 
 		@Override
@@ -828,7 +830,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Record[] call(ODHTNode node) {
-      return node.getRecordsFromNode(ids);
+      return node.getRecordsFromNode(null, ids);
     }
 
     @Override
@@ -864,7 +866,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected ORecordMetadata call(ODHTNode node) {
-      return node.getRecordMetadataFromNode(id);
+      return node.getRecordMetadataFromNode(null, id);
     }
 
     @Override
@@ -895,7 +897,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Void call(ODHTNode node) {
-      node.deleteRecord(id, version);
+      node.deleteRecord(null, id, version);
       return null;
     }
 
@@ -929,7 +931,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
     @Override
     protected Void call(ODHTNode node) {
-      node.deleteRecordFromNode(id, version);
+      node.deleteRecordFromNode(null, id, version);
       return null;
     }
 

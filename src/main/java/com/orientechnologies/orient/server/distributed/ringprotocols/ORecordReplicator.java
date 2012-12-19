@@ -9,5 +9,5 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 21.11.12
  */
 public interface ORecordReplicator {
-  public void replicateRecord(ODHTNode node, ORID recordId, int replicaCount, int syncReplicaCount);
+  public void replicateRecord(ODHTNode node, String storageName, ORID recordId, int replicaCount, int syncReplicaCount);
 }

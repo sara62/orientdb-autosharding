@@ -15,13 +15,13 @@ import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ONodeOfflineException;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
-import com.orientechnologies.orient.server.distributed.Record;
 
 /**
  * @author Andrey Lomakin
@@ -39,8 +39,8 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
   }
 
   @Override
-  public ONodeId reallocateWrongPlacedReplicas(final ODHTNodeLocal nodeLocal, ONodeId idToTest, int replicaCount,
-      int syncReplicaCount) {
+  public ONodeId reallocateWrongPlacedReplicas(String storageName, int clusterId, final ODHTNodeLocal nodeLocal, ONodeId idToTest,
+      int replicaCount, int syncReplicaCount) {
     final ONodeAddress localNodeAddress = nodeLocal.getNodeAddress();
 
     final ODHTNode.NodeState nodeState = nodeLocal.state();
@@ -48,7 +48,7 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
     if (nodeState == null || !nodeState.equals(ODHTNode.NodeState.PRODUCTION))
       return localNodeAddress.getNodeId();
 
-    final ORID nextRecordId = nextInDB(nodeLocal, new ORecordId(1, new OClusterPositionNodeId(idToTest)));
+    final ORID nextRecordId = nextInDB(storageName, nodeLocal, new ORecordId(clusterId, new OClusterPositionNodeId(idToTest)));
     if (nextRecordId == null)
       return localNodeAddress.getNodeId();
 
@@ -79,9 +79,8 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
     nodesToReplicate.add(successor);
     nodesToReplicate.addAll(replicaHolderAddresses);
 
-    final Iterator<ORecordMetadata> iterator = nodeLocal
-        .getLocalRingIterator(new ORecordId(1, new OClusterPositionNodeId(idToTest)), new ORecordId(1, new OClusterPositionNodeId(
-            successor.getNodeId())));
+    final Iterator<ORecordMetadata> iterator = nodeLocal.getLocalRingIterator(storageName, new ORecordId(clusterId,
+						new OClusterPositionNodeId(idToTest)), new ORecordId(clusterId, new OClusterPositionNodeId(successor.getNodeId())));
 
     final List<ORecordMetadata> recordMetadatas = new ArrayList<ORecordMetadata>(64);
 
@@ -91,16 +90,16 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
       recordMetadatas.add(recordMetadata);
 
       if (recordMetadatas.size() >= 64)
-        cleanOutForeignRecords(nodeLocal, recordMetadatas, nodesToReplicate);
+        cleanOutForeignRecords(storageName, nodeLocal, recordMetadatas, nodesToReplicate);
     }
 
     if (!recordMetadatas.isEmpty())
-      cleanOutForeignRecords(nodeLocal, recordMetadatas, nodesToReplicate);
+      cleanOutForeignRecords(storageName, nodeLocal, recordMetadatas, nodesToReplicate);
 
     return successor.getNodeId();
   }
 
-  private void cleanOutForeignRecords(final ODHTNodeLocal nodeLocal, List<ORecordMetadata> recordMetadatas,
+  private void cleanOutForeignRecords(String storageName, final ODHTNodeLocal nodeLocal, List<ORecordMetadata> recordMetadatas,
       List<ONodeAddress> nodesToReplicate) {
     ORecordMetadata[] metadatas = new ORecordMetadata[recordMetadatas.size()];
     metadatas = recordMetadatas.toArray(metadatas);
@@ -112,12 +111,12 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
         continue;
 
       try {
-        final ORID[] missingIds = node.findMissedRecords(metadatas);
+        final ORID[] missingIds = node.findMissedRecords(storageName, metadatas);
 
         for (ORID missingId : missingIds) {
-          final Record replica = nodeLocal.readRecordLocal(missingId);
+          final ORecordInternal<?> replica = nodeLocal.readRecordLocal(storageName, missingId);
           if (replica != null)
-            node.updateReplica(replica, false);
+            node.updateReplica(storageName, replica, false);
         }
 
       } catch (ONodeOfflineException noe) {
@@ -127,28 +126,28 @@ public final class OGlobalMaintenanceProtocolImpl implements OGlobalMaintenanceP
 
     for (ORecordMetadata recordMetadata : metadatas) {
       try {
-        nodeLocal.cleanOutData(recordMetadata.getId(), recordMetadata.getVersion());
+        nodeLocal.cleanOutRecord(storageName, recordMetadata.getRid(), recordMetadata.getVersion());
       } catch (OConcurrentModificationException e) {
-        logger.error("Record with id {} and version {} is out of date and can not be cleaned out", recordMetadata.getId(),
+        logger.error("Record with id {} and version {} is out of date and can not be cleaned out", recordMetadata.getRid(),
             recordMetadata.getVersion());
       } catch (ORecordNotFoundException e) {
-        logger.error("Record with id {} is absent and can not be cleaned out", recordMetadata.getId());
+        logger.error("Record with id {} is absent and can not be cleaned out", recordMetadata.getRid());
       }
     }
 
     recordMetadatas.clear();
   }
 
-  private ORID nextInDB(final ODHTNodeLocal nodeLocal, ORID id) {
-    final Iterator<ORecordMetadata> ringIterator = nodeLocal.getLocalRingIterator(id.nextRid(), id);
+  private ORID nextInDB(String storageName, final ODHTNodeLocal nodeLocal, ORID id) {
+    final Iterator<ORecordMetadata> ringIterator = nodeLocal.getLocalRingIterator(storageName, id.nextRid(), id);
 
     if (ringIterator.hasNext()) {
       final ORecordMetadata result = ringIterator.next();
 
-      if (result.getId().equals(id))
+      if (result.getRid().equals(id))
         return null;
 
-      return result.getId();
+      return result.getRid();
     }
 
     return null;

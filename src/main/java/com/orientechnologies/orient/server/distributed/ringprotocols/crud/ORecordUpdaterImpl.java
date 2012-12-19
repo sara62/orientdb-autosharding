@@ -1,8 +1,8 @@
 package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
-import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.ringprotocols.ORecordReplicator;
 
 /**
@@ -17,13 +17,14 @@ public final class ORecordUpdaterImpl implements ORecordUpdater {
 	}
 
 	@Override
-	public Record updateRecord(ODHTNodeLocal localNode, Record record, int replicaCount, int syncReplicaCount) {
+	public ORecordInternal<?> updateRecord(String storageName, ODHTNodeLocal localNode,
+																				 ORecordInternal<?> record, int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
-		localNode.updateRecordLocal(record.getId(), record);
+		localNode.updateRecordLocal(storageName, record);
 
-		recordReplicator.replicateRecord(localNode, record.getId(), replicaCount, syncReplicaCount);
+		recordReplicator.replicateRecord(localNode, storageName, record.getIdentity(), replicaCount, syncReplicaCount);
 
-		return localNode.readRecordLocal(record.getId());
+		return localNode.readRecordLocal(storageName, record.getIdentity());
 	}
 }

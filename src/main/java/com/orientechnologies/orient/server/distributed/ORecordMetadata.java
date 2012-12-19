@@ -24,7 +24,7 @@ public final class ORecordMetadata implements Externalizable {
     this.version = version;
   }
 
-  public ORID getId() {
+  public ORID getRid() {
     return id;
   }
 

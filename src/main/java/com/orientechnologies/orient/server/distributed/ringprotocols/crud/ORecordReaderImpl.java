@@ -2,13 +2,13 @@ package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
 import java.util.Set;
 
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.util.OWaitTillNodeJoin;
 import com.orientechnologies.orient.server.distributed.ringprotocols.OReplicaDistributionStrategy;
 
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
-import com.orientechnologies.orient.server.distributed.Record;
 
 
 /**
@@ -34,7 +34,8 @@ public final class ORecordReaderImpl implements ORecordReader {
 	}
 
   @Override
-  public Record readRecord(ODHTNodeLocal nodeLocal, ORID recordId, int replicaCount, int syncReplicaCount) {
+  public ORecordInternal<?> readRecord(String storageName, ODHTNodeLocal nodeLocal, ORID recordId,
+																			 int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(nodeLocal);
 
 		final ONodeAddress[] successors = nodeLocal.getSuccessors();
@@ -46,14 +47,14 @@ public final class ORecordReaderImpl implements ORecordReader {
     final Set<ONodeAddress> asyncReplicas = replicas[1];
 
 		final ORecordMergeExecutionContext executionContext =
-						recordMergeStrategy.mergeReplicaVersions(nodeLocal, recordId, syncReplicas);
+						recordMergeStrategy.mergeReplicaVersions(storageName, nodeLocal, recordId, syncReplicas);
 
-    final Record result = nodeLocal.readRecordLocal(recordId);
+    final ORecordInternal<?> result = nodeLocal.readRecordLocal(storageName, recordId);
 
     if (!asyncReplicas.isEmpty())
 			readRepairExecutor.submit(recordId, asyncReplicas, nodeLocal, executionContext);
 
-		if (result.isTombstone())
+		if (result.getRecordVersion().isTombstone())
 			return null;
 
     return result;

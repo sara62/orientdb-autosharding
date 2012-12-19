@@ -2,6 +2,7 @@ package com.orientechnologies.orient.server.distributed.ringprotocols.crud;
 
 import java.util.Set;
 
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,7 +12,6 @@ import com.orientechnologies.orient.server.distributed.ODHTNodeLocal;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
-import com.orientechnologies.orient.server.distributed.Record;
 
 /**
  * @author Andrey Lomakin
@@ -27,23 +27,25 @@ public final class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
 	}
 
 	@Override
-	public ORecordMergeExecutionContext mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders) {
+	public ORecordMergeExecutionContext mergeReplicaVersions(String storageName, ODHTNodeLocal localNode,
+																													 ORID recordId, Set<ONodeAddress> replicaHolders) {
 		final ORecordMergeExecutionContext executionContext = new ORecordMergeExecutionContext();
 
 		executionContext.setPrimaryHolder(localNode);
-		executionContext.setPrimaryMetadata(localNode.getRecordMetadataFromNode(recordId));
+		executionContext.setPrimaryMetadata(localNode.getRecordMetadataFromNode(null, recordId));
 
-		mergeReplicaVersions(localNode, recordId, replicaHolders, executionContext);
+		mergeReplicaVersions(storageName, localNode, recordId, replicaHolders, executionContext);
 		return executionContext;
 	}
 
 	@Override
-	public void mergeReplicaVersions(ODHTNodeLocal localNode, ORID recordId, Set<ONodeAddress> replicaHolders,
+	public void mergeReplicaVersions(String storageName, ODHTNodeLocal localNode, ORID recordId,
+																	 Set<ONodeAddress> replicaHolders,
 																	 ORecordMergeExecutionContext executionContext) {
 		if (executionContext == null) {
 			executionContext = new ORecordMergeExecutionContext();
 			executionContext.setPrimaryHolder(localNode);
-			executionContext.setPrimaryMetadata(localNode.getRecordMetadataFromNode(recordId));
+			executionContext.setPrimaryMetadata(localNode.getRecordMetadataFromNode(null, recordId));
 		}
 
 		try {
@@ -53,7 +55,7 @@ public final class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
 					continue;
 
 				try {
-					final ORecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(recordId);
+					final ORecordMetadata nodeMetadata = holderNode.getRecordMetadataFromNode(null, recordId);
 					if (executionContext.getPrimaryMetadata() == null) {
 						if (nodeMetadata != null) {
 							executionContext.getReplicaHoldersToUpdate().add(executionContext.getPrimaryHolder().getNodeAddress());
@@ -88,12 +90,12 @@ public final class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
 			}
 
 			if (!executionContext.getReplicaHoldersToUpdate().isEmpty()) {
-				final Record result;
+				final ORecordInternal<?> result;
 
 				if (localNode.getNodeAddress().equals(executionContext.getPrimaryHolder().getNodeAddress()))
-					result = localNode.readRecordLocal(recordId);
+					result = localNode.readRecordLocal(storageName, recordId);
 				else
-					result = executionContext.getPrimaryHolder().getRecordFromNode(recordId);
+					result = executionContext.getPrimaryHolder().getRecordFromNode(storageName, recordId);
 
 				if (result == null)
 					return;
@@ -103,7 +105,7 @@ public final class ORecordMergeStrategyImpl implements ORecordMergeStrategy {
 					if (replicaHolder == null)
 						continue;
 					try {
-						replicaHolder.updateReplica(result, false);
+						replicaHolder.updateReplica(storageName, result, false);
 					} catch (Exception e) {
 						LOGGER.error(
 										"Exception during replication of record with id " + recordId + " for node " + replicaHolder.getNodeAddress(), e);

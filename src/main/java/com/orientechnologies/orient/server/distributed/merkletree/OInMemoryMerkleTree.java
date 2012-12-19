@@ -20,9 +20,8 @@ import com.orientechnologies.orient.server.distributed.Record;
 public final class OInMemoryMerkleTree implements OMerkleTree {
   private final int                             clusterId;
   private final OMerkleTreeNode[]               roots;
-  private final NavigableMap<ORID, Record> db;
 
-  public OInMemoryMerkleTree(final NavigableMap<ORID, Record> db, final int clusterId) {
+  public OInMemoryMerkleTree(final int clusterId) {
     this.db = db;
     this.clusterId = clusterId;
 

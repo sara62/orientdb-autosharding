@@ -38,7 +38,8 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
   }
 
   @Override
-  public void synchronizeReplicasBetweenHolders(final ODHTNodeLocal localDHTNode, int replicaCount, int syncReplicaCount) {
+  public void synchronizeReplicasBetweenHolders(final ODHTNodeLocal localDHTNode, String storageName, int clusterId,
+																								int replicaCount, int syncReplicaCount) {
     OWaitTillNodeJoin.waitTillNodeJoin(localDHTNode);
 
     final ONodeAddress localPredecessor = localDHTNode.getPredecessor();
@@ -58,9 +59,10 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
         final ONodeId startId = localPredecessor.getNodeId().add(ONodeId.ONE);
         final ONodeId endId = localDHTNode.getNodeAddress().getNodeId();
 
-        final List<ODetachedMerkleTreeNode> roots = getRootsForInterval(localDHTNode.getLocalMerkleTree(), startId, endId);
+        final List<ODetachedMerkleTreeNode> roots =
+								getRootsForInterval(localDHTNode.getLocalMerkleTree(storageName, clusterId), startId, endId);
         for (final ODetachedMerkleTreeNode rootNode : roots)
-          synchronizeNode(localDHTNode, rootNode, replicaHolderAddress);
+          synchronizeNode(localDHTNode, storageName, rootNode, replicaHolderAddress);
       } catch (Exception e) {
         logger.error("Error during replication of content to node " + replicaHolderAddress, e);
       }
@@ -88,14 +90,16 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
     return result;
   }
 
-  private void synchronizeNode(final ODHTNodeLocal localDHTNode, final ODetachedMerkleTreeNode localTreeNode,
-      final ONodeAddress remoteNodeAddress) {
+  private void synchronizeNode(final ODHTNodeLocal localDHTNode,
+															 String storageName,
+															 final ODetachedMerkleTreeNode localTreeNode,
+															 final ONodeAddress remoteNodeAddress) {
     final ODHTNode remoteNode = nodeLookup.findById(remoteNodeAddress);
 
     if (remoteNode == null)
       throw new OLocalProtocolException("Node with id " + remoteNodeAddress + " is absent.");
 
-    final ODetachedMerkleTreeNode remoteTreeNode = remoteNode.findMerkleTreeNode(localTreeNode);
+    final ODetachedMerkleTreeNode remoteTreeNode = remoteNode.findMerkleTreeNode(null, localTreeNode);
 
     if (remoteTreeNode == null)
       throw new OLocalProtocolException("Related remote Merkle tree node is null.");
@@ -108,14 +112,15 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
       return;
 
     for (OLocalMaintenanceProtocolNodeComparator nodeComparator : nodeComparators)
-      nodeComparator.compareNodes(localDHTNode, localTreeNode, remoteTreeNode, remoteNodeAddress);
+      nodeComparator.compareNodes(storageName, localDHTNode, localTreeNode, remoteTreeNode, remoteNodeAddress);
 
     final ODHTRingInterval nodeInterval = new ODHTRingInterval(localPredecessor.getNodeId().add(ONodeId.ONE), localDHTNode
         .getNodeAddress().getNodeId());
 
     if (!localTreeNode.isLeaf() && !remoteTreeNode.isLeaf()) {
       for (int i = 0; i < 64; i++) {
-        final ODetachedMerkleTreeNode childTreeNode = localDHTNode.getLocalMerkleTree().getChildNode(localTreeNode, i);
+        final ODetachedMerkleTreeNode childTreeNode =
+								localDHTNode.getLocalMerkleTree(storageName, localTreeNode.getClusterId()).getChildNode(localTreeNode, i);
         if (childTreeNode == null)
           throw new OLocalProtocolException("Children of Merklee tree node were removed.");
 
@@ -126,7 +131,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
 
         if (nodeInterval.intersection(treeNodeInterval) != null) {
           if (!Arrays.equals(childTreeNode.getHash(), remoteTreeNode.getChildHash(i)))
-            synchronizeNode(localDHTNode, childTreeNode, remoteNodeAddress);
+            synchronizeNode(localDHTNode, storageName, childTreeNode, remoteNodeAddress);
         }
       }
     }

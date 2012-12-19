@@ -10,17 +10,19 @@ import com.orientechnologies.orient.server.distributed.ODHTNode;
  * @since 21.11.12
  */
 public final class ODistributedRecordDelete implements ODistributedRecordOperation<Void> {
-  private final ORID         recordId;
+  private final ORID           recordId;
   private final ORecordVersion version;
+	private final String         storageName;
 
-  public ODistributedRecordDelete(ORID recordId, ORecordVersion version) {
-    this.recordId = recordId;
+  public ODistributedRecordDelete(String storageName, ORID recordId, ORecordVersion version) {
+		this.storageName = storageName;
+		this.recordId = recordId;
     this.version = version;
   }
 
   @Override
   public Void execute(ODHTNode node) {
-    node.deleteRecordFromNode(recordId, version);
+    node.deleteRecordFromNode(storageName, recordId, version);
 
     return null;
   }

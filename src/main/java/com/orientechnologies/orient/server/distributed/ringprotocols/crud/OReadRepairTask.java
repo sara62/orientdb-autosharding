@@ -6,14 +6,7 @@ import com.orientechnologies.orient.server.distributed.ONodeAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author Andrey Lomakin
@@ -41,7 +34,7 @@ final class OReadRepairTask implements Runnable {
 	@Override
 	public void run() {
 		try {
-			recordMergeStrategy.mergeReplicaVersions(localNode, recordId, replicaHolders, executionContext);
+			recordMergeStrategy.mergeReplicaVersions(storageName, localNode, recordId, replicaHolders, executionContext);
 		} catch (Exception e) {
 			logger.error("Exception during read repair for record " + recordId, e);
 		}

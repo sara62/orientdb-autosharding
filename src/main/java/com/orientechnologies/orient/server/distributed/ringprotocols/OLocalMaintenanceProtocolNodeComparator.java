@@ -9,7 +9,7 @@ import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkl
  * @since 30.11.12
  */
 public interface OLocalMaintenanceProtocolNodeComparator {
-	public void compareNodes(ODHTNodeLocal localDHTNode,
+	public void compareNodes(String storageName, ODHTNodeLocal localDHTNode,
 													 ODetachedMerkleTreeNode localTreeNode, ODetachedMerkleTreeNode remoteNode,
 													 ONodeAddress remoteNodeAddress);
 }

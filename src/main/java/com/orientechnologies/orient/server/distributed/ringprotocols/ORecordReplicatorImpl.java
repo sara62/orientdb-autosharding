@@ -2,6 +2,7 @@ package com.orientechnologies.orient.server.distributed.ringprotocols;
 
 import java.util.Set;
 
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +28,7 @@ public final class ORecordReplicatorImpl implements ORecordReplicator {
   }
 
   @Override
-  public void replicateRecord(ODHTNode node, ORID recordId, int replicaCount, int syncReplicaCount) {
+  public void replicateRecord(ODHTNode node, String storageName, ORID recordId, int replicaCount, int syncReplicaCount) {
     if (replicaCount < 1)
       return;
 
@@ -39,7 +40,7 @@ public final class ORecordReplicatorImpl implements ORecordReplicator {
     final Set<ONodeAddress> syncReplicas = replicas[0];
     final Set<ONodeAddress> asyncReplicas = replicas[1];
 
-    final Record record = node.getRecordFromNode(recordId);
+    final ORecordInternal<?> record = node.getRecordFromNode(storageName, recordId);
 
     if (record == null)
       return;
@@ -51,7 +52,7 @@ public final class ORecordReplicatorImpl implements ORecordReplicator {
         continue;
       }
 
-      replicateRecord(replicaHolderNode, record, false);
+      replicateRecord(replicaHolderNode, storageName, record, false);
     }
 
     for (ONodeAddress asyncReplicaHolderAddress : asyncReplicas) {
@@ -61,17 +62,17 @@ public final class ORecordReplicatorImpl implements ORecordReplicator {
         continue;
       }
 
-      replicateRecord(replicaHolderNode, record, true);
+      replicateRecord(replicaHolderNode, storageName, record, true);
     }
   }
 
-  private void replicateRecord(ODHTNode replicaHolderNode, Record record, boolean async) {
+  private void replicateRecord(ODHTNode replicaHolderNode, String storageName, ORecordInternal<?> record, boolean async) {
     try {
-      replicaHolderNode.updateReplica(record, async);
+      replicaHolderNode.updateReplica(storageName, record, async);
     } catch (Exception e) {
       LOGGER
-          .error("Exception during replication of record " + record.getId() + " to node " + replicaHolderNode.getNodeAddress(), e);
-      // ignore
+          .error("Exception during replication of record " +
+									record.getIdentity() + " to node " + replicaHolderNode.getNodeAddress(), e);
     }
   }
 }

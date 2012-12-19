@@ -19,9 +19,15 @@ public final class OLocalMaintenanceProtocolRunnable implements Runnable {
 
 	private final OLocalMaintenanceProtocol localMaintenanceProtocol;
 
-	public OLocalMaintenanceProtocolRunnable(ODHTNodeLocal localDHTNode, int replicaCount, int syncReplicaCount,
+	private final String storageName;
+	private final int    clusterId;
+
+	public OLocalMaintenanceProtocolRunnable(ODHTNodeLocal localDHTNode, String storageName, int clusterId,
+																					 int replicaCount, int syncReplicaCount,
 																					 OLocalMaintenanceProtocol localMaintenanceProtocol) {
 		this.localDHTNode = localDHTNode;
+		this.storageName = storageName;
+		this.clusterId = clusterId;
 		this.replicaCount = replicaCount;
 		this.syncReplicaCount = syncReplicaCount;
 		this.localMaintenanceProtocol = localMaintenanceProtocol;
@@ -30,7 +36,7 @@ public final class OLocalMaintenanceProtocolRunnable implements Runnable {
 	@Override
 	public void run() {
 		try {
-			localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localDHTNode, replicaCount, syncReplicaCount);
+			localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localDHTNode, storageName, clusterId, replicaCount, syncReplicaCount);
 		} catch (Exception e) {
 			LOGGER.error("Error during execution of local maintenance protocol.", e);
 		}

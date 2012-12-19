@@ -4,12 +4,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.NavigableMap;
 import java.util.Set;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
+import com.orientechnologies.orient.core.db.ODatabase;
+import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,8 +47,6 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
                                                                                  ONodeId.NODE_SIZE_BITS - 1);
   private AtomicReference<ONodeAddress>                predecessor           = new AtomicReference<ONodeAddress>();
 
-  private final NavigableMap<ORID, Record>             db                    = new ConcurrentSkipListMap<ORID, Record>();
-
   private final ODHTNodeLookup                         nodeLookup;
 
   private int                                          nextIndex             = 0;
@@ -59,7 +58,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
   private volatile NodeState                           state;
 
-  private final OMerkleTree                            merkleTree            = new OInMemoryMerkleTree(db, 1);
+  private final OMerkleTree                            merkleTree            = new OInMemoryMerkleTree(1);
 
   private final int                                    replicaCount;
 	private final int 																	 syncReplicaCount;
@@ -70,8 +69,11 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   private final ORecordUpdater                         recordUpdater;
   private final ORecordDeleter                         recordDeleter;
   private final ORecordReader                          recordReader;
+	private final ODHTDatabaseLookup                     databaseLookup;
 
-  public OLocalDHTNode(ONodeAddress nodeAddress, ODHTNodeLookup nodeLookup,
+  public OLocalDHTNode(ONodeAddress nodeAddress,
+											 ODHTNodeLookup nodeLookup,
+											 ODHTDatabaseLookup databaseLookup,
 											 ODistributedCoordinatorFactory distributedCoordinatorFactory,
 											 ORingProtocolsFactory ringProtocolsFactory,
 											 int replicaCount, int syncReplicaCount) {
@@ -81,6 +83,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     this.replicaCount = replicaCount;
     this.nodeLookup = nodeLookup;
 		this.syncReplicaCount = syncReplicaCount;
+		this.databaseLookup = databaseLookup;
 
 		this.operationCoordinator = distributedCoordinatorFactory.createOperationCoordinator(nodeLookup);
 
@@ -90,8 +93,8 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     this.recordDeleter = ringProtocolsFactory.createRecordDeleter(nodeLookup, replicaCount, syncReplicaCount);
   }
 
-  public NavigableMap<ORID, Record> getDb() {
-    return db;
+  public ODatabase getDb(String storageName) {
+    return databaseLookup.openDatabase(storageName);
   }
 
   public void createDHT() {
@@ -310,84 +313,86 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     return predecessor.get();
   }
 
-  public Record createRecord(String data) {
-    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordCreation(data, null));
+  public ORecordInternal<?> crateRecord(String storageName, ORecordInternal<?> record) {
+    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordCreation(storageName, record));
   }
 
-  public Record createRecord(ORID recordId, String data) {
-    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordCreation(data, recordId));
+  public ORecordInternal<?> createRecord(String storageName, ORecordInternal<?> record) {
+    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordCreation(storageName, record));
   }
 
-  public Record readRecord(ORID recordId) {
-    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordRead(recordId));
+  public ORecordInternal<?> readRecord(String storageName, ORID recordId) {
+    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordRead(storageName, recordId));
   }
 
-  public void updateRecord(ORID recordId, Record record) {
-    operationCoordinator.executeRecordOperation(this, new ODistributedRecordUpdate(record));
+  public ORecordInternal<?> updateRecord(String storageName, ORecordInternal<?> record) {
+    return operationCoordinator.executeRecordOperation(this, new ODistributedRecordUpdate(storageName, record));
   }
 
-  public void deleteRecord(ORID recordId, ORecordVersion version) {
-    operationCoordinator.executeRecordOperation(this, new ODistributedRecordDelete(recordId, version));
-  }
-
-  @Override
-  public Record createRecordInNode(ORID recordId, String data) {
-    return recordCreator.createRecord(this, recordId, data, replicaCount, syncReplicaCount);
+  public void deleteRecord(String storageName, ORID recordId, ORecordVersion version) {
+    operationCoordinator.executeRecordOperation(this, new ODistributedRecordDelete(storageName, recordId, version));
   }
 
   @Override
-  public void updateRecordInNode(ORID recordId, Record record) {
-    recordUpdater.updateRecord(this, record, replicaCount, syncReplicaCount);
+  public ORecordInternal<?> createRecordInNode(String storageName, ORecordInternal<?> record) {
+    return recordCreator.createRecord(storageName, this, record, replicaCount, syncReplicaCount);
   }
 
   @Override
-  public void deleteRecordFromNode(ORID recordId, ORecordVersion version) {
-    recordDeleter.deleteRecord(this, recordId, version, replicaCount, syncReplicaCount);
-  }
-
-  public Record readRecordFromNode(ORID recordId) {
-    return recordReader.readRecord(this, recordId, replicaCount, syncReplicaCount);
-  }
-
-  public Record getRecordFromNode(ORID recordId) {
-    return readRecordLocal(recordId);
+  public ORecordInternal<?> updateRecordInNode(String storageName, ORecordInternal<?> record) {
+    return recordUpdater.updateRecord(storageName, this, record, replicaCount, syncReplicaCount);
   }
 
   @Override
-  public Record[] getRecordsFromNode(ORID[] ids) {
-    final ArrayList<Record> records = new ArrayList<Record>();
+  public void deleteRecordFromNode(String storageName, ORID recordId, ORecordVersion version) {
+    recordDeleter.deleteRecord(storageName, this, recordId, version, replicaCount, syncReplicaCount);
+  }
+
+  public ORecordInternal<?> readRecordFromNode(String storageName, ORID recordId) {
+    return recordReader.readRecord(storageName, this, recordId, replicaCount, syncReplicaCount);
+  }
+
+  public ORecordInternal<?> getRecordFromNode(String storageName, ORID recordId) {
+    return readRecordLocal(storageName, recordId);
+  }
+
+  @Override
+  public ORecordInternal<?>[] getRecordsFromNode(String storageName, ORID[] ids) {
+    final ArrayList<ORecordInternal<?>> records = new ArrayList<ORecordInternal<?>>();
     for (ORID id : ids) {
-      final Record record = getRecordFromNode(id);
+      final ORecordInternal<?> record = getRecordFromNode(storageName, id);
       if (record != null)
         records.add(record);
     }
 
-    Record[] recordsArray = new Record[records.size()];
+    ORecordInternal[] recordsArray = new ORecordInternal[records.size()];
     recordsArray = records.toArray(recordsArray);
 
     return recordsArray;
   }
 
   @Override
-  public ORecordMetadata getRecordMetadataFromNode(ORID id) {
-    final Record record = readRecordLocal(id);
+  public ORecordMetadata getRecordMetadataFromNode(String storageName, ORID id) {
+    final ORecordInternal record = readRecordLocal(storageName, id);
     if (record == null)
       return null;
 
-    return new ORecordMetadata(record.getId(), record.getVersion());
+    return new ORecordMetadata(record.getIdentity(), record.getRecordVersion());
   }
 
-  public ORID[] findMissedRecords(ORecordMetadata[] recordMetadatas) {
+  public ORID[] findMissedRecords(String storageName, ORecordMetadata[] recordMetadatas) {
     ArrayList<ORID> result = new ArrayList<ORID>();
 
+    final ODatabaseRecord db = databaseLookup.openDatabase(storageName);
+
     for (ORecordMetadata recordMetadata : recordMetadatas) {
-      final Record record = db.get(recordMetadata.getId());
+      final ORecordInternal<?> record = db.getRecord(recordMetadata.getRid());
 
       if (record == null)
-        result.add(recordMetadata.getId());
+        result.add(recordMetadata.getRid());
 
-      else if (recordMetadata.getVersion().compareTo(record.getVersion()) > 0)
-        result.add(recordMetadata.getId());
+      else if (recordMetadata.getVersion().compareTo(record.getRecordVersion()) > 0)
+        result.add(recordMetadata.getRid());
     }
 
     ORID[] missedRecords = new ORID[result.size()];
@@ -398,17 +403,17 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public void updateReplicas(Record[] replicas, boolean async) {
-    for (Record replica : replicas)
-      updateReplica(replica, async);
+  public void updateReplicas(String storageName, ORecordInternal<?>[] replicas, boolean async) {
+    for (ORecordInternal<?> replica : replicas)
+      updateReplica(storageName, replica, async);
   }
 
-  public void updateReplica(final Record replica, final boolean async) {
-    putReplica(replica.getId(), replica);
+  public void updateReplica(String storageName, final ORecordInternal<?> replica, final boolean async) {
+    putReplica(replica.getIdentity(), replica);
   }
 
   @Override
-  public ORecordMetadata[] getRecordsForIntervalFromNode(ORID startId, ORID endId) {
+  public ORecordMetadata[] getRecordsForIntervalFromNode(String storageName, ORID startId, ORID endId) {
     final List<ORecordMetadata> recordMetadatas = new ArrayList<ORecordMetadata>();
 
     int processedRecords = 0;
@@ -432,27 +437,27 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public Record addRecordLocal(ORID id, String data) {
+  public ORecordInternal<?> addRecordLocal(String storageName, ORecordInternal<?> recordInternal) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
-      return this.merkleTree.addData(id, data);
+      return this.merkleTree.addData(id, recordInternal);
     } finally {
       lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     }
   }
 
   @Override
-  public void updateRecordLocal(ORID id, Record record) {
+  public void updateRecordLocal(String storageName, ORecordInternal<?> recordInternal) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
-      this.merkleTree.updateData(id, record.getVersion(), record.getData());
+      this.merkleTree.updateData(id, recordInternal.getVersion(), recordInternal.getData());
     } finally {
       lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     }
   }
 
   @Override
-  public Record readRecordLocal(ORID dataId) {
+  public ORecordInternal<?> readRecordLocal(String storageName, ORID dataId) {
     Record data;
     lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
     try {
@@ -463,7 +468,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     return data;
   }
 
-  private void putReplica(ORID id, Record replica) {
+  private void putReplica(ORID id, ORecordInternal<?> replica) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.SHARED);
     try {
       this.merkleTree.updateReplica(id, replica);
@@ -473,7 +478,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public void removeRecordLocal(ORID id, ORecordVersion version) {
+  public void removeRecordLocal(String storageName, ORID id, ORecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version);
@@ -483,11 +488,11 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public OMerkleTree getLocalMerkleTree() {
+  public OMerkleTree getLocalMerkleTree(String storageName, int clusterId) {
     return merkleTree;
   }
 
-  public void cleanOutData(ORID id, ORecordVersion version) {
+  public void cleanOutRecord(String storageName, ORID id, ORecordVersion version) {
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
       merkleTree.deleteData(id, version, false);
@@ -497,11 +502,11 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public ODatabaseRingIterator getLocalRingIterator(ORID startRid, ORID endId) {
+  public ODatabaseRingIterator getLocalRingIterator(String storageName, ORID startRid, ORID endId) {
     return new ODatabaseRingIterator(db, startRid, endId);
   }
 
-  public int size() {
+  public int size(String storageName, int clusterId) {
     int count = 0;
 
     for (Record record : db.values()) {
@@ -818,7 +823,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public ODetachedMerkleTreeNode findMerkleTreeNode(ODetachedMerkleTreeNode remoteNode) {
+  public ODetachedMerkleTreeNode findMerkleTreeNode(String storageName, ODetachedMerkleTreeNode remoteNode) {
     final ODetachedMerkleTreeNode localNode = merkleTree.getEquivalentNode(remoteNode);
     if (localNode == null)
       return null;

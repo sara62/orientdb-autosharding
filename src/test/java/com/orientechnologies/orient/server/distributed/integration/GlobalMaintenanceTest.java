@@ -64,7 +64,7 @@ public class GlobalMaintenanceTest {
     int predecessorOneRecords = getOwnRecordsCount(localPredecessorOne);
     int predecessorTwoRecords = getOwnRecordsCount(localPredecessorTwo);
 
-    Assert.assertEquals(localDHTNode.getDb().size(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
+    Assert.assertEquals(localDHTNode.getDb(null).size(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
   }
 
   private void checkDataRedistribution(ServerInstance serverInstance) throws Exception {
@@ -83,9 +83,9 @@ public class GlobalMaintenanceTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
+      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb(null);
+      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb(null);
 
       ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
@@ -94,8 +94,8 @@ public class GlobalMaintenanceTest {
       while (ringIterator.hasNext()) {
         final ORecordMetadata recordMetadata = ringIterator.next();
 
-        Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getId()));
-        Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getId()));
+        Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getRid()));
+        Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getRid()));
       }
 
       dhtNode = serverInstance.findById(dhtNode.getSuccessor());
@@ -121,10 +121,10 @@ public class GlobalMaintenanceTest {
       final ODHTNode thirdSuccessor = serverInstance.findById(secondSuccessor.getSuccessor());
       final OLocalDHTNode localThirdSuccessor = getLocalNode(thirdSuccessor);
 
-      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb();
-      final NavigableMap<ORID, Record> thirdSuccessorDb = localThirdSuccessor.getDb();
+      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
+      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb(null);
+      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb(null);
+      final NavigableMap<ORID, Record> thirdSuccessorDb = localThirdSuccessor.getDb(null);
 
       ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
@@ -133,10 +133,10 @@ public class GlobalMaintenanceTest {
       while (ringIterator.hasNext()) {
         final ORecordMetadata recordMetadata = ringIterator.next();
 
-        Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getId()));
-        Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getId()));
+        Assert.assertTrue(firstSuccessorDb.containsKey(recordMetadata.getRid()));
+        Assert.assertTrue(secondSuccessorDb.containsKey(recordMetadata.getRid()));
 
-        Assert.assertFalse(thirdSuccessorDb.containsKey(recordMetadata.getId()));
+        Assert.assertFalse(thirdSuccessorDb.containsKey(recordMetadata.getRid()));
       }
 
       dhtNode = serverInstance.findById(dhtNode.getSuccessor());
@@ -154,7 +154,7 @@ public class GlobalMaintenanceTest {
   }
 
   private int getOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb();
+    final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
 
     ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
         .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()

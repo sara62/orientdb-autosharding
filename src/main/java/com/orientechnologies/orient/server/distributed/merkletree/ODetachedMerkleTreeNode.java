@@ -17,6 +17,7 @@ public final class ODetachedMerkleTreeNode implements Externalizable {
   private byte[]           hash;
   private ONodeId          startId;
   private ONodeId          endId;
+	private int              clusterId;
 
   private ORecordMetadata[] recordMetadata;
   private byte[][]         childrenHash;
@@ -26,12 +27,15 @@ public final class ODetachedMerkleTreeNode implements Externalizable {
   public ODetachedMerkleTreeNode() {
   }
 
-  public ODetachedMerkleTreeNode(byte[] hash, ONodeId startId, ONodeId endId, ORecordMetadata[] recordMetadata,
-      byte[][] childrenHash, int[] path) {
+  public ODetachedMerkleTreeNode(byte[] hash, ONodeId startId, ONodeId endId, int clusterId,
+																 ORecordMetadata[] recordMetadata,
+																 byte[][] childrenHash, int[] path) {
     this.hash = hash;
 
     this.startId = startId;
     this.endId = endId;
+
+		this.clusterId = clusterId;
 
     this.recordMetadata = recordMetadata;
     this.childrenHash = childrenHash;
@@ -79,15 +83,33 @@ public final class ODetachedMerkleTreeNode implements Externalizable {
     return recordMetadata != null;
   }
 
-  @Override
-  public String toString() {
-    return "ODetachedMerkleTreeNode{" + "hash=" + Arrays.toString(hash) + ", startId=" + startId + ", endId=" + endId
-        + ", recordMetadata=" + (recordMetadata == null ? null : Arrays.asList(recordMetadata)) + ", childrenHash="
-        + (childrenHash == null ? null : Arrays.asList(childrenHash)) + ", path=" + Arrays.toString(path) + '}';
-  }
+	public int getClusterId() {
+		return clusterId;
+	}
 
-  @Override
+	@Override
+	public String toString() {
+		final StringBuilder sb = new StringBuilder();
+		sb.append("ODetachedMerkleTreeNode");
+		sb.append("{hash=").append(hash == null ? "null" : "");
+		for (int i = 0; hash != null && i < hash.length; ++i)
+			sb.append(i == 0 ? "" : ", ").append(Arrays.toString(hash));
+		sb.append(", startId=").append(startId);
+		sb.append(", endId=").append(endId);
+		sb.append(", clusterId=").append(clusterId);
+		sb.append(", recordMetadata=").append(recordMetadata == null ? "null" : Arrays.asList(recordMetadata).toString());
+		sb.append(", childrenHash=").append(childrenHash == null ? "null" : Arrays.asList(childrenHash).toString());
+		sb.append(", path=").append(path == null ? "null" : "");
+		for (int i = 0; path != null && i < path.length; ++i)
+			sb.append(i == 0 ? "" : ", ").append(Arrays.toString(path));
+		sb.append('}');
+		return sb.toString();
+	}
+
+	@Override
   public void writeExternal(ObjectOutput out) throws IOException {
+		out.writeInt(clusterId);
+
     out.writeInt(hash.length);
     out.write(hash);
 
@@ -119,6 +141,8 @@ public final class ODetachedMerkleTreeNode implements Externalizable {
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+		clusterId = in.readInt();
+
     int hashLength = in.readInt();
     hash = new byte[hashLength];
 

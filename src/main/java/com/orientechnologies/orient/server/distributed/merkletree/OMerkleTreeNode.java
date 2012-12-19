@@ -31,8 +31,6 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
   public static final int                       KEY_SIZE               = ONodeId.NODE_SIZE_BYTES;
   public static final int                       LEAF_BUFFER_ENTRY_SIZE = KEY_SIZE +	ODistributedVersion.STREAMED_SIZE;
 
-  private final NavigableMap<ORID, Record> db;
-
   private int                                   count;
   private OMerkleTreeNode[]                     children;
 

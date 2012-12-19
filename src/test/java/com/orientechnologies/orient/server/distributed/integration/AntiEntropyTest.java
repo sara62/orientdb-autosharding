@@ -66,7 +66,7 @@ public class AntiEntropyTest {
     int predecessorOneRecords = gerOwnRecordsCount(localPredecessorOne);
     int predecessorTwoRecords = gerOwnRecordsCount(localPredecessorTwo);
 
-    Assert.assertEquals(localDHTNode.getDb().size(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
+    Assert.assertEquals(localDHTNode.getDb(null).size(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
   }
 
   public void testDataSynchronizationAfterRemove() throws Exception {
@@ -186,9 +186,9 @@ public class AntiEntropyTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb();
-      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb();
-      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb();
+      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
+      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb(null);
+      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb(null);
 
       ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
@@ -197,14 +197,14 @@ public class AntiEntropyTest {
       while (ringIterator.hasNext()) {
         final ORecordMetadata recordMetadata = ringIterator.next();
 
-        while (!firstSuccessorDb.containsKey(recordMetadata.getId())) {
-          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + firstSuccessor.getNodeAddress()
+        while (!firstSuccessorDb.containsKey(recordMetadata.getRid())) {
+          System.out.println("Wait for record " + recordMetadata.getRid() + " for node " + firstSuccessor.getNodeAddress()
               + " owner " + dhtNode.getNodeAddress());
           Thread.sleep(1000);
         }
 
-        while (!secondSuccessorDb.containsKey(recordMetadata.getId())) {
-          System.out.println("Wait for record " + recordMetadata.getId() + " for node " + secondSuccessor.getNodeAddress()
+        while (!secondSuccessorDb.containsKey(recordMetadata.getRid())) {
+          System.out.println("Wait for record " + recordMetadata.getRid() + " for node " + secondSuccessor.getNodeAddress()
               + " owner " + dhtNode.getNodeAddress());
           Thread.sleep(1000);
         }
@@ -225,7 +225,7 @@ public class AntiEntropyTest {
   }
 
   private int gerOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb();
+    final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
 
     ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
         .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()

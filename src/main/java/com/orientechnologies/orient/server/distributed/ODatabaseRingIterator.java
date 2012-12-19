@@ -3,26 +3,28 @@ package com.orientechnologies.orient.server.distributed;
 import java.util.Iterator;
 import java.util.NavigableMap;
 
+import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 
 /**
  * @author Andrey Lomakin
  * @since 12.10.12
  */
 public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
-  private final NavigableMap<ORID, Record> db;
+  private final ODatabaseRecord                 db;
   private final ORID 														start;
   private final ORID                            end;
 
-  private Iterator<Record>                      currentIterator;
+  private Iterator<ORecordInternal<?>>          currentIterator;
 
   private ORID                                  currentIntervalStart;
   private ORID                                  currentIntervalEnd;
 
-  public ODatabaseRingIterator(NavigableMap<ORID, Record> db, ORID start, ORID end) {
+  public ODatabaseRingIterator(ODatabaseRecord db, ORID start, ORID end) {
     this.db = db;
     this.start = start;
     this.end = end;
@@ -35,7 +37,7 @@ public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
       currentIntervalEnd = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.MAX_VALUE));
     }
 
-    currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
+    currentIterator = db.browseCluster().subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
   }
 
   @Override

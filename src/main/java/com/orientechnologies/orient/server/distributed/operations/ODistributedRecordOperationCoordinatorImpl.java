@@ -36,7 +36,7 @@ public final class ODistributedRecordOperationCoordinatorImpl implements ODistri
     while (true) {
       retryCount++;
 
-      if (recordOperation.getClusterPosition() == null) {
+      if (!recordOperation.getClusterPosition().isValid()) {
         recordOperation.setRecordId(new ORecordId(recordOperation.getClusterId(), new OClusterPositionNodeId(ONodeId
             .generateUniqueId())));
       }

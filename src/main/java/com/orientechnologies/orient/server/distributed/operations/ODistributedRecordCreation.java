@@ -2,7 +2,7 @@ package com.orientechnologies.orient.server.distributed.operations;
 
 import com.orientechnologies.orient.core.id.OClusterPosition;
 import com.orientechnologies.orient.core.id.ORID;
-import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -10,34 +10,31 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @author Andrey Lomakin
  * @since 21.11.12
  */
-public final class ODistributedRecordCreation implements ODistributedRecordOperation<Record> {
-  private final String data;
-  private ORID         recordId;
+public final class ODistributedRecordCreation implements ODistributedRecordOperation<ORecordInternal<?>> {
+  private final ORecordInternal<?> recordInternal;
+	private final String storageName;
 
-  public ODistributedRecordCreation(String data, ORID recordId) {
-    this.data = data;
-    this.recordId = recordId;
+  public ODistributedRecordCreation(String storageName, ORecordInternal<?> recordInternal) {
+    this.recordInternal = recordInternal;
+		this.storageName = storageName;
   }
 
   @Override
   public OClusterPosition getClusterPosition() {
-    if (recordId == null)
-      return null;
-
-    return recordId.getClusterPosition();
+    return recordInternal.getIdentity().getClusterPosition();
   }
 
   @Override
   public int getClusterId() {
-    return 1;
+    return recordInternal.getIdentity().getClusterId();
   }
 
   public void setRecordId(ORID recordId) {
-    this.recordId = recordId;
+    recordInternal.setIdentity(recordId.getClusterId(), recordId.getClusterPosition());
   }
 
   @Override
-  public Record execute(ODHTNode node) {
-    return node.createRecordInNode(recordId, data);
+  public ORecordInternal<?> execute(ODHTNode node) {
+    return node.createRecordInNode(storageName, recordInternal);
   }
 }

@@ -64,7 +64,7 @@ public class MerkleTreeTest {
         ORecordMetadata metadataOne = nodeOne.getRecordMetadata(i);
         ORecordMetadata metadataTwo = nodeTwo.getRecordMetadata(i);
 
-        Assert.assertEquals(metadataOne.getId(), metadataTwo.getId());
+        Assert.assertEquals(metadataOne.getRid(), metadataTwo.getRid());
         Assert.assertEquals(metadataOne.getVersion(), metadataTwo.getVersion());
       }
     } else {

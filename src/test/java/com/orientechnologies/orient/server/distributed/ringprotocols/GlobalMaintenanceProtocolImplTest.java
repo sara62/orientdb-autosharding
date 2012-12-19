@@ -17,11 +17,9 @@ import java.util.Set;
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
 import com.orientechnologies.orient.core.version.ODistributedVersion;
-import com.orientechnologies.orient.core.version.ORecordVersion;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.testng.Assert;
-import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
@@ -73,7 +71,7 @@ public class GlobalMaintenanceProtocolImplTest {
     when(nodeLocal.state()).thenReturn(null);
     when(nodeLocal.getNodeAddress()).thenReturn(nodeAddressStub);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
@@ -93,7 +91,7 @@ public class GlobalMaintenanceProtocolImplTest {
     when(nodeLocal.state()).thenReturn(ODHTNode.NodeState.JOIN);
     when(nodeLocal.getNodeAddress()).thenReturn(nodeAddressStub);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
@@ -117,16 +115,16 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(false);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
     verify(nodeLocal).state();
     verify(nodeLocal).getNodeAddress();
-    verify(nodeLocal).getLocalRingIterator(startRecordId.nextRid(), startRecordId);
+    verify(nodeLocal).getLocalRingIterator(null, startRecordId.nextRid(), startRecordId);
 
     verifyZeroInteractions(replicaDistributionStrategy, nodeLookup);
     verifyNoMoreInteractions(nodeLocal);
@@ -145,17 +143,17 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(startRecordId, new ODistributedVersion(0)));
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
     verify(nodeLocal).state();
     verify(nodeLocal).getNodeAddress();
-    verify(nodeLocal).getLocalRingIterator(startRecordId.nextRid(), startRecordId);
+    verify(nodeLocal).getLocalRingIterator(null, startRecordId.nextRid(), startRecordId);
 
     verifyZeroInteractions(replicaDistributionStrategy, nodeLookup);
     verifyNoMoreInteractions(nodeLocal);
@@ -175,20 +173,20 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
     when(nodeLocal.findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId())).thenReturn(
         new ONodeAddressStub(nodeId));
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
     verify(nodeLocal).state();
     verify(nodeLocal).getNodeAddress();
-    verify(nodeLocal).getLocalRingIterator(startRecordId.nextRid(), startRecordId);
+    verify(nodeLocal).getLocalRingIterator(null, startRecordId.nextRid(), startRecordId);
     verify(nodeLocal).findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId());
 
     verifyZeroInteractions(replicaDistributionStrategy, nodeLookup);
@@ -210,7 +208,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -219,13 +217,13 @@ public class GlobalMaintenanceProtocolImplTest {
 
     when(nodeLookup.findById(new ONodeAddressStub(successorNodeId))).thenReturn(null);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
     verify(nodeLocal).state();
     verify(nodeLocal).getNodeAddress();
-    verify(nodeLocal).getLocalRingIterator(startRecordId.nextRid(), startRecordId);
+    verify(nodeLocal).getLocalRingIterator(null, startRecordId.nextRid(), startRecordId);
     verify(nodeLocal).findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId());
     verify(nodeLookup).findById(new ONodeAddressStub(successorNodeId));
 
@@ -249,7 +247,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -268,13 +266,13 @@ public class GlobalMaintenanceProtocolImplTest {
         new Set[] { new HashSet<ONodeAddress>(Arrays.asList(recordSuccessors[0])),
             new HashSet<ONodeAddress>(Arrays.asList(recordSuccessors[1])) });
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
     verify(nodeLocal).state();
     verify(nodeLocal).getNodeAddress();
-    verify(nodeLocal).getLocalRingIterator(startRecordId.nextRid(), startRecordId);
+    verify(nodeLocal).getLocalRingIterator(null, startRecordId.nextRid(), startRecordId);
     verify(nodeLocal).findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId());
     verify(nodeLookup).findById(new ONodeAddressStub(successorNodeId));
 
@@ -298,7 +296,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -317,13 +315,13 @@ public class GlobalMaintenanceProtocolImplTest {
         new Set[] { new HashSet<ONodeAddress>(Arrays.asList(recordSuccessors[1])),
             new HashSet<ONodeAddress>(Arrays.asList(recordSuccessors[0])) });
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 1, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 1, 1);
 
     Assert.assertEquals(result, nodeId);
 
     verify(nodeLocal).state();
     verify(nodeLocal).getNodeAddress();
-    verify(nodeLocal).getLocalRingIterator(startRecordId.nextRid(), startRecordId);
+    verify(nodeLocal).getLocalRingIterator(null, startRecordId.nextRid(), startRecordId);
     verify(nodeLocal).findSuccessor(((OClusterPositionNodeId) nextRecordId.getClusterPosition()).getNodeId());
     verify(nodeLookup).findById(new ONodeAddressStub(successorNodeId));
 
@@ -347,7 +345,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -377,7 +375,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -388,25 +386,25 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[10];
     for (int i = 0; i < 10; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(successorNode.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
 
     for (Record missedRecord : missedRecords)
-      when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+      when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
     for (Record record : missedRecords) {
-      verify(successorNode).updateReplica(record, false);
-      verify(firstReplicaHolder).updateReplica(record, false);
-      verify(secondReplicaHolder).updateReplica(record, false);
+      verify(successorNode).updateReplica(null, record, false);
+      verify(firstReplicaHolder).updateReplica(null, record, false);
+      verify(secondReplicaHolder).updateReplica(null, record, false);
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 
@@ -425,7 +423,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -455,7 +453,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -466,25 +464,25 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[64];
     for (int i = 0; i < 64; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(successorNode.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
 
     for (Record missedRecord : missedRecords)
-      when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+      when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
     for (Record record : missedRecords) {
-      verify(successorNode).updateReplica(record, false);
-      verify(firstReplicaHolder).updateReplica(record, false);
-      verify(secondReplicaHolder).updateReplica(record, false);
+      verify(successorNode).updateReplica(null, record, false);
+      verify(firstReplicaHolder).updateReplica(null, record, false);
+      verify(secondReplicaHolder).updateReplica(null, record, false);
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 
@@ -503,7 +501,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -533,7 +531,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -544,35 +542,35 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[66];
     for (int i = 0; i < missedIDs.length; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.subList(0, 64).toArray(new ORecordMetadata[0]))).thenReturn(
+    when(successorNode.findMissedRecords(null, missedMetadata.subList(0, 64).toArray(new ORecordMetadata[0]))).thenReturn(
         Arrays.copyOf(missedIDs, 64));
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.subList(0, 64).toArray(new ORecordMetadata[0]))).thenReturn(
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.subList(0, 64).toArray(new ORecordMetadata[0]))).thenReturn(
 						Arrays.copyOf(missedIDs, 64));
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.subList(0, 64).toArray(new ORecordMetadata[0]))).thenReturn(
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.subList(0, 64).toArray(new ORecordMetadata[0]))).thenReturn(
         Arrays.copyOf(missedIDs, 64));
 
-    when(successorNode.findMissedRecords(missedMetadata.subList(64, 66).toArray(new ORecordMetadata[0]))).thenReturn(
+    when(successorNode.findMissedRecords(null, missedMetadata.subList(64, 66).toArray(new ORecordMetadata[0]))).thenReturn(
         Arrays.copyOfRange(missedIDs, 64, 66));
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.subList(64, 66).toArray(new ORecordMetadata[0]))).thenReturn(
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.subList(64, 66).toArray(new ORecordMetadata[0]))).thenReturn(
 						Arrays.copyOfRange(missedIDs, 64, 66));
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.subList(64, 66).toArray(new ORecordMetadata[0]))).thenReturn(
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.subList(64, 66).toArray(new ORecordMetadata[0]))).thenReturn(
         Arrays.copyOfRange(missedIDs, 64, 66));
 
     for (Record missedRecord : missedRecords)
-      when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+      when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
     for (Record record : missedRecords) {
-      verify(successorNode).updateReplica(record, false);
-      verify(firstReplicaHolder).updateReplica(record, false);
-      verify(secondReplicaHolder).updateReplica(record, false);
+      verify(successorNode).updateReplica(null, record, false);
+      verify(firstReplicaHolder).updateReplica(null, record, false);
+      verify(secondReplicaHolder).updateReplica(null, record, false);
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 
@@ -591,7 +589,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -621,7 +619,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -632,24 +630,24 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[10];
     for (int i = 0; i < 10; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(successorNode.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
 
     for (Record missedRecord : missedRecords)
-      when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+      when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
     for (Record record : missedRecords) {
-      verify(successorNode).updateReplica(record, false);
-      verify(secondReplicaHolder).updateReplica(record, false);
+      verify(successorNode).updateReplica(null, record, false);
+      verify(secondReplicaHolder).updateReplica(null, record, false);
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 
@@ -668,7 +666,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -698,7 +696,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -709,25 +707,25 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[10];
     for (int i = 0; i < 10; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenThrow(
+    when(successorNode.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenThrow(
 						new ONodeOfflineException("", null, recordSuccessors[0].getNodeId()));
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
 
     for (Record missedRecord : missedRecords)
-      when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+      when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
     for (Record record : missedRecords) {
-      verify(successorNode).updateReplica(record, false);
-      verify(secondReplicaHolder).updateReplica(record, false);
+      verify(successorNode).updateReplica(null, record, false);
+      verify(secondReplicaHolder).updateReplica(null, record, false);
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 
@@ -746,7 +744,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -776,7 +774,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -787,35 +785,35 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[10];
     for (int i = 0; i < 10; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(successorNode.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
 
     for (Record missedRecord : missedRecords)
-      when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+      when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
 
     final Record outOfDateRecordOne = missedRecords.get(2);
     final Record outOfDateRecordTwo = missedRecords.get(3);
 
     doThrow(new OConcurrentModificationException(outOfDateRecordOne.getId(),
 						new ODistributedVersion(0), outOfDateRecordOne.getVersion(), 0)).when(
-						nodeLocal).cleanOutData(outOfDateRecordOne.getId(), outOfDateRecordOne.getVersion());
+						nodeLocal).cleanOutRecord(null, outOfDateRecordOne.getId(), outOfDateRecordOne.getVersion());
     doThrow(new OConcurrentModificationException(outOfDateRecordTwo.getId(),
 						new ODistributedVersion(0), outOfDateRecordTwo.getVersion(), 0)).when(
-						nodeLocal).cleanOutData(outOfDateRecordTwo.getId(), outOfDateRecordTwo.getVersion());
+						nodeLocal).cleanOutRecord(null, outOfDateRecordTwo.getId(), outOfDateRecordTwo.getVersion());
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
     for (Record record : missedRecords) {
-      verify(successorNode).updateReplica(record, false);
-      verify(firstReplicaHolder).updateReplica(record, false);
-      verify(secondReplicaHolder).updateReplica(record, false);
+      verify(successorNode).updateReplica(null, record, false);
+      verify(firstReplicaHolder).updateReplica(null, record, false);
+      verify(secondReplicaHolder).updateReplica(null, record, false);
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 
@@ -834,7 +832,7 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final Iterator<ORecordMetadata> metadataIterator = mock(Iterator.class);
 
-    when(nodeLocal.getLocalRingIterator(startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
+    when(nodeLocal.getLocalRingIterator(null, startRecordId.nextRid(), startRecordId)).thenReturn(metadataIterator);
     when(metadataIterator.hasNext()).thenReturn(true);
     when(metadataIterator.next()).thenReturn(new ORecordMetadata(nextRecordId, new ODistributedVersion(0)));
 
@@ -864,7 +862,7 @@ public class GlobalMaintenanceProtocolImplTest {
       missedMetadata.add(new ORecordMetadata(missedRid, missedRecord.getVersion()));
     }
 
-    when(nodeLocal.getLocalRingIterator(startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
+    when(nodeLocal.getLocalRingIterator(null, startRecordId, new ORecordId(1, new OClusterPositionNodeId(successorNodeId)))).thenReturn(
         missedMetadata.iterator());
 
     final ODHTNode firstReplicaHolder = mock(ODHTNode.class);
@@ -875,25 +873,25 @@ public class GlobalMaintenanceProtocolImplTest {
 
     final ORID[] missedIDs = new ORID[10];
     for (int i = 0; i < 10; i++)
-      missedIDs[i] = missedMetadata.get(i).getId();
+      missedIDs[i] = missedMetadata.get(i).getRid();
 
-    when(successorNode.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(firstReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
-    when(secondReplicaHolder.findMissedRecords(missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(successorNode.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(firstReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
+    when(secondReplicaHolder.findMissedRecords(null, missedMetadata.toArray(new ORecordMetadata[0]))).thenReturn(missedIDs);
 
     for (int i = 0; i < 10; i++) {
       final Record missedRecord = missedRecords.get(i);
 
       if (i != 1 && i != 2)
-        when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(missedRecord);
+        when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(missedRecord);
       else {
-				when(nodeLocal.readRecordLocal(missedRecord.getId())).thenReturn(null);
+				when(nodeLocal.readRecordLocal(null, missedRecord.getId())).thenReturn(null);
 				doThrow(new  ORecordNotFoundException("")).
-								when(nodeLocal).cleanOutData(missedRecord.getId(), missedRecord.getVersion());
+								when(nodeLocal).cleanOutRecord(null, missedRecord.getId(), missedRecord.getVersion());
 			}
     }
 
-    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToStart, 2, 1);
+    final ONodeId result = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToStart, 2, 1);
 
     Assert.assertEquals(result, successorNodeId);
 
@@ -901,12 +899,12 @@ public class GlobalMaintenanceProtocolImplTest {
 			final Record record = missedRecords.get(i);
 
 			if (i != 1 && i != 2) {
-				verify(successorNode).updateReplica(record, false);
-				verify(firstReplicaHolder).updateReplica(record, false);
-				verify(secondReplicaHolder).updateReplica(record, false);
+				verify(successorNode).updateReplica(null, record, false);
+				verify(firstReplicaHolder).updateReplica(null, record, false);
+				verify(secondReplicaHolder).updateReplica(null, record, false);
 			}
 
-      verify(nodeLocal).cleanOutData(record.getId(), record.getVersion());
+      verify(nodeLocal).cleanOutRecord(null, record.getId(), record.getVersion());
     }
   }
 

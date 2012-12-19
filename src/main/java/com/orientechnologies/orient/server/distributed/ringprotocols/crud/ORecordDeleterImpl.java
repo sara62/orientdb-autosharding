@@ -19,10 +19,11 @@ public final class ORecordDeleterImpl implements ORecordDeleter {
   }
 
   @Override
-  public void deleteRecord(ODHTNodeLocal localNode, ORID recordId, ORecordVersion version, int replicaCount, int syncReplicaCount) {
+  public void deleteRecord(String storageName, ODHTNodeLocal localNode, ORID recordId, ORecordVersion version,
+													 int replicaCount, int syncReplicaCount) {
 		OWaitTillNodeJoin.waitTillNodeJoin(localNode);
 
-    localNode.removeRecordLocal(recordId, version);
-    recordReplicator.replicateRecord(localNode, recordId, replicaCount, syncReplicaCount);
+    localNode.removeRecordLocal(storageName, recordId, version);
+    recordReplicator.replicateRecord(localNode, storageName, recordId, replicaCount, syncReplicaCount);
   }
 }

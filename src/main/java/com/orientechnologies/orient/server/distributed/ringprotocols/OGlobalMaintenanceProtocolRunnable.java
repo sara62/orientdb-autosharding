@@ -18,11 +18,17 @@ public final class OGlobalMaintenanceProtocolRunnable implements Runnable {
 	private final ODHTNodeLocal nodeLocal;
 	private final int replicaCount;
 	private final int syncReplicaCount;
+	private final String storageName;
+	private final int    clusterId;
 
 	private ONodeId idToTest;
 
-	public OGlobalMaintenanceProtocolRunnable(OGlobalMaintenanceProtocol globalMaintenanceProtocol, ODHTNodeLocal nodeLocal, int replicaCount, int syncReplicaCount) {
+	public OGlobalMaintenanceProtocolRunnable(OGlobalMaintenanceProtocol globalMaintenanceProtocol,
+																						int clusterId, String storageName, ODHTNodeLocal nodeLocal,
+																						int replicaCount, int syncReplicaCount) {
 		this.globalMaintenanceProtocol = globalMaintenanceProtocol;
+		this.clusterId = clusterId;
+		this.storageName = storageName;
 		this.nodeLocal = nodeLocal;
 		this.replicaCount = replicaCount;
 		this.syncReplicaCount = syncReplicaCount;
@@ -32,7 +38,7 @@ public final class OGlobalMaintenanceProtocolRunnable implements Runnable {
 	@Override
 	public void run() {
 		try{
-			idToTest = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(nodeLocal, idToTest,
+			idToTest = globalMaintenanceProtocol.reallocateWrongPlacedReplicas(storageName, clusterId, nodeLocal, idToTest,
 							replicaCount, syncReplicaCount);
 		} catch (Exception e) {
 			LOGGER.error("Error during global maintenance protocol execution.", e);
