@@ -8,7 +8,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
-import com.orientechnologies.orient.core.db.ODatabase;
 import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
@@ -58,7 +57,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
   private volatile NodeState                           state;
 
-  private final OMerkleTree                            merkleTree            = new OInMemoryMerkleTree(1);
+  private final OMerkleTree                            merkleTree;
 
   private final int                                    replicaCount;
 	private final int 																	 syncReplicaCount;
@@ -91,9 +90,11 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     this.recordUpdater = ringProtocolsFactory.createRecordUpdater(nodeLookup, replicaCount, syncReplicaCount);
     this.recordReader = ringProtocolsFactory.createRecordReader(nodeLookup, replicaCount, syncReplicaCount);
     this.recordDeleter = ringProtocolsFactory.createRecordDeleter(nodeLookup, replicaCount, syncReplicaCount);
+
+    this.merkleTree = new OInMemoryMerkleTree(databaseLookup, 1);
   }
 
-  public ODatabase getDb(String storageName) {
+  public ODatabaseRecord getDb(String storageName) {
     return databaseLookup.openDatabase(storageName);
   }
 
@@ -418,7 +419,7 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
     int processedRecords = 0;
 
-    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(db, startId, endId);
+    final ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(databaseLookup.openDatabase(storageName), startId, endId);
     while (ringIterator.hasNext()) {
       final ORecordMetadata recordMetadata = ringIterator.next();
       if (recordMetadata != null)
@@ -437,20 +438,22 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
   }
 
   @Override
-  public ORecordInternal<?> addRecordLocal(String storageName, ORecordInternal<?> recordInternal) {
+  public ORecordInternal<?> addRecordLocal(String storageName, ORecordInternal<?> record) {
+    final ORID id = record.getIdentity();
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
-      return this.merkleTree.addData(id, recordInternal);
+      return this.merkleTree.addData(id, record);
     } finally {
       lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     }
   }
 
   @Override
-  public void updateRecordLocal(String storageName, ORecordInternal<?> recordInternal) {
+  public void updateRecordLocal(String storageName, ORecordInternal<?> record) {
+    final ORID id = record.getIdentity();
     lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     try {
-      this.merkleTree.updateData(id, recordInternal.getVersion(), recordInternal.getData());
+      this.merkleTree.updateData(id, record.getRecordVersion(), record);
     } finally {
       lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
     }
@@ -458,10 +461,10 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
   @Override
   public ORecordInternal<?> readRecordLocal(String storageName, ORID dataId) {
-    Record data;
+    ORecordInternal<?> data;
     lockManager.acquireLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
     try {
-      data = db.get(dataId);
+      data = databaseLookup.openDatabase(storageName).getRecord(dataId);
     } finally {
       lockManager.releaseLock(Thread.currentThread(), dataId, OLockManager.LOCK.SHARED);
     }
@@ -503,14 +506,16 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
 
   @Override
   public ODatabaseRingIterator getLocalRingIterator(String storageName, ORID startRid, ORID endId) {
-    return new ODatabaseRingIterator(db, startRid, endId);
+    return new ODatabaseRingIterator(databaseLookup.openDatabase(storageName), startRid, endId);
   }
 
   public int size(String storageName, int clusterId) {
     int count = 0;
 
-    for (Record record : db.values()) {
-      if (!record.isTombstone())
+    final ODatabaseRecord db = databaseLookup.openDatabase(storageName);
+    final String clusterName = db.getClusterNameById(clusterId);
+    for (ORecordInternal<?> record : db.browseCluster(clusterName)) {
+      if (!record.getRecordVersion().isTombstone())
         count++;
     }
 

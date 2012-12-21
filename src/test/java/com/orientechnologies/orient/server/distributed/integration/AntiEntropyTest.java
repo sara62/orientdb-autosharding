@@ -2,21 +2,19 @@ package com.orientechnologies.orient.server.distributed.integration;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NavigableMap;
 import java.util.Random;
 
+import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODatabaseRingIterator;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
-import com.orientechnologies.orient.server.distributed.Record;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastDHTNodeProxy;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -42,7 +40,7 @@ public class AntiEntropyTest {
     System.out.println("[stat] Start data filling.");
 
     for (int i = 0; i < 100000; i++) {
-      serverInstance.create("data" + i);
+      serverInstance.create(record, storageName);
     }
 
     System.out.println("[stat] Data were added.");
@@ -91,7 +89,7 @@ public class AntiEntropyTest {
     System.out.println("[stat] Start data filling.");
 
     for (int i = 0; i < 100000; i++) {
-      serverInstance.create("data" + i);
+      serverInstance.create(record, storageName);
     }
 
     System.out.println("[stat] Data were added.");
@@ -135,7 +133,7 @@ public class AntiEntropyTest {
     System.out.println("[stat] Start data filling.");
 
     for (int i = 0; i < 100000; i++) {
-      serverInstance.create("data" + i);
+      serverInstance.create(record, storageName);
     }
 
     System.out.println("[stat] Data were added.");
@@ -186,9 +184,9 @@ public class AntiEntropyTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
-      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb(null);
-      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb(null);
+      final ODatabaseRecord nodeDb = localDHTNode.getDb(null);
+      final ODatabaseRecord firstSuccessorDb = localFirstSuccessor.getDb(null);
+      final ODatabaseRecord secondSuccessorDb = localSecondSuccessor.getDb(null);
 
       ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
@@ -197,13 +195,15 @@ public class AntiEntropyTest {
       while (ringIterator.hasNext()) {
         final ORecordMetadata recordMetadata = ringIterator.next();
 
-        while (!firstSuccessorDb.containsKey(recordMetadata.getRid())) {
+        //TODO exist record
+        while (firstSuccessorDb.getRecord(recordMetadata.getRid()) == null) {
           System.out.println("Wait for record " + recordMetadata.getRid() + " for node " + firstSuccessor.getNodeAddress()
               + " owner " + dhtNode.getNodeAddress());
           Thread.sleep(1000);
         }
 
-        while (!secondSuccessorDb.containsKey(recordMetadata.getRid())) {
+        //TODO exist record
+        while (secondSuccessorDb.getRecord(recordMetadata.getRid()) == null) {
           System.out.println("Wait for record " + recordMetadata.getRid() + " for node " + secondSuccessor.getNodeAddress()
               + " owner " + dhtNode.getNodeAddress());
           Thread.sleep(1000);
@@ -225,7 +225,7 @@ public class AntiEntropyTest {
   }
 
   private int gerOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
+    final ODatabaseRecord nodeDb = localDHTNode.getDb(null);
 
     ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
         .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()

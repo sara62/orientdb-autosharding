@@ -15,15 +15,17 @@ import java.util.Set;
 final class OReadRepairTask implements Runnable {
 	private static final Logger logger = LoggerFactory.getLogger(OReadRepairTask.class);
 
+  private final String storageName;
 	private final ORID recordId;
 	private final Set<ONodeAddress> replicaHolders;
 	private final ODHTNodeLocal localNode;
 	private final ORecordMergeStrategy recordMergeStrategy;
 	private final ORecordMergeExecutionContext executionContext;
 
-	OReadRepairTask(ORID recordId, Set<ONodeAddress> replicaHolders,
+	OReadRepairTask(String storageName, ORID recordId, Set<ONodeAddress> replicaHolders,
 									ODHTNodeLocal localNode, ORecordMergeStrategy recordMergeStrategy,
 									ORecordMergeExecutionContext executionContext) {
+    this.storageName = storageName;
 		this.recordId = recordId;
 		this.replicaHolders = replicaHolders;
 		this.localNode = localNode;

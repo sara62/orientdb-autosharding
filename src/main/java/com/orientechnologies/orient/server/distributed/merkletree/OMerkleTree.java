@@ -4,23 +4,23 @@ import java.util.List;
 
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
-import com.orientechnologies.orient.server.distributed.Record;
 
 /**
  * @author Andrey Lomakin
  * @since 13.09.12
  */
 public interface OMerkleTree {
-  public Record addData(final ORID id, final String data);
+  public ORecordInternal<?> addData(final ORID id, final ORecordInternal<?> data);
 
   public void deleteData(final ORID id, final ORecordVersion version);
 
   public void deleteData(final ORID id, final ORecordVersion version, boolean softDelete);
 
-  public void updateData(final ORID id, final ORecordVersion version, final String data);
+  public void updateData(final ORID id, final ORecordVersion version, final ORecordInternal<?> data);
 
-  public void updateReplica(final ORID id, final Record replica);
+  public void updateReplica(final ORID id, final ORecordInternal<?> replica);
 
   public ODetachedMerkleTreeNode getRootNode(int index);
 

@@ -1,19 +1,16 @@
 package com.orientechnologies.orient.server.distributed.integration;
 
-import java.util.NavigableMap;
-
+import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODatabaseRingIterator;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
-import com.orientechnologies.orient.server.distributed.Record;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
-import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastDHTNodeProxy;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -40,7 +37,7 @@ public class GlobalMaintenanceTest {
     System.out.println("[stat] Start data filling.");
 
     for (int i = 0; i < 100000; i++) {
-      serverInstance.create("data" + i);
+      serverInstance.create(record, storageName);
     }
 
     System.out.println("[stat] Data were added.");
@@ -83,9 +80,9 @@ public class GlobalMaintenanceTest {
       final ODHTNode secondSuccessor = serverInstance.findById(firstSuccessor.getSuccessor());
       final OLocalDHTNode localSecondSuccessor = getLocalNode(secondSuccessor);
 
-      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
-      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb(null);
-      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb(null);
+      final ODatabaseRecord nodeDb = localDHTNode.getDb(null);
+      final ODatabaseRecord firstSuccessorDb = localFirstSuccessor.getDb(null);
+      final ODatabaseRecord secondSuccessorDb = localSecondSuccessor.getDb(null);
 
       ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
@@ -121,10 +118,10 @@ public class GlobalMaintenanceTest {
       final ODHTNode thirdSuccessor = serverInstance.findById(secondSuccessor.getSuccessor());
       final OLocalDHTNode localThirdSuccessor = getLocalNode(thirdSuccessor);
 
-      final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
-      final NavigableMap<ORID, Record> firstSuccessorDb = localFirstSuccessor.getDb(null);
-      final NavigableMap<ORID, Record> secondSuccessorDb = localSecondSuccessor.getDb(null);
-      final NavigableMap<ORID, Record> thirdSuccessorDb = localThirdSuccessor.getDb(null);
+      final ODatabaseRecord nodeDb = localDHTNode.getDb(null);
+      final ODatabaseRecord firstSuccessorDb = localFirstSuccessor.getDb(null);
+      final ODatabaseRecord secondSuccessorDb = localSecondSuccessor.getDb(null);
+      final ODatabaseRecord thirdSuccessorDb = localThirdSuccessor.getDb(null);
 
       ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
           .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
@@ -154,7 +151,7 @@ public class GlobalMaintenanceTest {
   }
 
   private int getOwnRecordsCount(OLocalDHTNode localDHTNode) {
-    final NavigableMap<ORID, Record> nodeDb = localDHTNode.getDb(null);
+    final ODatabaseRecord nodeDb = localDHTNode.getDb(null);
 
     ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
         .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()

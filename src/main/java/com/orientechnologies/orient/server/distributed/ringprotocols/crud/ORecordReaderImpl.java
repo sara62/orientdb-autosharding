@@ -52,7 +52,7 @@ public final class ORecordReaderImpl implements ORecordReader {
     final ORecordInternal<?> result = nodeLocal.readRecordLocal(storageName, recordId);
 
     if (!asyncReplicas.isEmpty())
-			readRepairExecutor.submit(recordId, asyncReplicas, nodeLocal, executionContext);
+			readRepairExecutor.submit(storageName, recordId, asyncReplicas, nodeLocal, executionContext);
 
 		if (result.getRecordVersion().isTombstone())
 			return null;

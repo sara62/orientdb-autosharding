@@ -24,8 +24,8 @@ public final class OGlobalMaintenanceProtocolRunnable implements Runnable {
 	private ONodeId idToTest;
 
 	public OGlobalMaintenanceProtocolRunnable(OGlobalMaintenanceProtocol globalMaintenanceProtocol,
-																						int clusterId, String storageName, ODHTNodeLocal nodeLocal,
-																						int replicaCount, int syncReplicaCount) {
+                                            String storageName, int clusterId, ODHTNodeLocal nodeLocal,
+                                            int replicaCount, int syncReplicaCount) {
 		this.globalMaintenanceProtocol = globalMaintenanceProtocol;
 		this.clusterId = clusterId;
 		this.storageName = storageName;

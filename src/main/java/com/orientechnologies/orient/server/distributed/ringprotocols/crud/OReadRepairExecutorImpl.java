@@ -31,9 +31,9 @@ public final class OReadRepairExecutorImpl implements OReadRepairExecutor {
 	}
 
 	@Override
-	public void submit(ORID recordId, Set<ONodeAddress> replicaHolders, ODHTNodeLocal localNode,
-										 ORecordMergeExecutionContext executionContext) {
-		readRepairService.submit(new OReadRepairTask(recordId, replicaHolders, localNode, recordMergeStrategy,
+	public void submit(String storageName, ORID recordId, Set<ONodeAddress> replicaHolders, ODHTNodeLocal localNode,
+                     ORecordMergeExecutionContext executionContext) {
+		readRepairService.submit(new OReadRepairTask(storageName, recordId, replicaHolders, localNode, recordMergeStrategy,
 						executionContext));
 	}
 

@@ -140,8 +140,8 @@ public class DHTConcurrencyTest {
     long start = System.currentTimeMillis();
     for (Map.Entry<ORID, Record> entry : data.entrySet()) {
 
-      serverInstance.get(entry.getKey());
-      Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
+      serverInstance.get(storageName, entry.getKey());
+      Assert.assertEquals(serverInstance.get(storageName, entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
       i++;
 
       if (i % 10000 == 0) {
@@ -219,7 +219,7 @@ public class DHTConcurrencyTest {
                 Record record = data.get(key);
 
                 if (record != null) {
-                  record = serverInstance.get(key);
+                  record = serverInstance.get(storageName, key);
 
                   Assert.assertNotNull(record);
 
@@ -231,7 +231,7 @@ public class DHTConcurrencyTest {
 											if (e.getCause() instanceof ExecutionException && e.getCause().getCause() instanceof ORecordNotFoundException) {
 												System.out.println("[stat] Reread data in deleter for record with id " + key);
 
-												record = serverInstance.get(key);
+												record = serverInstance.get(storageName, key);
 
 												Assert.assertNotNull(record);
 											} else
@@ -281,7 +281,7 @@ public class DHTConcurrencyTest {
           id = new ORecordId(1, new OClusterPositionNodeId(ONodeId.generateUniqueId()));
           lockManager.acquireLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
           try {
-            final Record record = serverInstance.create(id, String.valueOf(id));
+            final Record record = serverInstance.create(storageName, record);
             data.put(id, record);
           } finally {
             lockManager.releaseLock(Thread.currentThread(), id, OLockManager.LOCK.EXCLUSIVE);
@@ -319,7 +319,7 @@ public class DHTConcurrencyTest {
             lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
             try {
               if (data.containsKey(entry.getKey()))
-                Assert.assertEquals(serverInstance.get(entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
+                Assert.assertEquals(serverInstance.get(storageName, entry.getKey()), entry.getValue(), "Key " + entry.getKey() + " is absent");
               i++;
               if (i % 10000 == 0)
                 System.out.println(Thread.currentThread().getName() + " " + i + " items were processed");

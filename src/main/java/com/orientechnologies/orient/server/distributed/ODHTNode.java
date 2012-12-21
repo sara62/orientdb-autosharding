@@ -36,7 +36,7 @@ public interface ODHTNode {
   public ORecordInternal<?> getRecordFromNode(String storageName, ORID id);
   public ORecordInternal<?>[] getRecordsFromNode(String storageName, ORID[] ids);
 
-  public ORecordInternal<?> createRecordInNode(String storageName, ORecordInternal<?> recordInternal);
+  public ORecordInternal<?> createRecordInNode(String storageName, ORecordInternal<?> record);
   public ORecordInternal<?> updateRecordInNode(String storageName, ORecordInternal<?> record);
   public void deleteRecordFromNode(String storageName, ORID id, ORecordVersion version);
   public ORecordInternal<?> readRecordFromNode(String storageName, ORID id);

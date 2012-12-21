@@ -322,7 +322,7 @@ public class DHTModificationTest {
                 if (data.containsKey(id))
                   continue kCycle;
 
-                final Record record = si.create(id, String.valueOf(id));
+                final Record record = si.create(storageName, record);
                 data.put(id, record);
               } catch (Exception e) {
                 if (!si.isRunning())
@@ -377,7 +377,7 @@ public class DHTModificationTest {
               lockManager.acquireLock(Thread.currentThread(), entry.getKey(), OLockManager.LOCK.SHARED);
               try {
                 if (data.containsKey(entry.getKey()))
-                  Assert.assertEquals(si.get(entry.getKey()), entry.getValue());
+                  Assert.assertEquals(si.get(storageName, entry.getKey()), entry.getValue());
 
                 i++;
                 if (i % 10000 == 0)

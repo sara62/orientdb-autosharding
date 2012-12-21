@@ -11,6 +11,6 @@ import java.util.Set;
  * @since 05.12.12
  */
 public interface OReadRepairExecutor {
-	void submit(ORID recordId, Set<ONodeAddress> replicaHolders,	ODHTNodeLocal localNode,
-							ORecordMergeExecutionContext executionContext);
+	void submit(String storageName, ORID recordId, Set<ONodeAddress> replicaHolders, ODHTNodeLocal localNode,
+              ORecordMergeExecutionContext executionContext);
 }

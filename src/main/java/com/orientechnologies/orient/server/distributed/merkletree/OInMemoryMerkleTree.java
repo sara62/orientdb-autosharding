@@ -3,13 +3,15 @@ package com.orientechnologies.orient.server.distributed.merkletree;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NavigableMap;
 
+import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
+import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
 import com.orientechnologies.orient.server.distributed.Record;
 
@@ -18,23 +20,24 @@ import com.orientechnologies.orient.server.distributed.Record;
  * @since 13.09.12
  */
 public final class OInMemoryMerkleTree implements OMerkleTree {
-  private final int                             clusterId;
-  private final OMerkleTreeNode[]               roots;
+  private final int                clusterId;
+  private final OMerkleTreeNode[]  roots;
+  private final ODHTDatabaseLookup databaseLookup;
 
-  public OInMemoryMerkleTree(final int clusterId) {
-    this.db = db;
+  public OInMemoryMerkleTree(ODHTDatabaseLookup databaseLookup, final int clusterId) {
+    this.databaseLookup = databaseLookup;
     this.clusterId = clusterId;
 
     final OMerkleTreeNode[] newRoots = new OMerkleTreeNode[64];
 
     for (int i = 0; i < 64; i++)
-      newRoots[i] = new OMerkleTreeNode(db, clusterId);
+      newRoots[i] = new OMerkleTreeNode(databaseLookup, clusterId);
 
     this.roots = newRoots;
   }
 
   @Override
-	public Record addData(final ORID id, final String data) {
+  public ORecordInternal<?> addData(final ORID id, final ORecordInternal<?> data) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -44,7 +47,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void deleteData(final ORID id, final ORecordVersion version) {
+  public void deleteData(final ORID id, final ORecordVersion version) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -53,7 +56,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void deleteData(final ORID id, final ORecordVersion version, boolean softDelete) {
+  public void deleteData(final ORID id, final ORecordVersion version, boolean softDelete) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId startId = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -65,7 +68,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void updateData(final ORID id, final ORecordVersion version, final String data) {
+  public void updateData(final ORID id, final ORecordVersion version, final ORecordInternal<?> data) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -74,7 +77,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public void updateReplica(final ORID id, final Record replica) {
+  public void updateReplica(final ORID id, final ORecordInternal<?> replica) {
     final int childIndex = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
     final ONodeId offset = OMerkleTreeNode.startNodeId(1, childIndex, ONodeId.valueOf(0));
 
@@ -83,7 +86,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public ODetachedMerkleTreeNode getRootNode(int index) {
+  public ODetachedMerkleTreeNode getRootNode(int index) {
     ONodeId startId = OMerkleTreeNode.startNodeId(1, index, ONodeId.valueOf(0));
     ONodeId endId = OMerkleTreeNode.startNodeId(1, index + 1, ONodeId.valueOf(0)).subtract(ONodeId.valueOf(1));
 
@@ -91,7 +94,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public List<ODetachedMerkleTreeNode> getRootNodesForInterval(final ONodeId startId, final ONodeId endId) {
+  public List<ODetachedMerkleTreeNode> getRootNodesForInterval(final ONodeId startId, final ONodeId endId) {
     final int startChildIndex = OMerkleTreeNode.childIndex(0, startId);
     final int endChildIndex = OMerkleTreeNode.childIndex(0, endId);
 
@@ -108,7 +111,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public ODetachedMerkleTreeNode getEquivalentNode(ODetachedMerkleTreeNode detachedNode) {
+  public ODetachedMerkleTreeNode getEquivalentNode(ODetachedMerkleTreeNode detachedNode) {
     final OMerkleTreeNode internalNode = getEquivalentInternalNode(detachedNode);
     if (internalNode == null)
       return null;
@@ -117,7 +120,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
   }
 
   @Override
-	public ODetachedMerkleTreeNode getChildNode(ODetachedMerkleTreeNode parent, int index) {
+  public ODetachedMerkleTreeNode getChildNode(ODetachedMerkleTreeNode parent, int index) {
     final OMerkleTreeNode parentNode = getEquivalentInternalNode(parent);
 
     if (parentNode == null)
@@ -182,23 +185,24 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
       if (node.isLeaf()) {
         List<ORecordMetadata> recordMetadatas = new ArrayList<ORecordMetadata>();
 
-        final Iterator<Record> recordIterator;
+        //TODO storage name
+        final ODatabaseRecord db = databaseLookup.openDatabase("11");
+
+        final Iterator<ORecordInternal<?>> recordIterator;
         if (endId.compareTo(startId) >= 0)
-          recordIterator = db
-              .subMap(new ORecordId(clusterId, new OClusterPositionNodeId(startId)), true,
-                  new ORecordId(clusterId, new OClusterPositionNodeId(endId)), true).values().iterator();
+          recordIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startId), new OClusterPositionNodeId(endId), true);
         else
-          recordIterator = db.tailMap(new ORecordId(clusterId, new OClusterPositionNodeId(startId)), true).values().iterator();
+          recordIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startId), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true);
 
         while (recordIterator.hasNext()) {
-          final Record record = recordIterator.next();
-          recordMetadatas.add(new ORecordMetadata(record.getId(), record.getVersion()));
+          final ORecordInternal<?> record = recordIterator.next();
+          recordMetadatas.add(new ORecordMetadata(record.getIdentity(), record.getRecordVersion()));
         }
 
         ORecordMetadata[] metadata = new ORecordMetadata[recordMetadatas.size()];
         metadata = recordMetadatas.toArray(metadata);
 
-        result = new ODetachedMerkleTreeNode(node.getHash(), startId, endId, metadata, null, path);
+        result = new ODetachedMerkleTreeNode(node.getHash(), startId, endId, clusterId, metadata, null, path);
       } else {
         byte[][] childrenHash = new byte[64][];
 
@@ -207,7 +211,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
           childrenHash[i] = treeNode.getHash();
         }
 
-        result = new ODetachedMerkleTreeNode(node.getHash(), startId, endId, null, childrenHash, path);
+        result = new ODetachedMerkleTreeNode(node.getHash(), startId, endId, clusterId, null, childrenHash, path);
       }
 
     } finally {

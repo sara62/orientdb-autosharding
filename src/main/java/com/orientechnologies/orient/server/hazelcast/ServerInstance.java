@@ -27,12 +27,14 @@ import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
+import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
+import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
+import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookupImpl;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ONodeAddress;
-import com.orientechnologies.orient.server.distributed.Record;
 import com.orientechnologies.orient.server.distributed.operations.ODefaultDistributedCoordinatorFactory;
 import com.orientechnologies.orient.server.distributed.ringprotocols.ODefaultRingProtocolsFactory;
 import com.orientechnologies.orient.server.distributed.ringprotocols.OGlobalMaintenanceProtocolRunnable;
@@ -98,8 +100,9 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     final OHazelcastNodeAddress localNodeAddress = new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance
         .getCluster().getLocalMember().getUuid());
 
-    localNode = new OLocalDHTNode(localNodeAddress, this, new ODefaultDistributedCoordinatorFactory(), ringProtocolsFactory,
-        replicaCount, syncReplicaCount, databaseLookup);
+    final ODHTDatabaseLookup databaseLookup = new ODHTDatabaseLookupImpl("databaseName");
+    localNode = new OLocalDHTNode(localNodeAddress, this, databaseLookup, new ODefaultDistributedCoordinatorFactory(), ringProtocolsFactory,
+        replicaCount, syncReplicaCount);
 
     INSTANCES.put(hazelcastInstance.getCluster().getLocalMember().getUuid(), this);
 
@@ -121,13 +124,17 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
       } while (!localNode.joinDHT(nodeAddress));
     }
 
+    //TODO storageName and cluster id
+    final String storageName = "storageName";
+    final int clusterId = 0;
+
     if (useAntiEntropy)
       lmExecutorService.scheduleWithFixedDelay(new OLocalMaintenanceProtocolRunnable(localNode, storageName, clusterId, replicaCount, syncReplicaCount,
           ringProtocolsFactory.createLocalMaintenanceProtocol(this)), 1, 1, TimeUnit.SECONDS);
 
     if (useGlobalMaintainence)
       gmExecutorService.scheduleWithFixedDelay(
-          new OGlobalMaintenanceProtocolRunnable(ringProtocolsFactory.createGlobalMaintenanceProtocol(this), clusterId, storageName, localNode,
+          new OGlobalMaintenanceProtocolRunnable(ringProtocolsFactory.createGlobalMaintenanceProtocol(this), storageName, clusterId, localNode,
               replicaCount, syncReplicaCount), 100, 100, TimeUnit.MILLISECONDS);
 
     timer.schedule(new TimerTask() {
@@ -140,16 +147,16 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     }, 10000, 10000);
   }
 
-  public Record create(ORID id, String data) {
-    return localNode.createRecord(id, data);
+  public ORecordInternal<?> create(String storageName, ORecordInternal<?> record) {
+    return localNode.createRecord(storageName, record);
   }
 
-  public Record create(String data) {
-    return localNode.createRecord(null, null);
+  public ORecordInternal<?> create(ORecordInternal record, String storageName) {
+    return localNode.createRecord(storageName, record);
   }
 
-  public Record get(ORID id) {
-    return localNode.readRecord(null, id);
+  public ORecordInternal<?> get(String storageName, ORID id) {
+    return localNode.readRecord(storageName, id);
   }
 
   public void remove(ORID id, ORecordVersion version) {

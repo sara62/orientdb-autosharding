@@ -15,7 +15,6 @@ import com.hazelcast.core.Member;
 import com.hazelcast.core.MemberLeftException;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
-import com.orientechnologies.orient.core.record.ORecord;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
@@ -69,11 +68,11 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   public int size(String storageName, int clusterId) {
-    return callOnRemoteMember(new SizeNodeCall(nodeAddress), false);
+    return callOnRemoteMember(new SizeNodeCall(nodeAddress, storageName), false);
   }
 
   public ORID[] findMissedRecords(String storageName, ORecordMetadata[] recordMetadatas) {
-    return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeAddress, recordMetadatas), false);
+    return callOnRemoteMember(new FindMissedRecordsNodeCall(nodeAddress, recordMetadatas, storageName), false);
   }
 
   public NodeState state() {
@@ -89,43 +88,38 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public Record createRecord(String storageName, ORecord<?> record) {
-    return callOnRemoteMember(new CreateNodeCall(nodeAddress, data), false);
-  }
-
-  @Override
   public ORecordInternal<?> createRecord(String storageName, ORecordInternal<?> record) {
-    return callOnRemoteMember(new CreateWithIdNodeCall(nodeAddress, id, record), false);
+    return callOnRemoteMember(new CreateNodeCall(nodeAddress, storageName, record), false);
   }
 
   @Override
   public ORecordInternal<?> readRecord(String storageName, ORID id) {
-    return callOnRemoteMember(new GetNodeCall(nodeAddress, id), false);
+    return callOnRemoteMember(new GetNodeCall(nodeAddress, storageName, id), false);
   }
 
   @Override
   public ORecordInternal<?> updateRecord(String storageName, ORecordInternal<?> record) {
-    callOnRemoteMember(new UpdateNodeCall(nodeAddress, id, record), false);
+    return callOnRemoteMember(new UpdateNodeCall(nodeAddress, storageName, record), false);
   }
 
   @Override
   public void deleteRecord(String storageName, ORID id, ORecordVersion version) {
-    callOnRemoteMember(new RemoveNodeCall(nodeAddress, id, version), false);
+    callOnRemoteMember(new RemoveNodeCall(nodeAddress, storageName, id, version), false);
   }
 
   @Override
   public void updateReplica(String storageName, ORecordInternal<?> replica, boolean async) {
-    callOnRemoteMember(new UpdateReplicaNodeCall(nodeAddress, replica), async);
+    callOnRemoteMember(new UpdateReplicaNodeCall(nodeAddress, storageName, replica), async);
   }
 
   @Override
   public void updateReplicas(String storageName, ORecordInternal<?>[] replicas, boolean async) {
-    callOnRemoteMember(new UpdateReplicasNodeCall(nodeAddress, replicas), async);
+    callOnRemoteMember(new UpdateReplicasNodeCall(nodeAddress, storageName, replicas), async);
   }
 
   @Override
   public ORecordInternal<?> getRecordFromNode(String storageName, ORID id) {
-    return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeAddress, id), false);
+    return callOnRemoteMember(new GetRecordFromNodeNodeCall(nodeAddress, id, storageName), false);
   }
 
   @Override
@@ -149,13 +143,13 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   @Override
-  public ORecordInternal<?> createRecordInNode(String storageName, ORecordInternal<?> recordInternal) {
-    return callOnRemoteMember(new CreateWithIdInNodeNodeCall(nodeAddress, id, data), false);
+  public ORecordInternal<?> createRecordInNode(String storageName, ORecordInternal<?> record) {
+    return callOnRemoteMember(new CreateWithIdInNodeNodeCall(nodeAddress, storageName, record), false);
   }
 
   @Override
   public ORecordInternal<?> updateRecordInNode(String storageName, ORecordInternal<?> record) {
-    callOnRemoteMember(new UpdateRecordInNodeCall(nodeAddress, id, record), false);
+    return callOnRemoteMember(new UpdateRecordInNodeCall(nodeAddress, storageName, record), false);
   }
 
   @Override
@@ -175,6 +169,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
       if (member == null)
         throw new ONodeOfflineException("Member " + nodeAddress + " was left.", null, nodeAddress.getNodeId());
 
+      @SuppressWarnings("unchecked")
       Future<T> future = (Future<T>) hazelcastInstance.getExecutorService().submit(new DistributedTask<T>(call, member));
 
       if (async)
@@ -239,23 +234,26 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 
   private static final class FindMissedRecordsNodeCall extends NodeCall<ORID[]> {
     private ORecordMetadata[] recordMetadatas;
+    private String storageName;
 
     public FindMissedRecordsNodeCall() {
     }
 
-    private FindMissedRecordsNodeCall(OHazelcastNodeAddress nodeAddress, ORecordMetadata[] recordMetadatas) {
+    private FindMissedRecordsNodeCall(OHazelcastNodeAddress nodeAddress, ORecordMetadata[] recordMetadatas, String storageName) {
       super(nodeAddress);
       this.recordMetadatas = recordMetadatas;
+      this.storageName = storageName;
     }
 
     @Override
     protected ORID[] call(ODHTNode node) {
-      return node.findMissedRecords(null, recordMetadatas);
+      return node.findMissedRecords(storageName, recordMetadatas);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
+      out.writeUTF(storageName);
 
       out.writeInt(recordMetadatas.length);
 
@@ -266,6 +264,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
+      storageName = in.readUTF();
 
       final int dataLength = in.readInt();
       recordMetadatas = new ORecordMetadata[dataLength];
@@ -276,44 +275,49 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
   }
 
   private static final class UpdateReplicaNodeCall extends NodeCall<Void> {
-    private Record record;
+    private ORecordInternal<?> record;
+    private String storageName;
 
     public UpdateReplicaNodeCall() {
     }
 
-    private UpdateReplicaNodeCall(OHazelcastNodeAddress nodeAddress, Record record) {
+    private UpdateReplicaNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORecordInternal<?> record) {
       super(nodeAddress);
+      this.storageName = storageName;
       this.record = record;
     }
 
     @Override
     protected Void call(ODHTNode node) {
-      node.updateReplica(null, record, false);
-
+      node.updateReplica(storageName, record, false);
       return null;
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
+      out.writeUTF(storageName);
       out.writeObject(record);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-      record = (Record) in.readObject();
+      storageName = in.readUTF();
+      record = (ORecordInternal) in.readObject();
     }
   }
 
   private static final class UpdateReplicasNodeCall extends NodeCall<Void> {
-    private Record[] records;
+    private ORecordInternal<?>[] records;
+    private String storageName;
 
     public UpdateReplicasNodeCall() {
     }
 
-    private UpdateReplicasNodeCall(OHazelcastNodeAddress nodeAddress, Record[] records) {
+    private UpdateReplicasNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORecordInternal<?>[] records) {
       super(nodeAddress);
+      this.storageName = storageName;
       this.records = records;
     }
 
@@ -327,8 +331,9 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
+      out.writeUTF(storageName);
       out.writeInt(records.length);
-      for (Record record : records)
+      for (ORecordInternal<?> record : records)
         out.writeObject(record);
 
     }
@@ -336,174 +341,130 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-
+      storageName = in.readUTF();
       int len = in.readInt();
-      records = new Record[len];
+      records = new ORecordInternal<?>[len];
       for (int i = 0; i < len; i++)
-        records[i] = (Record) in.readObject();
+        records[i] = (ORecordInternal<?>) in.readObject();
     }
   }
 
-  private static final class UpdateNodeCall extends NodeCall<Void> {
-    private ORID id;
-    private Record    record;
+  private static final class UpdateNodeCall extends NodeCall<ORecordInternal<?>> {
+    private ORecordInternal<?> record;
+    private String storageName;
 
     public UpdateNodeCall() {
     }
 
-    private UpdateNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, Record record) {
+    private UpdateNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORecordInternal<?> record) {
       super(nodeAddress);
-      this.id = id;
+      this.storageName = storageName;
       this.record = record;
     }
 
     @Override
-    protected Void call(ODHTNode node) {
-      node.updateRecord(null, record);
-      return null;
+    protected ORecordInternal<?> call(ODHTNode node) {
+      return node.updateRecord(storageName, record);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
-      out.writeObject(id);
+
       out.writeObject(record);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-      id = (ORID) in.readObject();
-      record = (Record) in.readObject();
+      record = (ORecordInternal<?>) in.readObject();
     }
   }
 
-  private static final class UpdateRecordInNodeCall extends NodeCall<Void> {
-    private ORID id;
-    private Record    record;
+  private static final class UpdateRecordInNodeCall extends NodeCall<ORecordInternal> {
+    private ORecordInternal<?>    record;
 
     public UpdateRecordInNodeCall() {
     }
 
-    private UpdateRecordInNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, Record record) {
+    private UpdateRecordInNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORecordInternal<?> record) {
       super(nodeAddress);
-      this.id = id;
       this.record = record;
     }
 
     @Override
-    protected Void call(ODHTNode node) {
-      node.updateRecordInNode(null, record);
-      return null;
+    protected ORecordInternal<?> call(ODHTNode node) {
+      return node.updateRecordInNode(null, record);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
-      out.writeObject(id);
       out.writeObject(record);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-      id = (ORID) in.readObject();
-      record = (Record) in.readObject();
+      record = (ORecordInternal<?>) in.readObject();
     }
   }
 
-  private static final class CreateNodeCall extends NodeCall<Record> {
-    private String data;
+  private static final class CreateNodeCall extends NodeCall<ORecordInternal<?>> {
+    private ORecordInternal<?>    data;
 
     public CreateNodeCall() {
     }
 
-    private CreateNodeCall(OHazelcastNodeAddress nodeAddress, String data) {
+    private CreateNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORecordInternal<?> data) {
       super(nodeAddress);
       this.data = data;
     }
 
     @Override
-    protected Record call(ODHTNode node) {
-      return node.createRecord(null, null);
-    }
-
-    @Override
-    public void writeExternal(ObjectOutput out) throws IOException {
-      super.writeExternal(out);
-      out.writeUTF(data);
-    }
-
-    @Override
-    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-      super.readExternal(in);
-      data = in.readUTF();
-    }
-  }
-
-  private static final class CreateWithIdNodeCall extends NodeCall<Record> {
-    private String    data;
-    private ORID id;
-
-    public CreateWithIdNodeCall() {
-    }
-
-    private CreateWithIdNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, String data) {
-      super(nodeAddress);
-      this.data = data;
-      this.id = id;
-    }
-
-    @Override
-    protected Record call(ODHTNode node) {
+    protected ORecordInternal<?> call(ODHTNode node) {
       return node.createRecord(null, data);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
-      out.writeObject(id);
-      out.writeUTF(data);
+      out.writeObject(data);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-      id = (ORID) in.readObject();
-      data = in.readUTF();
+      data = (ORecordInternal<?>) in.readObject();
     }
   }
 
-  private static final class CreateWithIdInNodeNodeCall extends NodeCall<Record> {
-    private String    data;
-    private ORID id;
+  private static final class CreateWithIdInNodeNodeCall extends NodeCall<ORecordInternal<?>> {
+    private String storageName;
+    private ORecordInternal<?> record;
 
     public CreateWithIdInNodeNodeCall() {
     }
 
-    private CreateWithIdInNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, String data) {
+    private CreateWithIdInNodeNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORecordInternal<?> record) {
       super(nodeAddress);
-      this.data = data;
-      this.id = id;
+      this.storageName = storageName;
+      this.record = record;
     }
 
     @Override
-    protected Record call(ODHTNode node) {
+    protected ORecordInternal<?> call(ODHTNode node) {
       return node.createRecordInNode(null, null);
     }
 
     @Override
     public void writeExternal(ObjectOutput out) throws IOException {
       super.writeExternal(out);
-      out.writeObject(id);
-      out.writeUTF(data);
     }
 
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
       super.readExternal(in);
-      id = (ORID) in.readObject();
-      data = in.readUTF();
     }
   }
 
@@ -539,7 +500,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     public SizeNodeCall() {
     }
 
-    private SizeNodeCall(OHazelcastNodeAddress nodeAddress) {
+    private SizeNodeCall(OHazelcastNodeAddress nodeAddress, String storageName) {
       super(nodeAddress);
     }
 
@@ -693,19 +654,19 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
-  private static final class GetNodeCall extends NodeCall<Record> {
+  private static final class GetNodeCall extends NodeCall<ORecordInternal<?>> {
     private ORID id;
 
     public GetNodeCall() {
     }
 
-    private GetNodeCall(OHazelcastNodeAddress nodeAddress, ORID id) {
+    private GetNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORID id) {
       super(nodeAddress);
       this.id = id;
     }
 
     @Override
-    protected Record call(ODHTNode node) {
+    protected ORecordInternal<?> call(ODHTNode node) {
       return node.readRecord(null, id);
     }
 
@@ -758,19 +719,19 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
-  private static final class GetRecordFromNodeNodeCall extends NodeCall<Record> {
+  private static final class GetRecordFromNodeNodeCall extends NodeCall<ORecordInternal<?>> {
     private ORID id;
 
     public GetRecordFromNodeNodeCall() {
     }
 
-    private GetRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORID id) {
+    private GetRecordFromNodeNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, String storageName) {
       super(nodeAddress);
       this.id = id;
     }
 
     @Override
-    protected Record call(ODHTNode node) {
+    protected ORecordInternal<?> call(ODHTNode node) {
       return node.getRecordFromNode(null, id);
     }
 
@@ -787,7 +748,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
   }
 
-	private static final class ReadRecordFromNodeNodeCall extends NodeCall<Record> {
+	private static final class ReadRecordFromNodeNodeCall extends NodeCall<ORecordInternal<?>> {
 		private ORID id;
 
 		public ReadRecordFromNodeNodeCall() {
@@ -799,7 +760,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 		}
 
 		@Override
-		protected Record call(ODHTNode node) {
+		protected ORecordInternal<?> call(ODHTNode node) {
 			return node.readRecordFromNode(null, id);
 		}
 
@@ -817,7 +778,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
 	}
 
 
-	private static final class GetRecordsFromNodeNodeCall extends NodeCall<Record[]> {
+	private static final class GetRecordsFromNodeNodeCall extends NodeCall<ORecordInternal<?>[]> {
     private ORID[] ids;
 
     public GetRecordsFromNodeNodeCall() {
@@ -829,7 +790,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     }
 
     @Override
-    protected Record[] call(ODHTNode node) {
+    protected ORecordInternal<?>[] call(ODHTNode node) {
       return node.getRecordsFromNode(null, ids);
     }
 
@@ -889,7 +850,7 @@ public class OHazelcastDHTNodeProxy implements ODHTNode {
     public RemoveNodeCall() {
     }
 
-    private RemoveNodeCall(OHazelcastNodeAddress nodeAddress, ORID id, ORecordVersion version) {
+    private RemoveNodeCall(OHazelcastNodeAddress nodeAddress, String storageName, ORID id, ORecordVersion version) {
       super(nodeAddress);
       this.id = id;
       this.version = version;

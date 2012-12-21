@@ -23,11 +23,14 @@ public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
 
   private ORID                                  currentIntervalStart;
   private ORID                                  currentIntervalEnd;
+  private final String cluster;
 
   public ODatabaseRingIterator(ODatabaseRecord db, ORID start, ORID end) {
     this.db = db;
     this.start = start;
     this.end = end;
+    //TODO cluster
+    cluster = "some cluster";
 
     if (end.compareTo(start) > 0) {
       currentIntervalStart = start;
@@ -37,7 +40,7 @@ public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
       currentIntervalEnd = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.MAX_VALUE));
     }
 
-    currentIterator = db.browseCluster().subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
+    currentIterator = db.browseCluster(cluster, currentIntervalStart.getClusterPosition(), currentIntervalEnd.getClusterPosition(), true);
   }
 
   @Override
@@ -51,16 +54,16 @@ public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
     currentIntervalStart = new ORecordId(start.getClusterId(), new OClusterPositionNodeId(ONodeId.ZERO));
     currentIntervalEnd = end;
 
-    currentIterator = db.subMap(currentIntervalStart, true, currentIntervalEnd, true).values().iterator();
+    currentIterator = db.browseCluster(cluster, currentIntervalStart.getClusterPosition(), currentIntervalEnd.getClusterPosition(), true);
 
     return currentIterator.hasNext();
   }
 
   @Override
   public ORecordMetadata next() {
-    final Record record = currentIterator.next();
+    final ORecordInternal<?> record = currentIterator.next();
 
-    return new ORecordMetadata(record.getId(), record.getVersion());
+    return new ORecordMetadata(record.getIdentity(), record.getRecordVersion());
   }
 
   @Override

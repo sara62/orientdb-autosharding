@@ -4,6 +4,8 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
+import com.orientechnologies.orient.core.db.document.ODatabaseDocument;
+import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.merkletree.ODetachedMerkleTreeNode;
 import com.orientechnologies.orient.server.distributed.merkletree.OInMemoryMerkleTree;
@@ -22,9 +24,12 @@ import com.orientechnologies.orient.core.id.ORID;
 @Test
 public class MerkleTreeTest {
   public void testAdd67KeysToNext1024NodeCompareDetachedNodes() throws Exception {
+    ODatabaseDocument db = new ODatabaseDocumentTx("memory:mercletreetest");
+    db.create();
+
     NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
 
-    OMerkleTree tree = new OInMemoryMerkleTree(map, 1);
+    OMerkleTree tree = new OInMemoryMerkleTree(1);
     for (int i = 0; i < 2; i++)
       tree.addData(convertTORID(i), i + "");
 
