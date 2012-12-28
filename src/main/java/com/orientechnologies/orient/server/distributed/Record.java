@@ -49,11 +49,11 @@ public class Record implements Externalizable {
     this.data = data;
   }
 
-  public ORID getId() {
+  public ORID getIdentity() {
     return id;
   }
 
-  public ORecordVersion getVersion() {
+  public ORecordVersion getRecordVersion() {
     return version;
   }
 

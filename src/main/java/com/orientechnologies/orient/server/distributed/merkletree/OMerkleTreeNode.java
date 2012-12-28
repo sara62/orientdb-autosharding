@@ -11,10 +11,12 @@ import java.util.Map;
 import java.util.NavigableMap;
 
 import com.orientechnologies.common.concur.resource.OSharedResourceAdaptive;
+import com.orientechnologies.orient.core.db.ODatabaseComplex;
 import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.db.record.OIdentifiable;
 import com.orientechnologies.orient.core.db.record.ORecordOperation;
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
+import com.orientechnologies.orient.core.exception.ODatabaseException;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
@@ -22,6 +24,7 @@ import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
+import com.orientechnologies.orient.core.storage.ORecordMetadata;
 import com.orientechnologies.orient.core.version.ODistributedVersion;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
@@ -60,7 +63,7 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
     this.clusterId = clusterId;
   }
 
-  public ORecordInternal<?> addRecord(int level, ONodeId offset, ORID id, ORecordInternal<?> data) {
+  public ORecordInternal<?> addRecord(int level, ONodeId offset, ORecordInternal<?> data) {
     OMerkleTreeNode treeNode = this;
     final List<PathItem> hashPathNodes = new ArrayList<PathItem>();
 
@@ -73,7 +76,7 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
 
       offset = startNodeId(level, childIndex, offset);
 
-      childIndex = childIndex(level, ((OClusterPositionNodeId) id.getClusterPosition()).getNodeId());
+      childIndex = childIndex(level, ((OClusterPositionNodeId) data.getIdentity().getClusterPosition()).getNodeId());
 
       final OMerkleTreeNode child = treeNode.getChild(childIndex);
       child.acquireExclusiveLock();
@@ -88,13 +91,14 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
     try {
       //TODO storage name
       final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
-      record = db.load(id);
+
+      record = retrieveRecord(db, data.getIdentity());
 
       if (record == null || record.getRecordVersion().isTombstone()) {
-        record = db.save(data);
         if (record == null) {
           treeNode.count++;
         }
+        record = db.save(data, ODatabaseComplex.OPERATION_MODE.SYNCHRONOUS, true, null, null);
 
         if (treeNode.getRecordsCount() <= 64)
           rehashLeafNode(level, offset, treeNode, childIndex);
@@ -105,13 +109,23 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
           hashPathNodes.add(new PathItem(treeNode, childIndex, offset));
         }
       } else
-        throw new ORecordDuplicatedException("Record with id " + id + " has already exist in DB.", id);
+        throw new ORecordDuplicatedException("Record with id " + data.getIdentity() + " has already exist in DB.", data.getIdentity());
     } finally {
       treeNode.releaseExclusiveLock();
     }
 
     rehashParentNodes(hashPathNodes);
 
+    return record;
+  }
+
+  private ORecordInternal<?> retrieveRecord(ODatabaseRecord db, ORID id) {
+    ORecordInternal<?> record;
+    try {
+      record = db.load(id);
+    } catch (ODatabaseException e) {
+      record = null;
+    }
     return record;
   }
 
@@ -141,16 +155,16 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
 
     //TODO storage name
     final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
-    ORecordInternal<?> record;
+    ORecordMetadata record;
     try {
-      record = db.load(id);
+      record = db.getRecordMetadata(id);
       if (record == null || record.getRecordVersion().isTombstone())
         throw new ORecordNotFoundException("Record with id " + id + " not found.");
 
       if (record.getRecordVersion().compareTo(version) != 0)
         throw new OConcurrentModificationException(id, record.getRecordVersion(), version, ORecordOperation.UPDATED);
 
-      db.save(record);
+      db.save(data);
 
       rehashLeafNode(level, offset, treeNode, childIndex);
     } finally {
@@ -188,13 +202,13 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
       //TODO storage name
       final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
 
-      final ORecordInternal<?> record = db.getRecord(id);
+      final ORecordMetadata record = db.getRecordMetadata(id);
 
       if (record == null || replica.getRecordVersion().compareTo(record.getRecordVersion()) > 0) {
-        db.save(replica);
-
         if (record == null)
           treeNode.count++;
+
+        db.updatedReplica(replica);
 
         if (treeNode.getRecordsCount() <= 64)
           rehashLeafNode(level, offset, treeNode, childIndex);
@@ -229,7 +243,7 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
     final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
 
     if (endId.compareTo(startId) > 0)
-      idIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startId), new OClusterPositionNodeId(endId), true);
+      idIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startId), new OClusterPositionNodeId(endId.subtract(ONodeId.ONE)), true);
     else
       idIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startId), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true);
 
@@ -238,7 +252,7 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
 
     while (idIterator.hasNext()) {
       final ORID currentId = idIterator.next().getIdentity();
-      final ORecordVersion version = db.getRecord(currentId).getRecordVersion();
+      final ORecordVersion version = db.getRecordMetadata(currentId).getRecordVersion();
 
       byteBuffer.put(((OClusterPositionNodeId) currentId.getClusterPosition()).getNodeId().chunksToByteArray());
       byteBuffer.put(version.getSerializer().toByteArray(version));
@@ -283,10 +297,10 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
     try {
       //TODO storage name
       final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
-      final ORecordInternal<?> record = db.load(id);
+      final ORecordMetadata record = db.getRecordMetadata(id);
       if (record != null && !record.getRecordVersion().isTombstone()) {
         if (record.getRecordVersion().compareTo(version) == 0) {
-          db.delete(record);
+          db.delete(record.getRecordId());
 
           rehashLeafNode(level, offset, treeNode, childIndex);
         } else
@@ -327,10 +341,10 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
     try {
       //TODO storage name
       final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
-      final ORecordInternal<?> record = db.load(id);
+      final ORecordMetadata record = db.getRecordMetadata(id);
       if (record != null) {
         if (record.getRecordVersion().compareTo(version) == 0) {
-          db.cleanOutRecord(record.getIdentity(), record.getRecordVersion());
+          db.cleanOutRecord(record.getRecordId(), record.getRecordVersion());
 
           treeNode.count--;
 
@@ -388,13 +402,13 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
       //TODO change iterator to ORID
       final Iterator<ORecordInternal<?>> idIterator;
       if (endChildKey.compareTo(startChildKey) > 0)
-        idIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startChildKey), new OClusterPositionNodeId(endChildKey), true);
+        idIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startChildKey), new OClusterPositionNodeId(endChildKey.subtract(ONodeId.ONE)), true);
       else
         idIterator = db.browseCluster(db.getClusterNameById(clusterId), new OClusterPositionNodeId(startChildKey), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true);
 
       int recordsCount = 0;
 
-      final Map<ORID, ORecordVersion> recordsToHash = new LinkedHashMap<ORID, ORecordVersion>(64);
+      Map<ORID, ORecordVersion> recordsToHash = new LinkedHashMap<ORID, ORecordVersion>(64);
 
       while (idIterator.hasNext()) {
         if (recordsCount == 64) {
@@ -404,8 +418,7 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
 
         final ORecordInternal<?> currentRecord = idIterator.next();
 
-        final ORecordVersion version = db.load(currentRecord).getRecordVersion();
-        recordsToHash.put(currentRecord.getIdentity(), version);
+        recordsToHash.put(currentRecord.getIdentity(), currentRecord.getRecordVersion());
         recordsCount++;
       }
 
@@ -426,6 +439,11 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
 
         child = new OMerkleTreeNode(recordsCount, sha.digest(), databaseLookup, clusterId);
       } else {
+
+        //TODO recheck
+        //Prevent memory wasting
+        recordsToHash = null;
+
         child = new OMerkleTreeNode(databaseLookup, clusterId);
         addInternalNodes(childLevel, startChildKey, child);
       }

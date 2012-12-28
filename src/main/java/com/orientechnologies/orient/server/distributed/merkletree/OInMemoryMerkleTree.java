@@ -8,12 +8,10 @@ import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
-import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
-import com.orientechnologies.orient.server.distributed.Record;
 
 /**
  * @author Andrey Lomakin
@@ -43,7 +41,7 @@ public final class OInMemoryMerkleTree implements OMerkleTree {
 
     final OMerkleTreeNode node = roots[childIndex];
 
-    return node.addRecord(1, offset, id, data);
+    return node.addRecord(1, offset, data);
   }
 
   @Override

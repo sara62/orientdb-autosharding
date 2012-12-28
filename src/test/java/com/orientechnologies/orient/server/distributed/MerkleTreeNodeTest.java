@@ -5,20 +5,21 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
-import java.util.TreeMap;
 
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
+import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
+import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
 import com.orientechnologies.orient.core.id.ORecordId;
+import com.orientechnologies.orient.core.record.ORecordInternal;
+import com.orientechnologies.orient.core.record.impl.ODocument;
 import com.orientechnologies.orient.core.version.ODistributedVersion;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTreeNode;
 import org.testng.Assert;
-import org.testng.annotations.BeforeClass;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
@@ -29,43 +30,65 @@ import com.orientechnologies.orient.core.id.ORID;
  */
 @Test
 public class MerkleTreeNodeTest {
-	@BeforeMethod
-	public void setUp() {
-		OGlobalConfiguration.DB_USE_DISTRIBUTED_VERSION.setValue(true);
-	}
 
-	public void testAddOneKey() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+  public static final int CLUSTER_ID = 1;
+  private ODatabaseDocumentTx db;
+  private ODatabaseDocumentTx db2;
 
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
-		treeNode.addRecord(1, ONodeId.valueOf(0), new ORecordId(1, new OClusterPositionNodeId(ONodeId.valueOf(130))), "130");
+  @BeforeMethod
+  public void setUp() {
+    OGlobalConfiguration.DB_USE_DISTRIBUTED_VERSION.setValue(true);
+    OGlobalConfiguration.USE_NODE_ID_CLUSTER_POSITION.setValue(true);
+    OGlobalConfiguration.USE_LHPEPS_MEMORY_CLUSTER.setValue(true);
+    OGlobalConfiguration.STORAGE_USE_TOMBSTONES.setValue(true);
+    
+    db = new ODatabaseDocumentTx("memory:mercleTreeTest");
+    db.create();
 
-		Record record = map.get(convertTORID(130L));
-		Assert.assertEquals(record.getData(), "130");
-		Assert.assertEquals(record.getShortVersion(), 0);
+    db2 = new ODatabaseDocumentTx("memory:mercleTreeTestSecondaryDb");
+    db2.create();
+  }
 
-		MessageDigest sha = MessageDigest.getInstance("SHA-1");
+  @AfterMethod
+  public void tearDown() throws Exception {
+    db.drop();
+    db2.drop();
+  }
 
-		final ByteBuffer byteBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE);
-		byteBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		byteBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+  public void testAddOneKey() throws Exception {
+    OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
+    final ODocument data = new ODocument().field("value", "130");
+    data.setIdentity(new ORecordId(1, new OClusterPositionNodeId(ONodeId.valueOf(130))));
+    treeNode.addRecord(1, ONodeId.valueOf(0), data);
 
-		byteBuffer.rewind();
-		sha.update(byteBuffer);
+    ODocument record = db.load(convertTORID(130L));
+    Assert.assertEquals(record.field("value"), "130");
+    Assert.assertEquals(record.getRecordVersion().getCounter(), 0);
 
-		Assert.assertEquals(treeNode.getHash(), sha.digest());
-		Assert.assertEquals(treeNode.getRecordsCount(), 1);
-	}
+    MessageDigest sha = MessageDigest.getInstance("SHA-1");
 
-	public void testAdd66Keys() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+    final ByteBuffer byteBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE);
+    byteBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+    byteBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
-		for (int i = 0; i < 66; i++)
-			treeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
+    byteBuffer.rewind();
+    sha.update(byteBuffer);
+
+    Assert.assertEquals(treeNode.getHash(), sha.digest());
+    Assert.assertEquals(treeNode.getRecordsCount(), 1);
+  }
+
+  public void testAdd66Keys() throws Exception {
+		OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 66; i++) {
+      final ODocument doc = new ODocument();
+      doc.field("value", i + "");
+      doc.setIdentity(convertTORID(i));
+      treeNode.addRecord(1, ONodeId.valueOf(0), doc);
+    }
 
 		for (long i = 0; i < 66; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		OMerkleTreeNode parent = null;
 
@@ -94,10 +117,10 @@ public class MerkleTreeNodeTest {
 
 		OMerkleTreeNode child = treeNode.getChild(0);
 		for (int n = 0; n < 64; n++) {
-			Record record = map.get(convertTORID(n));
+			ODocument record = db.load(convertTORID(n));
 
-			buffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-			buffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+			buffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+			buffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 		}
 
 		buffer.limit(buffer.position());
@@ -109,15 +132,15 @@ public class MerkleTreeNodeTest {
 		Assert.assertEquals(child.getHash(), sha.digest());
 
 		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE * 2);
-		Record record;
+		ODocument record;
 
-		record = map.get(convertTORID(64L));
-		lastChildBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		lastChildBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		record = db.load(convertTORID(64L));
+		lastChildBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		lastChildBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
-		record = map.get(convertTORID(65L));
-		lastChildBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		lastChildBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		record = db.load(convertTORID(65L));
+		lastChildBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		lastChildBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		lastChildBuffer.rewind();
 
@@ -160,21 +183,24 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd67KeysToEnd() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
-
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
+		OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
 		for (ONodeId i = ONodeId.MAX_VALUE; i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66))) >= 0; i = i.subtract(ONodeId
 						.valueOf(1))) {
 			int childPos = OMerkleTreeNode.childIndex(0, i);
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.valueOf(0));
 
-			treeNode.addRecord(1, startKey, new ORecordId(1, new OClusterPositionNodeId(i)), i + "");
+      final ODocument doc = new ODocument();
+      doc.setIdentity(new ORecordId(1, new OClusterPositionNodeId(i)));
+      doc.field("value", i + "");
+      treeNode.addRecord(1, startKey, doc);
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE; i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66))) >= 0; i = i.subtract(ONodeId
-						.valueOf(1)))
-			Assert.assertEquals(map.get(new ORecordId(1, new OClusterPositionNodeId(i))).getData(), i + "");
+						.valueOf(1))) {
+      final ODocument doc = db.load(new ORecordId(1, new OClusterPositionNodeId(i)));
+      Assert.assertEquals(doc.field("value"), i + "");
+    }
 
 		OMerkleTreeNode parent = null;
 
@@ -206,10 +232,10 @@ public class MerkleTreeNodeTest {
 		for (int n = 63; n >= 0; n--) {
 			final ONodeId id = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(n));
 
-			Record record = map.get(new ORecordId(1, new OClusterPositionNodeId(id)));
+			ODocument record = db.load(new ORecordId(1, new OClusterPositionNodeId(id)));
 
 			buffer.put(id.chunksToByteArray());
-			buffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+			buffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 		}
 
 		buffer.rewind();
@@ -221,19 +247,19 @@ public class MerkleTreeNodeTest {
 
 		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE * 3);
 
-		Record record = map.get(new ORecordId(1, new OClusterPositionNodeId(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66)))));
+		ODocument record = db.load(new ORecordId(1, new OClusterPositionNodeId(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66)))));
 
-		lastChildBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		lastChildBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		lastChildBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		lastChildBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
-		record = map.get(new ORecordId(1, new OClusterPositionNodeId(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(65)))));
-		lastChildBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		lastChildBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		record = db.load(new ORecordId(1, new OClusterPositionNodeId(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(65)))));
+		lastChildBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		lastChildBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
-		record = map.get(new ORecordId(1, new OClusterPositionNodeId(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(64)))));
+		record = db.load(new ORecordId(1, new OClusterPositionNodeId(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(64)))));
 
-		lastChildBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		lastChildBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		lastChildBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		lastChildBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		lastChildBuffer.rewind();
 
@@ -278,20 +304,26 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd67KeysToNext1024Node() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+    OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
+    for (int i = 0; i < 2; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
+      treeNode.addRecord(1, ONodeId.valueOf(0), doc);
+    }
 
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
-		for (int i = 0; i < 2; i++)
-			treeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
-
-		for (int i = 1024; i < 1089; i++)
-			treeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
-
+    for (int i = 1024; i < 1089; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
+      treeNode.addRecord(1, ONodeId.valueOf(0), doc);
+    }
+      
 		for (long i = 0; i < 2; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		for (long i = 1024; i < 1089; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		List<byte[]> hashes = new ArrayList<byte[]>();
 
@@ -326,10 +358,10 @@ public class MerkleTreeNodeTest {
 
 		OMerkleTreeNode child = parent.getChild(16);
 		for (int n = 0; n < 64; n++) {
-			final Record record = map.get(convertTORID(1024L + n));
+			final ODocument record = db.load(convertTORID(1024L + n));
 
-			buffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-			buffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+			buffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+			buffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 		}
 
 		buffer.rewind();
@@ -339,11 +371,11 @@ public class MerkleTreeNodeTest {
 
 		Assert.assertEquals(child.getHash(), sha.digest());
 
-		Record record = map.get(convertTORID(1088L));
+		ODocument record = db.load(convertTORID(1088L));
 		final ByteBuffer lastChildBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE);
 
 		lastChildBuffer.put(ONodeId.valueOf(1088).chunksToByteArray());
-		lastChildBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		lastChildBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		lastChildBuffer.rewind();
 
@@ -356,15 +388,15 @@ public class MerkleTreeNodeTest {
 
 		ByteBuffer firstNodeBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE * 2);
 
-		record = map.get(convertTORID(0));
+		record = db.load(convertTORID(0));
 
-		firstNodeBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		firstNodeBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		firstNodeBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		firstNodeBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
-		record = map.get(convertTORID(1));
+		record = db.load(convertTORID(1));
 
-		firstNodeBuffer.put(((OClusterPositionNodeId) record.getId().getClusterPosition()).getNodeId().chunksToByteArray());
-		firstNodeBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		firstNodeBuffer.put(((OClusterPositionNodeId) record.getIdentity().getClusterPosition()).getNodeId().chunksToByteArray());
+		firstNodeBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		firstNodeBuffer.rewind();
 
@@ -407,96 +439,114 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd69KeysRemove3() {
-		NavigableMap<ORID, Record> mapOne = new TreeMap<ORID, Record>();
+		final OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 69; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne, 1);
-		for (int i = 0; i < 69; i++)
-			testTreeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
+			testTreeNode.addRecord(1, ONodeId.valueOf(0), doc);
+    }
 
-		for (long i = 68; i < 69; i++) {
-			final Record record = mapOne.get(convertTORID(i));
-			testTreeNode.deleteRecord(1, ONodeId.valueOf(0), record.getId(), record.getVersion());
+		for (long i = 66; i < 69; i++) {
+			final ODocument record = db.load(convertTORID(i));
+			testTreeNode.deleteRecord(1, ONodeId.valueOf(0), record.getIdentity(), record.getRecordVersion());
 		}
 
 		for (long i = 0; i < 66; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
 
-		for (Map.Entry<ORID, Record> entry : mapOne.entrySet())
-			sampleTreeNode.updateReplica(1, ONodeId.valueOf(0), entry.getKey(), entry.getValue());
+		final OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
+
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+      final ODocument copy = doc.copy();
+      copy.setDirty();
+      sampleTreeNode.updateReplica(1, ONodeId.valueOf(0), doc.getIdentity(), copy);
+    }
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
+
 	public void testAdd69KeysRemove60() {
-		NavigableMap<ORID, Record> mapOne = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+    for (int i = 0; i < 69; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne, 1);
-		for (int i = 0; i < 69; i++)
-			testTreeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
-		for (long i = 64; i < 69; i++) {
-			final Record record = mapOne.get(convertTORID(i));
+		for (long i = 9; i < 69; i++) {
+			final ORecordInternal<?> record = db.load(convertTORID(i));
 
-			testTreeNode.deleteRecord(1, ONodeId.valueOf(0), convertTORID(i), record.getVersion());
+			testTreeNode.deleteRecord(1, ONodeId.valueOf(0), convertTORID(i), record.getRecordVersion());
 		}
 
-		for (long i = 0; i < 64; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), i + "");
+		for (long i = 0; i < 9; i++)
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : mapOne.entrySet())
-			sampleTreeNode.updateReplica(1, ONodeId.valueOf(0), entry.getKey(), entry.getValue());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true))
+			sampleTreeNode.updateReplica(1, ONodeId.valueOf(0), doc.getIdentity(), doc);
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToNext1024NodeRemove60() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 2; i++){
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map, 1);
-		for (int i = 0; i < 2; i++)
-			testTreeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
-		for (int i = 1024; i < 1089; i++)
-			testTreeNode.addRecord(1, ONodeId.valueOf(0), convertTORID(i), i + "");
+		for (int i = 1024; i < 1089; i++){
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
+
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 1024; i < 1084; i++) {
-			final Record record = map.get(convertTORID(i));
+			final ORecordInternal<?> record = db.load(convertTORID(i));
 
-			testTreeNode.deleteRecord(1, ONodeId.valueOf(0), convertTORID(i), record.getVersion());
+			testTreeNode.deleteRecord(1, ONodeId.valueOf(0), convertTORID(i), record.getRecordVersion());
 		}
 
 		for (long i = 0; i < 2; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		for (long i = 1084; i < 1089; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : map.entrySet())
-			sampleTreeNode.updateReplica(1, ONodeId.valueOf(0), entry.getKey(), entry.getValue());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true))
+			sampleTreeNode.updateReplica(1, ONodeId.valueOf(0), doc.getIdentity(), doc);
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
-	public void testAdd67KeysToEndRemove60() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
-
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map, 1);
+  public void testAdd67KeysToEndRemove60() throws Exception {
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
 		for (ONodeId i = ONodeId.MAX_VALUE; i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66))) >= 0; i = i
 						.subtract(ONodeId.ONE)) {
 			int childPos = OMerkleTreeNode.childIndex(0, i);
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			testTreeNode.addRecord(1, startKey, new ORecordId(1, new OClusterPositionNodeId(i)), i + "");
+      final ODocument doc = new ODocument();
+      doc.setIdentity(new ORecordId(1, new OClusterPositionNodeId(i)));
+      doc.field("value", i + "");
+
+      testTreeNode.addRecord(1, startKey, doc);
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66)); i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(6))) < 0; i = i
@@ -504,130 +554,144 @@ public class MerkleTreeNodeTest {
 			final int childPos = OMerkleTreeNode.childIndex(0, i);
 			final ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			final Record record = map.get(new ORecordId(1, new OClusterPositionNodeId(i)));
+			final ORecordInternal<?> record = db.load(new ORecordId(1, new OClusterPositionNodeId(i)));
 
-			testTreeNode.deleteRecord(1, startKey, record.getId(), record.getVersion());
+			testTreeNode.deleteRecord(1, startKey, record.getIdentity(), record.getRecordVersion());
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(6)); i.compareTo(ONodeId.ZERO) > 0; i = i.add(ONodeId.ONE))
-			Assert.assertEquals(map.get(new ORecordId(1, new OClusterPositionNodeId(i))).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(new ORecordId(1, new OClusterPositionNodeId(i)))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : map.entrySet()) {
-			final int childPos = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) entry.getKey().getClusterPosition()).getNodeId());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			final int childPos = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) doc.getIdentity().getClusterPosition()).getNodeId());
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			sampleTreeNode.updateReplica(1, startKey, entry.getKey(), entry.getValue());
+			sampleTreeNode.updateReplica(1, startKey, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd69KeysCleanOut3() {
-		NavigableMap<ORID, Record> mapOne = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 69; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne, 1);
-		for (int i = 0; i < 69; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+			testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 68; i < 69; i++) {
-			final Record record = mapOne.get(convertTORID(i));
-			testTreeNode.cleanOutRecord(1, ONodeId.ZERO, record.getId(), record.getVersion());
+			final ORecordInternal<?> record = db.load(convertTORID(i));
+			testTreeNode.cleanOutRecord(1, ONodeId.ZERO, record.getIdentity(), record.getRecordVersion());
 		}
 
 		for (long i = 0; i < 66; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : mapOne.entrySet()) {
-			if (entry.getValue().isTombstone())
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			if (doc.getRecordVersion().isTombstone())
 				Assert.fail();
 
-			sampleTreeNode.updateReplica(1, ONodeId.ZERO, entry.getKey(), entry.getValue());
+			sampleTreeNode.updateReplica(1, ONodeId.ZERO, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd69KeysCleanOut60() {
-		NavigableMap<ORID, Record> mapOne = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 69; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne, 1);
-		for (int i = 0; i < 69; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 64; i < 69; i++) {
-			final Record record = mapOne.get(convertTORID(i));
+			final ORecordInternal<?> record = db.load(convertTORID(i));
 
-			testTreeNode.cleanOutRecord(1, ONodeId.ZERO, record.getId(), record.getVersion());
+			testTreeNode.cleanOutRecord(1, ONodeId.ZERO, record.getIdentity(), record.getRecordVersion());
 		}
 
 		for (long i = 0; i < 64; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : mapOne.entrySet()) {
-			if (entry.getValue().isTombstone())
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			if (doc.getRecordVersion().isTombstone())
 				Assert.fail();
 
-			sampleTreeNode.updateReplica(1, ONodeId.ZERO, entry.getKey(), entry.getValue());
+			sampleTreeNode.updateReplica(1, ONodeId.ZERO, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToNext1024NodeCleanOut60() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 2; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map, 1);
-		for (int i = 0; i < 2; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
-		for (int i = 1024; i < 1089; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+		for (int i = 1024; i < 1089; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
+
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 1024; i < 1084; i++) {
-			final Record record = map.get(convertTORID(i));
+			final ORecordInternal<?> record = db.load(convertTORID(i));
 
-			testTreeNode.cleanOutRecord(1, ONodeId.ZERO, record.getId(), record.getVersion());
+			testTreeNode.cleanOutRecord(1, ONodeId.ZERO, record.getIdentity(), record.getRecordVersion());
 		}
 
-		for (long i = 0; i < 2; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+		for (long i = 0; i < 2; i++) {
+      Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
+    }
 
-		for (long i = 1084; i < 1089; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+		for (long i = 1084; i < 1089; i++) {
+      Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
+    }
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : map.entrySet()) {
-			if (entry.getValue().isTombstone())
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			if (doc.getRecordVersion().isTombstone())
 				Assert.fail();
 
-			sampleTreeNode.updateReplica(1, ONodeId.ZERO, entry.getKey(), entry.getValue());
+			sampleTreeNode.updateReplica(1, ONodeId.ZERO, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToEndCleanOut60() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
-
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map, 1);
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
 		for (ONodeId i = ONodeId.MAX_VALUE; i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66))) >= 0; i = i
 						.subtract(ONodeId.ONE)) {
 			int childPos = OMerkleTreeNode.childIndex(0, i);
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			testTreeNode.addRecord(1, startKey, new ORecordId(1, new OClusterPositionNodeId(i)), i + "");
+      final ODocument doc = new ODocument();
+      doc.setIdentity(new ORecordId(1, new OClusterPositionNodeId(i)));
+      doc.field("value", i + "");
+
+      testTreeNode.addRecord(1, startKey, doc);
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66)); i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(62))) < 0; i = i
@@ -635,49 +699,51 @@ public class MerkleTreeNodeTest {
 			final int childPos = OMerkleTreeNode.childIndex(0, i);
 			final ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			final Record record = map.get(new ORecordId(1, new OClusterPositionNodeId(i)));
+			final ORecordInternal<?> record = db.load(new ORecordId(1, new OClusterPositionNodeId(i)));
 
-			testTreeNode.cleanOutRecord(1, startKey, record.getId(), record.getVersion());
+			testTreeNode.cleanOutRecord(1, startKey, record.getIdentity(), record.getRecordVersion());
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(60)); i.compareTo(ONodeId.ZERO) > 0; i = i.add(ONodeId.ONE))
-			Assert.assertEquals(map.get(new ORecordId(1, new OClusterPositionNodeId(i))).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(new ORecordId(1, new OClusterPositionNodeId(i)))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : map.entrySet()) {
-			int childPos = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) entry.getKey().getClusterPosition()).getNodeId());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			int childPos = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) doc.getIdentity().getClusterPosition()).getNodeId());
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			if (entry.getValue().isTombstone())
+			if (doc.getRecordVersion().isTombstone())
 				Assert.fail();
 
-			sampleTreeNode.updateReplica(1, startKey, entry.getKey(), entry.getValue());
+			sampleTreeNode.updateReplica(1, startKey, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAddOneKeyUpdateOneKey() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+		OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
-		treeNode.addRecord(1, ONodeId.ZERO, convertTORID(130), "130");
+    final ODocument doc = new ODocument();
+    doc.setIdentity(convertTORID(130));
+    doc.field("value", "130");
+		treeNode.addRecord(1, ONodeId.ZERO, doc);
 
-		Record record = map.get(convertTORID(130L));
+		ODocument record = db.load(convertTORID(130L));
+    record.field("value", "150");
 
-		treeNode.updateRecord(1, ONodeId.ZERO, record.getId(), record.getVersion(), "150");
+		treeNode.updateRecord(1, ONodeId.ZERO, record.getIdentity(), record.getRecordVersion(), record);
 
-		record = map.get(convertTORID(130L));
-		Assert.assertEquals(record.getData(), "150");
-		Assert.assertEquals(record.getShortVersion(), 1);
+		record = db.load(convertTORID(130L));
+		Assert.assertEquals(record.field("value"), "150");
+		Assert.assertEquals(record.getRecordVersion().getCounter(), 1);
 
 		MessageDigest sha = MessageDigest.getInstance("SHA-1");
 
 		final ByteBuffer byteBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE);
 		byteBuffer.put(ONodeId.valueOf(130L).chunksToByteArray());
-		byteBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		byteBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		byteBuffer.rewind();
 		sha.update(byteBuffer);
@@ -687,24 +753,29 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAddOneKeyUpdateOneKeyTwoTimes() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+		OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
-		treeNode.addRecord(1, ONodeId.ZERO, convertTORID(130), "130");
+    final ODocument doc = new ODocument();
+    doc.setIdentity(convertTORID(130));
+    doc.field("value", "130");
+		treeNode.addRecord(1, ONodeId.ZERO, doc);
 
-		final Record record = map.get(convertTORID(130L));
+		ODocument record = db.load(convertTORID(130L));
 
-		treeNode.updateRecord(1, ONodeId.ZERO, convertTORID(130), record.getVersion(), "150");
-		treeNode.updateRecord(1, ONodeId.ZERO, convertTORID(130), record.getVersion(), "160");
+    record.field("value", "150");
+    treeNode.updateRecord(1, ONodeId.ZERO, convertTORID(130), record.getRecordVersion(), record);
+    record.field("value", "160");
+    treeNode.updateRecord(1, ONodeId.ZERO, convertTORID(130), record.getRecordVersion(), record);
 
-		Assert.assertEquals(record.getData(), "160");
-		Assert.assertEquals(record.getShortVersion(), 2);
+    record = db.load(convertTORID(130L));
+    Assert.assertEquals(record.field("value"), "160");
+		Assert.assertEquals(record.getRecordVersion().getCounter(), 2);
 
 		MessageDigest sha = MessageDigest.getInstance("SHA-1");
 
 		final ByteBuffer byteBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE);
 		byteBuffer.put(ONodeId.valueOf(130L).chunksToByteArray());
-		byteBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		byteBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		byteBuffer.rewind();
 		sha.update(byteBuffer);
@@ -714,32 +785,37 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAddOneKeyUpdateOneKeySecondTimeWithWrongVersion() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+		OMerkleTreeNode treeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
-		OMerkleTreeNode treeNode = new OMerkleTreeNode(map, 1);
-		treeNode.addRecord(1, ONodeId.ZERO, convertTORID(130), "130");
+    final ODocument doc = new ODocument();
+    doc.setIdentity(convertTORID(130));
+    doc.field("value", "130");
+		treeNode.addRecord(1, ONodeId.ZERO, doc);
 
-		Record record = map.get(convertTORID(130L));
+		ODocument record = db.load(convertTORID(130L));
 
-		treeNode.updateRecord(1, ONodeId.ZERO, record.getId(), record.getVersion(), "150");
+    record.field("value", "150");
+    treeNode.updateRecord(1, ONodeId.ZERO, record.getIdentity(), record.getRecordVersion(), record);
 
 		try {
 			final ORecordVersion version = new ODistributedVersion(34);
 
-			treeNode.updateRecord(1, ONodeId.ZERO, convertTORID(130), version, "160");
+      record.getRecordVersion().copyFrom(version);
+      record.field("value", "160");
+      treeNode.updateRecord(1, ONodeId.ZERO, convertTORID(130), version, record);
 			Assert.fail();
 		} catch (OConcurrentModificationException e) {
 		}
 
-		record = map.get(convertTORID(130L));
-		Assert.assertEquals(record.getData(), "150");
-		Assert.assertEquals(record.getShortVersion(), 1);
+		record = db.load(convertTORID(130L));
+		Assert.assertEquals(record.field("value"), "150");
+		Assert.assertEquals(record.getRecordVersion().getCounter(), 1);
 
 		MessageDigest sha = MessageDigest.getInstance("SHA-1");
 
 		final ByteBuffer byteBuffer = ByteBuffer.allocate(OMerkleTreeNode.LEAF_BUFFER_ENTRY_SIZE);
 		byteBuffer.put(ONodeId.valueOf(130).chunksToByteArray());
-		byteBuffer.put(record.getVersion().getSerializer().toByteArray(record.getVersion()));
+		byteBuffer.put(record.getRecordVersion().getSerializer().toByteArray(record.getRecordVersion()));
 
 		byteBuffer.rewind();
 		sha.update(byteBuffer);
@@ -749,107 +825,123 @@ public class MerkleTreeNodeTest {
 	}
 
 	public void testAdd69KeysUpdate3() {
-		NavigableMap<ORID, Record> mapOne = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 69; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne, 1);
-		for (int i = 0; i < 69; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 68; i < 69; i++) {
-			final Record record = mapOne.get(convertTORID(i));
+			final ODocument record = db.load(convertTORID(i));
+      record.field("value", "11" + i);
 
-			testTreeNode.updateRecord(1, ONodeId.ZERO, record.getId(), record.getVersion(), "11" + i);
+      testTreeNode.updateRecord(1, ONodeId.ZERO, record.getIdentity(), record.getRecordVersion(), record);
 		}
 
 		for (long i = 0; i < 66; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		for (long i = 68; i < 69; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), "11" + i);
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), "11" + i);
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : mapOne.entrySet())
-			sampleTreeNode.updateReplica(1, ONodeId.ZERO, entry.getKey(), entry.getValue());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true))
+			sampleTreeNode.updateReplica(1, ONodeId.ZERO, doc.getIdentity(), doc);
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd69KeysUpdate60() {
-		NavigableMap<ORID, Record> mapOne = new TreeMap<ORID, Record>();
-
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(mapOne, 1);
-		for (int i = 0; i < 69; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 69; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
+      
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 64; i < 69; i++) {
-			final Record record = mapOne.get(convertTORID(i));
+			final ODocument record = db.load(convertTORID(i));
+      record.field("value", "11" + i);
 
-			testTreeNode.updateRecord(1, ONodeId.ZERO, convertTORID(i), record.getVersion(), "11" + i);
+			testTreeNode.updateRecord(1, ONodeId.ZERO, convertTORID(i), record.getRecordVersion(), record);
 		}
 
 		for (long i = 0; i < 64; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		for (long i = 64; i < 69; i++)
-			Assert.assertEquals(mapOne.get(convertTORID(i)).getData(), "11" + i);
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), "11" + i);
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : mapOne.entrySet())
-			sampleTreeNode.updateReplica(1, ONodeId.ZERO, entry.getKey(), entry.getValue());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true))
+			sampleTreeNode.updateReplica(1, ONodeId.ZERO, doc.getIdentity(), doc);
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToNext1024NodeUpdate60() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
+		for (int i = 0; i < 2; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
 
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map, 1);
-		for (int i = 0; i < 2; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
-		for (int i = 1024; i < 1089; i++)
-			testTreeNode.addRecord(1, ONodeId.ZERO, convertTORID(i), i + "");
+		for (int i = 1024; i < 1089; i++) {
+      final ODocument doc = new ODocument();
+      doc.setIdentity(convertTORID(i));
+      doc.field("value", i + "");
+
+      testTreeNode.addRecord(1, ONodeId.ZERO, doc);
+    }
 
 		for (long i = 1024; i < 1084; i++) {
-			final Record record = map.get(convertTORID(i));
+			final ODocument record = db.load(convertTORID(i));
+      record.field("value", "11" + i);
 
-			testTreeNode.updateRecord(1, ONodeId.ZERO, convertTORID(i), record.getVersion(), "11" + i);
+			testTreeNode.updateRecord(1, ONodeId.ZERO, convertTORID(i), record.getRecordVersion(), record);
 		}
 
 		for (long i = 0; i < 2; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
 		for (long i = 1024; i < 1084; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), "11" + i);
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), "11" + i);
 
 		for (long i = 1084; i < 1089; i++)
-			Assert.assertEquals(map.get(convertTORID(i)).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(convertTORID(i))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : map.entrySet()) {
-			sampleTreeNode.updateReplica(1, ONodeId.ZERO, entry.getKey(), entry.getValue());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			sampleTreeNode.updateReplica(1, ONodeId.ZERO, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
 	}
 
 	public void testAdd67KeysToEndUpdate60() throws Exception {
-		NavigableMap<ORID, Record> map = new TreeMap<ORID, Record>();
-
-		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(map, 1);
+		OMerkleTreeNode testTreeNode = new OMerkleTreeNode(createDbLookup(), 1);
 
 		for (ONodeId i = ONodeId.MAX_VALUE; i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66))) >= 0; i = i
 						.subtract(ONodeId.ONE)) {
 			int childPos = OMerkleTreeNode.childIndex(0, i);
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			testTreeNode.addRecord(1, startKey, new ORecordId(1, new OClusterPositionNodeId(i)), i + "");
+      final ODocument doc = new ODocument();
+      doc.setIdentity(new ORecordId(1, new OClusterPositionNodeId(i)));
+      doc.field("value", i + "");
+
+			testTreeNode.addRecord(1, startKey, doc);
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(66)); i.compareTo(ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(6))) < 0; i = i
@@ -857,22 +949,21 @@ public class MerkleTreeNodeTest {
 			final int childPos = OMerkleTreeNode.childIndex(0, i);
 			final ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			final Record record = map.get(new ORecordId(1, new OClusterPositionNodeId(i)));
+			final ORecordInternal<?> record = db.load(new ORecordId(1, new OClusterPositionNodeId(i)));
 
-			testTreeNode.deleteRecord(1, startKey, new ORecordId(1, new OClusterPositionNodeId(i)), record.getVersion());
+			testTreeNode.deleteRecord(1, startKey, new ORecordId(1, new OClusterPositionNodeId(i)), record.getRecordVersion());
 		}
 
 		for (ONodeId i = ONodeId.MAX_VALUE.subtract(ONodeId.valueOf(6)); i.compareTo(ONodeId.ZERO) > 0; i = i.add(ONodeId.ONE))
-			Assert.assertEquals(map.get(new ORecordId(1, new OClusterPositionNodeId(i))).getData(), i + "");
+			Assert.assertEquals(((ODocument) db.load(new ORecordId(1, new OClusterPositionNodeId(i)))).field("value"), i + "");
 
-		NavigableMap<ORID, Record> mapTwo = new TreeMap<ORID, Record>();
-		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(mapTwo, 1);
+		OMerkleTreeNode sampleTreeNode = new OMerkleTreeNode(createDb2Lookup(), 1);
 
-		for (Map.Entry<ORID, Record> entry : map.entrySet()) {
-			int childPos = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) entry.getKey().getClusterPosition()).getNodeId());
+		for (ODocument doc : db.browseCluster(db.getClusterNameById(CLUSTER_ID), new OClusterPositionNodeId(ONodeId.MIN_VALUE), new OClusterPositionNodeId(ONodeId.MAX_VALUE), true)) {
+			int childPos = OMerkleTreeNode.childIndex(0, ((OClusterPositionNodeId) doc.getIdentity().getClusterPosition()).getNodeId());
 			ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
-			sampleTreeNode.updateReplica(1, startKey, entry.getKey(), entry.getValue());
+			sampleTreeNode.updateReplica(1, startKey, doc.getIdentity(), doc);
 		}
 
 		compareNodes(sampleTreeNode, testTreeNode);
@@ -893,7 +984,15 @@ public class MerkleTreeNodeTest {
 		}
 	}
 
-	private ORID convertTORID(long i) {
+	private ORecordId convertTORID(long i) {
 		return new ORecordId(1, new OClusterPositionNodeId(ONodeId.valueOf(i)));
 	}
+
+  private ODHTDatabaseLookupImpl createDbLookup() {
+    return new ODHTDatabaseLookupImpl("memory:mercleTreeTest", "admin", "admin");
+  }
+
+  private ODHTDatabaseLookupImpl createDb2Lookup() {
+    return new ODHTDatabaseLookupImpl("memory:mercleTreeTestSecondaryDb", "admin", "admin");
+  }
 }
