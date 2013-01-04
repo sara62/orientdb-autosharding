@@ -1,5 +1,6 @@
 package com.orientechnologies.orient.server.distributed.operations;
 
+import com.orientechnologies.orient.core.id.OClusterPosition;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
@@ -36,7 +37,9 @@ public final class ODistributedRecordOperationCoordinatorImpl implements ODistri
     while (true) {
       retryCount++;
 
-      if (!recordOperation.getClusterPosition().isValid()) {
+
+      final OClusterPosition position = recordOperation.getClusterPosition();
+      if (position == null || !position.isValid()) {
         recordOperation.setRecordId(new ORecordId(recordOperation.getClusterId(), new OClusterPositionNodeId(ONodeId
             .generateUniqueId())));
       }
