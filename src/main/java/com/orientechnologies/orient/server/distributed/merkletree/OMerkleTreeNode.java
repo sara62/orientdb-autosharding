@@ -8,27 +8,22 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
 
 import com.orientechnologies.common.concur.resource.OSharedResourceAdaptive;
 import com.orientechnologies.orient.core.db.ODatabaseComplex;
 import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
-import com.orientechnologies.orient.core.db.record.OIdentifiable;
 import com.orientechnologies.orient.core.db.record.ORecordOperation;
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException;
-import com.orientechnologies.orient.core.exception.ODatabaseException;
 import com.orientechnologies.orient.core.exception.ORecordNotFoundException;
 import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
 import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORID;
-import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.storage.ORecordDuplicatedException;
 import com.orientechnologies.orient.core.storage.ORecordMetadata;
 import com.orientechnologies.orient.core.version.ODistributedVersion;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
-import com.orientechnologies.orient.server.distributed.Record;
 
 /**
  * @author Andrey Lomakin
@@ -92,7 +87,7 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
       //TODO storage name
       final ODatabaseRecord db = databaseLookup.openDatabase("storageName");
 
-      record = retrieveRecord(db, data.getIdentity());
+      record = db.load(data.getIdentity());
 
       if (record == null || record.getRecordVersion().isTombstone()) {
         if (record == null) {
@@ -116,16 +111,6 @@ public final class OMerkleTreeNode extends OSharedResourceAdaptive {
 
     rehashParentNodes(hashPathNodes);
 
-    return record;
-  }
-
-  private ORecordInternal<?> retrieveRecord(ODatabaseRecord db, ORID id) {
-    ORecordInternal<?> record;
-    try {
-      record = db.load(id);
-    } catch (ODatabaseException e) {
-      record = null;
-    }
     return record;
   }
 

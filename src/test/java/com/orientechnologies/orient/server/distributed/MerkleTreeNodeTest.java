@@ -42,10 +42,10 @@ public class MerkleTreeNodeTest {
     OGlobalConfiguration.USE_LHPEPS_MEMORY_CLUSTER.setValue(true);
     OGlobalConfiguration.STORAGE_USE_TOMBSTONES.setValue(true);
     
-    db = new ODatabaseDocumentTx("memory:mercleTreeTest");
+    db = new ODatabaseDocumentTx("memory:mercleTreeNodeTest");
     db.create();
 
-    db2 = new ODatabaseDocumentTx("memory:mercleTreeTestSecondaryDb");
+    db2 = new ODatabaseDocumentTx("memory:mercleTreeNodeTestSecondaryDb");
     db2.create();
   }
 
@@ -989,10 +989,10 @@ public class MerkleTreeNodeTest {
 	}
 
   private ODHTDatabaseLookupImpl createDbLookup() {
-    return new ODHTDatabaseLookupImpl("memory:mercleTreeTest", "admin", "admin");
+    return new ODHTDatabaseLookupImpl("memory:mercleTreeNodeTest", "admin", "admin");
   }
 
   private ODHTDatabaseLookupImpl createDb2Lookup() {
-    return new ODHTDatabaseLookupImpl("memory:mercleTreeTestSecondaryDb", "admin", "admin");
+    return new ODHTDatabaseLookupImpl("memory:mercleTreeNodeTestSecondaryDb", "admin", "admin");
   }
 }
