@@ -29,8 +29,8 @@ public final class ODatabaseRingIterator implements Iterator<ORecordMetadata> {
     this.db = db;
     this.start = start;
     this.end = end;
-    //TODO cluster
-    cluster = "some cluster";
+
+    cluster = db.getClusterNameById(start.getClusterId());
 
     if (end.compareTo(start) > 0) {
       currentIntervalStart = start;
