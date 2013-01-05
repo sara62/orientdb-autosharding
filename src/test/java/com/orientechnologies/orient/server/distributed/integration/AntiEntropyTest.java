@@ -3,9 +3,18 @@ package com.orientechnologies.orient.server.distributed.integration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+
+import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
+
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
+import com.orientechnologies.orient.core.id.OClusterPositionFactory;
+import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
+import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.core.id.ORecordId;
 import com.orientechnologies.orient.core.record.impl.ODocument;
 import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
@@ -14,13 +23,6 @@ import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODatabaseRingIterator;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
 import com.orientechnologies.orient.server.distributed.ORecordMetadata;
-import org.testng.Assert;
-import org.testng.annotations.AfterMethod;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.Test;
-
-import com.orientechnologies.orient.core.id.OClusterPositionNodeId;
-import com.orientechnologies.orient.core.id.ONodeId;
 import com.orientechnologies.orient.server.hazelcast.OHazelcastDHTNodeProxy;
 import com.orientechnologies.orient.server.hazelcast.ServerInstance;
 
@@ -30,7 +32,8 @@ import com.orientechnologies.orient.server.hazelcast.ServerInstance;
  */
 @Test
 public class AntiEntropyTest {
-  public static final int DB_COUNT = 10;
+  public static final int       CLUSTER_ID = 1;
+  public static final int       DB_COUNT   = 10;
   private ODatabaseDocumentTx[] db;
 
   @BeforeMethod
@@ -49,10 +52,11 @@ public class AntiEntropyTest {
 
   @AfterMethod
   public void tearDown() throws Exception {
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < DB_COUNT; i++) {
       db[i].drop();
     }
   }
+
   public void testDataSynchronizationAfterAdd() throws Exception {
     System.out.println("[stat] Ring initialization.");
 
@@ -71,9 +75,10 @@ public class AntiEntropyTest {
     for (int i = 0; i < 100000; i++) {
 
       final ODocument doc = new ODocument();
+      doc.setIdentity(generateRid());
       doc.field("value", i + "");
-      
-      serverInstance.create(doc, "storageName");
+
+      serverInstance.create("storageName", doc);
     }
 
     System.out.println("[stat] Data were added.");
@@ -172,6 +177,7 @@ public class AntiEntropyTest {
     for (int i = 0; i < 100000; i++) {
 
       final ODocument doc = new ODocument();
+      doc.setIdentity(generateRid());
       doc.field("value", i + "");
 
       serverInstance.create("storage", doc);
@@ -280,5 +286,9 @@ public class AntiEntropyTest {
 
   private ODHTDatabaseLookup dbLookup(int dbNumber) {
     return new ODHTDatabaseLookupImpl("memory:AntiEntropyTest" + dbNumber, "admin", "admin");
+  }
+
+  private ORecordId generateRid() {
+    return new ORecordId(CLUSTER_ID, OClusterPositionFactory.INSTANCE.generateUniqueClusterPosition());
   }
 }

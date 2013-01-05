@@ -99,7 +99,7 @@ public final class OLocalMaintenanceProtocolImpl implements OLocalMaintenancePro
     if (remoteNode == null)
       throw new OLocalProtocolException("Node with id " + remoteNodeAddress + " is absent.");
 
-    final ODetachedMerkleTreeNode remoteTreeNode = remoteNode.findMerkleTreeNode(null, localTreeNode);
+    final ODetachedMerkleTreeNode remoteTreeNode = remoteNode.findMerkleTreeNode(storageName, localTreeNode);
 
     if (remoteTreeNode == null)
       throw new OLocalProtocolException("Related remote Merkle tree node is null.");
