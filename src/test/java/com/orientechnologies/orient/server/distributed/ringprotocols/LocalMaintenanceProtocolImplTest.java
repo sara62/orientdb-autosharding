@@ -36,8 +36,9 @@ import com.orientechnologies.orient.server.distributed.merkletree.OMerkleTree;
 @Test
 public class LocalMaintenanceProtocolImplTest {
   public static final int     CLUSTER_ID = 1;
+  public static final String STORAGE_NAME = "storageName";
 
-	private OLocalMaintenanceProtocolImpl localMaintenanceProtocol;
+  private OLocalMaintenanceProtocolImpl localMaintenanceProtocol;
 
 	@Mock
 	private ODHTNodeLocal localNode;
@@ -73,7 +74,7 @@ public class LocalMaintenanceProtocolImplTest {
 		when(localNode.getPredecessor()).thenReturn(null);
 		when(localNode.state()).thenReturn(ODHTNode.NodeState.PRODUCTION);
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
 		verify(localNode).getPredecessor();
 		verify(localNode).state();
@@ -126,7 +127,7 @@ public class LocalMaintenanceProtocolImplTest {
 		when(remoteNodeOne.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 		when(remoteNodeTwo.findMerkleTreeNode(null, localRootNode)).thenReturn(remoteRootNode);
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
 		verifyZeroInteractions(nodeComparator);
 	}
@@ -134,18 +135,18 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testVerifyOneChildInsideRootIntervalAndSecondIsNot() {
 		final CreateTwoDifferentNodesWithOnlyOneInside processFlow = new CreateTwoDifferentNodesWithOnlyOneInside();
 
-    localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+    localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -154,15 +155,15 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testOneOfTheServerNodesThrowsExceptionDuringProcessing() {
 		final OneReplicaHolderThrowsExceptionDuringProcessing processFlow = new OneReplicaHolderThrowsExceptionDuringProcessing();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -171,12 +172,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testOneOfTheServerNodesIsOffline() {
 		final OneReplicaHolderIsOffline processFlow = new OneReplicaHolderIsOffline();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -185,7 +186,7 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testPredecessorIsNullSecondTime() {
 		final PredecessorIsNullSecondTime processFlow = new PredecessorIsNullSecondTime();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
 		verifyZeroInteractions(nodeComparator);
 	}
@@ -193,15 +194,15 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testRemoteTreeNodeIsNull() {
 		RemoteTreeNodeIsNull processFlow = new RemoteTreeNodeIsNull();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -210,12 +211,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testLocalTreeChildNodeIsNull() {
 		LocalTreeNodeIsNull processFlow = new LocalTreeNodeIsNull();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -224,12 +225,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testRootNodesAreDifferentRemoteIsLeafButLocalIsNot() {
 		RootNodesAreDifferentRemoteIsLeafButLocalIsNot processFlow = new RootNodesAreDifferentRemoteIsLeafButLocalIsNot();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -239,12 +240,12 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testRootNodesAreDifferentLocalIsLeafButRemoteIsNot() {
 		RootNodesAreDifferentLocalIsLeafButRemoteIsNot processFlow = new RootNodesAreDifferentLocalIsLeafButRemoteIsNot();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
 		verifyNoMoreInteractions(nodeComparator);
@@ -253,22 +254,22 @@ public class LocalMaintenanceProtocolImplTest {
 	public void testLeafChildIsNotEqualOnThirdLevel() {
 		LeafChildIsNotEqualOnThirdLevel processFlow = new LeafChildIsNotEqualOnThirdLevel();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNodeSecondLevel,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNodeSecondLevel,
 						processFlow.firstRemoteChildNodeSecondLevel,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNodeSecondLevel,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNodeSecondLevel,
 						processFlow.firstRemoteChildNodeSecondLevel,
 						processFlow.replicaHolderTwo);
 
@@ -279,21 +280,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst processFlow =
 						new PredecessorIsGreaterThanNodeIdSecondIntervalIsSameAsFirst();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalChildNode, processFlow.secondRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -304,21 +305,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst processFlow =
 						new PredecessorIsGreaterThanNodeIdSecondIntervalIsNotSameAsFirst();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -329,21 +330,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne processFlow =
 						new PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameOne();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -354,21 +355,21 @@ public class LocalMaintenanceProtocolImplTest {
 		PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo processFlow =
 						new PredecessorIsGreaterThanNodeIdThreeRootNodesOneIsTheSameTwo();
 
-		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, "storageName", CLUSTER_ID, 2, 1);
+		localMaintenanceProtocol.synchronizeReplicasBetweenHolders(localNode, STORAGE_NAME, CLUSTER_ID, 2, 1);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.localRootNode, processFlow.remoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.localRootNode, processFlow.remoteRootNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.firstLocalChildNode, processFlow.firstRemoteChildNode,
 						processFlow.replicaHolderTwo);
 
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderOne);
-		verify(nodeComparator).compareNodes("storageName", localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
+		verify(nodeComparator).compareNodes(STORAGE_NAME, localNode, processFlow.secondLocalRootNode, processFlow.secondRemoteRootNode,
 						processFlow.replicaHolderTwo);
 
 
@@ -702,7 +703,7 @@ public class LocalMaintenanceProtocolImplTest {
 											localNodeAddress.getNodeId().subtract(ONodeId.TWO), CLUSTER_ID, recordMetadata, null, new int[0]);
 
 
-			when(localNode.getLocalMerkleTree("storageName", CLUSTER_ID)).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(STORAGE_NAME, CLUSTER_ID)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -786,7 +787,7 @@ public class LocalMaintenanceProtocolImplTest {
 			localRootNode = new ODetachedMerkleTreeNode(remoteRootHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
 							localNodeAddress.getNodeId(), CLUSTER_ID, recordMetadata, null, new int[0]);
 
-			when(localNode.getLocalMerkleTree("storageName", CLUSTER_ID)).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(STORAGE_NAME, CLUSTER_ID)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -841,7 +842,7 @@ public class LocalMaintenanceProtocolImplTest {
 			remoteRootNode = new ODetachedMerkleTreeNode(remoteRootHash, predecessorAddress.getNodeId().add(ONodeId.ONE),
 							localNodeAddress.getNodeId(), CLUSTER_ID, recordMetadata, null, new int[0]);
 
-			when(localNode.getLocalMerkleTree("storageName", CLUSTER_ID)).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(STORAGE_NAME, CLUSTER_ID)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
@@ -1001,7 +1002,7 @@ public class LocalMaintenanceProtocolImplTest {
 							secondRemoteChildNodeStartId(),
 							secondRemoteChildNodeEndId(), CLUSTER_ID, recordMetadata, null, new int[0]);
 
-			when(localNode.getLocalMerkleTree("storageName", CLUSTER_ID)).thenReturn(merkleTree);
+			when(localNode.getLocalMerkleTree(STORAGE_NAME, CLUSTER_ID)).thenReturn(merkleTree);
 			when(merkleTree.getRootNodesForInterval(localChildNodeStartId(), localRootNodeEndId()))
 							.thenReturn(Arrays.asList(localRootNode));
 
