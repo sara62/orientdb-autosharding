@@ -30,7 +30,6 @@ import com.orientechnologies.orient.core.id.ORID;
 import com.orientechnologies.orient.core.record.ORecordInternal;
 import com.orientechnologies.orient.core.version.ORecordVersion;
 import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookup;
-import com.orientechnologies.orient.server.distributed.ODHTDatabaseLookupImpl;
 import com.orientechnologies.orient.server.distributed.ODHTNode;
 import com.orientechnologies.orient.server.distributed.ODHTNodeLookup;
 import com.orientechnologies.orient.server.distributed.OLocalDHTNode;
@@ -69,21 +68,23 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
   private final ScheduledExecutorService                  gmExecutorService  = Executors
                                                                                  .newSingleThreadScheduledExecutor(new OGlobalMaintenanceProtocolThreadFactory());
 	private final ODefaultRingProtocolsFactory              ringProtocolsFactory;
+  private final ODHTDatabaseLookup databaseLookup;
 
-	public ServerInstance() {
-    this(true, true, true, REPLICA_COUNT, SYNC_REPLICA_COUNT);
+  public ServerInstance(ODHTDatabaseLookup databaseLookup) {
+    this(databaseLookup, true, true, true, REPLICA_COUNT, SYNC_REPLICA_COUNT);
   }
 
-  public ServerInstance(int replicaCount, int syncReplicaCount) {
-    this(true, true, true, replicaCount, syncReplicaCount);
+  public ServerInstance(ODHTDatabaseLookup databaseLookup, int replicaCount, int syncReplicaCount) {
+    this(databaseLookup, true, true, true, replicaCount, syncReplicaCount);
   }
 
-  public ServerInstance(boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence) {
-    this(useReadRepair, useAntiEntropy, useGlobalMaintainence, REPLICA_COUNT, SYNC_REPLICA_COUNT);
+  public ServerInstance(ODHTDatabaseLookup databaseLookup, boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence) {
+    this(databaseLookup, useReadRepair, useAntiEntropy, useGlobalMaintainence, REPLICA_COUNT, SYNC_REPLICA_COUNT);
   }
 
-  public ServerInstance(boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence, int replicaCount,
-      int syncReplicaCount) {
+  public ServerInstance(ODHTDatabaseLookup databaseLookup, boolean useReadRepair, boolean useAntiEntropy, boolean useGlobalMaintainence, int replicaCount,
+                        int syncReplicaCount) {
+    this.databaseLookup = databaseLookup;
     this.useAntiEntropy = useAntiEntropy;
     this.useGlobalMaintainence = useGlobalMaintainence;
     this.replicaCount = replicaCount;
@@ -100,7 +101,6 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     final OHazelcastNodeAddress localNodeAddress = new OHazelcastNodeAddress(ONodeId.generateUniqueId(), hazelcastInstance
         .getCluster().getLocalMember().getUuid());
 
-    final ODHTDatabaseLookup databaseLookup = new ODHTDatabaseLookupImpl("databaseName");
     localNode = new OLocalDHTNode(localNodeAddress, this, databaseLookup, new ODefaultDistributedCoordinatorFactory(), ringProtocolsFactory,
         replicaCount, syncReplicaCount);
 
@@ -151,6 +151,7 @@ public class ServerInstance implements MembershipListener, ODHTNodeLookup, Lifec
     return localNode.createRecord(storageName, record);
   }
 
+  //TODO delete this method
   public ORecordInternal<?> create(ORecordInternal record, String storageName) {
     return localNode.createRecord(storageName, record);
   }
