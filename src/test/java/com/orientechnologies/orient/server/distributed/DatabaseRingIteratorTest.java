@@ -25,7 +25,6 @@ import com.orientechnologies.orient.core.id.ORID;
 public class DatabaseRingIteratorTest {
   public static final int     CLUSTER_ID = 1;
   private ODatabaseDocumentTx db;
-  private ODatabaseDocumentTx db2;
 
   @BeforeMethod
   public void setUp() {
@@ -36,17 +35,12 @@ public class DatabaseRingIteratorTest {
 
     db = new ODatabaseDocumentTx("memory:ringIteratorTest");
     db.create();
-
-    db2 = new ODatabaseDocumentTx("memory:ringIteratorTestSecondaryDb");
-    db2.create();
   }
 
   @AfterMethod
   public void tearDown() throws Exception {
     db.drop();
-    db2.drop();
   }
-
 
   public void continuousIntervalTest() {
     for (long i = 0; i < 100; i++) {
