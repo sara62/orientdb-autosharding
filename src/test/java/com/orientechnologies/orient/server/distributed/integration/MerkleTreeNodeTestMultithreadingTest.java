@@ -12,6 +12,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.hazelcast.util.ConcurrentHashSet;
 import com.orientechnologies.orient.core.config.OGlobalConfiguration;
 import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx;
 import com.orientechnologies.orient.core.db.record.ODatabaseRecord;
@@ -78,18 +79,20 @@ public class MerkleTreeNodeTestMultithreadingTest {
 
     final OLockManager<ORID, Runnable> lockManager = new OLockManager<ORID, Runnable>(true, 500);
 
+    final ConcurrentHashSet<ONodeId> ids = new ConcurrentHashSet<ONodeId>();
+
     final long start = System.currentTimeMillis();
 
     final int interval = 500000;
 
     for (int i = 0; i < 1; i++) //5
-      writerFutures.add(adderExecutorService.submit(new ConcurrentAdder(treeNode, trigger, i * interval, interval, lockManager)));
+      writerFutures.add(adderExecutorService.submit(new ConcurrentAdder(treeNode, trigger, i * interval, interval, lockManager, ids)));
 
     for (int i = 0; i < 0; i++) //2
       readerFutures.add(readerExecutorService.submit(new ConcurrentReader(treeNode, trigger, testIsFinished)));
 
 //    deleterFutures.add(deleterExecutorService.submit(new ConcurrentDeleter(treeNode, trigger, interval * 5, testIsFinished,
-//        lockManager, new ODHTDatabaseLookupImpl("memory:mercleTreeMultithreadingTest", "admin","admin"))));
+//        lockManager, new ODHTDatabaseLookupImpl("memory:mercleTreeMultithreadingTest", "admin","admin"), ids)));
 
     trigger.countDown();
 
@@ -183,22 +186,24 @@ public class MerkleTreeNodeTestMultithreadingTest {
     private final ODHTDatabaseLookup dbLookup;
 
     private final OLockManager<ORID, Runnable> lockManager;
+    private final ConcurrentHashSet<ONodeId> ids;
 
     private ConcurrentDeleter(OMerkleTreeNode node, CountDownLatch trigger, int interval, AtomicBoolean testIsFinished,
-        OLockManager<ORID, Runnable> lockManager, ODHTDatabaseLookupImpl dbLookup) {
+                              OLockManager<ORID, Runnable> lockManager, ODHTDatabaseLookupImpl dbLookup, ConcurrentHashSet<ONodeId> ids) {
       this.node = node;
       this.trigger = trigger;
       this.interval = interval;
       this.testIsFinished = testIsFinished;
       this.lockManager = lockManager;
       this.dbLookup = dbLookup;
+      this.ids = ids;
     }
 
     public Void call() throws Exception {
       trigger.await();
 
       while (!testIsFinished.get()) {
-        final ONodeId key = ONodeId.valueOf(random.nextInt(interval));
+        final ONodeId key = ids.iterator().next();
 				final ORID rid = new ORecordId(1, new OClusterPositionNodeId(key));
 
         lockManager.acquireLock(Thread.currentThread(), rid, OLockManager.LOCK.EXCLUSIVE);
@@ -213,6 +218,7 @@ public class MerkleTreeNodeTestMultithreadingTest {
           final ONodeId startKey = OMerkleTreeNode.startNodeId(1, childPos, ONodeId.ZERO);
 
           node.deleteRecord(1, startKey, rid, record.getRecordVersion());
+          ids.remove(key);
         } finally {
           lockManager.releaseLock(Thread.currentThread(), rid, OLockManager.LOCK.EXCLUSIVE);
         }
@@ -228,14 +234,16 @@ public class MerkleTreeNodeTestMultithreadingTest {
     private final long                         startPos;
     private final int                          interval;
     private final OLockManager<ORID, Runnable> lockManager;
+    private final ConcurrentHashSet<ONodeId> ids;
 
     private ConcurrentAdder(OMerkleTreeNode node, CountDownLatch trigger, long startPos, int interval,
-        OLockManager<ORID, Runnable> lockManager) {
+                            OLockManager<ORID, Runnable> lockManager, ConcurrentHashSet<ONodeId> ids) {
       this.node = node;
       this.trigger = trigger;
       this.startPos = startPos;
       this.interval = interval;
       this.lockManager = lockManager;
+      this.ids = ids;
     }
 
     public Void call() throws Exception {
@@ -244,7 +252,7 @@ public class MerkleTreeNodeTestMultithreadingTest {
       System.out.println(Thread.currentThread().getName() + ":Insertions were started.");
 
       for (long i = startPos; i < startPos + interval; i++) {
-				final ONodeId nodeId = ONodeId.valueOf(i);
+				final ONodeId nodeId = ONodeId.generateUniqueId().shiftRight(6);
 				final ORecordId rid = new ORecordId(1, new OClusterPositionNodeId(nodeId));
 
         int childPos = OMerkleTreeNode.childIndex(0, nodeId);
@@ -256,6 +264,7 @@ public class MerkleTreeNodeTestMultithreadingTest {
           doc.setIdentity(rid);
           doc.field("value", i + "");
           node.addRecord(1, startKey, doc);
+          ids.add(nodeId);
           if ((i - startPos) % 10000 == 0)
             System.out.println(Thread.currentThread().getName() + ":" + (i - startPos) + " records were inserted.");
         } finally {
