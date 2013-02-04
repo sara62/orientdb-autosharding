@@ -105,7 +105,7 @@ public class LocalMaintenanceProtocolImplTest {
     final ODetachedMerkleTreeNode remoteRootNode = new ODetachedMerkleTreeNode(hash, predecessorAddress.getNodeId()
         .add(ONodeId.ONE), localNodeAddress.getNodeId(), CLUSTER_ID, null, null, new int[0]);
 
-    when(localNode.getLocalMerkleTree(STORAGE_NAME, -1)).thenReturn(merkleTree);
+    when(localNode.getLocalMerkleTree(STORAGE_NAME, CLUSTER_ID)).thenReturn(merkleTree);
     when(merkleTree.getRootNodesForInterval(predecessorAddress.getNodeId().add(ONodeId.ONE), localNodeAddress.getNodeId()))
         .thenReturn(Arrays.asList(localRootNode));
 
