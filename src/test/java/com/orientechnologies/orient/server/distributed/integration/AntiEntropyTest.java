@@ -32,7 +32,7 @@ import com.orientechnologies.orient.server.hazelcast.ServerInstance;
  */
 @Test
 public class AntiEntropyTest {
-  public static final int       CLUSTER_ID = 1;
+  public static final int       CLUSTER_ID = 3;
   public static final int       DB_COUNT   = 10;
   private ODatabaseDocumentTx[] db;
 
@@ -102,7 +102,7 @@ public class AntiEntropyTest {
     int predecessorOneRecords = gerOwnRecordsCount(localPredecessorOne);
     int predecessorTwoRecords = gerOwnRecordsCount(localPredecessorTwo);
 
-    Assert.assertEquals(localDHTNode.getDb(null).getSize(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
+    Assert.assertEquals(localDHTNode.getDb("memory:AntiEntropyTest5").getSize(), dhtNodeRecords + predecessorOneRecords + predecessorTwoRecords);
   }
 
   public void testDataSynchronizationAfterRemove() throws Exception {
@@ -235,8 +235,8 @@ public class AntiEntropyTest {
       final ODatabaseRecord firstSuccessorDb = localFirstSuccessor.getDb(null);
       final ODatabaseRecord secondSuccessorDb = localSecondSuccessor.getDb(null);
 
-      ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(dhtNode
-          .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(dhtNode.getNodeAddress()
+      ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(CLUSTER_ID, new OClusterPositionNodeId(dhtNode
+          .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(CLUSTER_ID, new OClusterPositionNodeId(dhtNode.getNodeAddress()
           .getNodeId())));
 
       while (ringIterator.hasNext()) {
@@ -272,8 +272,8 @@ public class AntiEntropyTest {
   private int gerOwnRecordsCount(OLocalDHTNode localDHTNode) {
     final ODatabaseRecord nodeDb = localDHTNode.getDb(null);
 
-    ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(1, new OClusterPositionNodeId(localDHTNode
-        .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(1, new OClusterPositionNodeId(localDHTNode.getNodeAddress()
+    ODatabaseRingIterator ringIterator = new ODatabaseRingIterator(nodeDb, new ORecordId(CLUSTER_ID, new OClusterPositionNodeId(localDHTNode
+        .getPredecessor().getNodeId().add(ONodeId.ONE))), new ORecordId(CLUSTER_ID, new OClusterPositionNodeId(localDHTNode.getNodeAddress()
         .getNodeId())));
     int count = 0;
     while (ringIterator.hasNext()) {

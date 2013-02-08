@@ -91,7 +91,8 @@ public final class OLocalDHTNode implements ODHTNode, ODHTNodeLocal {
     this.recordReader = ringProtocolsFactory.createRecordReader(nodeLookup, replicaCount, syncReplicaCount);
     this.recordDeleter = ringProtocolsFactory.createRecordDeleter(nodeLookup, replicaCount, syncReplicaCount);
 
-    this.merkleTree = new OInMemoryMerkleTree(databaseLookup, 1);
+    //TODO cluster ID
+    this.merkleTree = new OInMemoryMerkleTree(databaseLookup, 3);
   }
 
   public ODatabaseRecord getDb(String storageName) {
